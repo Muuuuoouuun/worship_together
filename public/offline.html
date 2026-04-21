@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#F7F5EF" />
+    <title>Worship Together Offline</title>
+    <style>
+      :root {
+        background: #f7f5ef;
+        color: #1f2a2a;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        display: grid;
+        min-height: 100dvh;
+        margin: 0;
+        place-items: center;
+        padding: max(24px, env(safe-area-inset-top))
+          max(20px, env(safe-area-inset-right))
+          max(24px, env(safe-area-inset-bottom))
+          max(20px, env(safe-area-inset-left));
+      }
+
+      main {
+        width: min(100%, 440px);
+        border: 1px solid rgba(21, 62, 59, 0.12);
+        border-radius: 24px;
+        background: rgba(255, 253, 248, 0.86);
+        box-shadow: 0 24px 80px rgba(21, 62, 59, 0.1);
+        padding: 28px;
+      }
+
+      .mark {
+        display: grid;
+        width: 64px;
+        height: 64px;
+        margin-bottom: 24px;
+        place-items: center;
+        border-radius: 18px;
+        background: #153e3b;
+        color: #f7f5ef;
+        font-size: 28px;
+        font-weight: 900;
+      }
+
+      h1 {
+        margin: 0;
+        color: #153e3b;
+        font-size: 28px;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 14px 0 0;
+        color: rgba(31, 42, 42, 0.68);
+        line-height: 1.6;
+      }
+
+      button {
+        min-height: 44px;
+        margin-top: 24px;
+        border: 0;
+        border-radius: 999px;
+        background: #153e3b;
+        color: #fffdf8;
+        cursor: pointer;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        padding: 12px 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark">W</div>
+      <h1>You are offline</h1>
+      <p>
+        Worship Together needs a connection for live sync, library updates, and
+        session feedback. Reconnect and try again.
+      </p>
+      <button type="button" onclick="window.location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

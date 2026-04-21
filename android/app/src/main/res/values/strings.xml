@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Worship Together</string>
+    <string name="title_activity_main">Worship Together</string>
+    <string name="package_name">com.worshiptogether.app</string>
+    <string name="custom_url_scheme">com.worshiptogether.app</string>
+</resources>
