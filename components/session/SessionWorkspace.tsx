@@ -47,6 +47,7 @@ interface SessionWorkspaceProps {
     session: SessionRow;
     songs: SongRow[];
     teamId: string;
+    initialState: SessionCurrentState;
     teamName: string;
     setlistTitle: string;
     worshipDateLabel: string;
@@ -114,6 +115,7 @@ export default function SessionWorkspace({
     session,
     songs,
     teamId,
+    initialState,
     teamName,
     setlistTitle,
     worshipDateLabel,
@@ -122,7 +124,6 @@ export default function SessionWorkspace({
     const initializeSession = useSessionStore((state) => state.initializeSession);
     const applyRemoteState = useSessionStore((state) => state.applyRemoteState);
     const updateLocalState = useSessionStore((state) => state.updateState);
-    const syncFeedbackLog = useSessionStore((state) => state.syncFeedbackLog);
     const syncQuickFeedbackPresets = useSessionStore((state) => state.syncQuickFeedbackPresets);
     const setFeedbackRole = useSessionStore((state) => state.setFeedbackRole);
     const toggleMaster = useSessionStore((state) => state.toggleMaster);
@@ -149,8 +150,8 @@ export default function SessionWorkspace({
     const [isPresetPending, startPresetTransition] = useTransition();
 
     useEffect(() => {
-        initializeSession(session, songs);
-    }, [initializeSession, session, songs]);
+        initializeSession(session, songs, initialState);
+    }, [initializeSession, initialState, session, songs]);
 
     useEffect(() => {
         if (!currentSession) {
@@ -164,9 +165,8 @@ export default function SessionWorkspace({
             return;
         }
 
-        syncFeedbackLog(remoteState.feedbackLog);
         syncQuickFeedbackPresets(remoteState.quickFeedbackPresets);
-    }, [applyRemoteState, currentSession, isMaster, songs, syncEnabled, syncFeedbackLog, syncQuickFeedbackPresets]);
+    }, [applyRemoteState, currentSession, isMaster, songs, syncEnabled, syncQuickFeedbackPresets]);
 
     const { broadcastFeedback } = useRealtimeSession({
         sessionId: session.id,

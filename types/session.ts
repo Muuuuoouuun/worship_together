@@ -1,6 +1,7 @@
 import { Database, Json } from '@/types/schema';
 
 export type SessionRow = Database['public']['Tables']['sessions']['Row'];
+export type SessionFeedbackRow = Database['public']['Tables']['session_feedback']['Row'];
 export type SongRow = Database['public']['Tables']['songs']['Row'];
 export type SetlistRow = Database['public']['Tables']['setlists']['Row'];
 export type TeamRow = Database['public']['Tables']['teams']['Row'];
@@ -110,6 +111,21 @@ export interface SessionFeedbackBroadcastPayload {
     entry: SessionFeedbackEntry;
     sessionId: string;
     teamId: string;
+}
+
+export function sessionFeedbackRowToEntry(row: SessionFeedbackRow): SessionFeedbackEntry {
+    return {
+        id: row.id,
+        clientId: row.client_id,
+        role: isSessionFeedbackRole(row.role) ? row.role : DEFAULT_SESSION_FEEDBACK_ROLE,
+        message: row.message,
+        createdAt: row.created_at,
+        teamId: row.team_id,
+        songId: row.song_id,
+        songTitle: row.song_title,
+        page: row.page,
+        section: row.section,
+    };
 }
 
 export const DEFAULT_SESSION_SECTIONS = [

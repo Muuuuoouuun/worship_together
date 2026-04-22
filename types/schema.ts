@@ -314,6 +314,47 @@ export interface Database {
                     ended_at?: string | null
                 }
             }
+            session_feedback: {
+                Row: {
+                    id: string
+                    session_id: string
+                    team_id: string
+                    client_id: string | null
+                    role: string
+                    message: string
+                    song_id: string | null
+                    song_title: string | null
+                    page: number
+                    section: string | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    session_id: string
+                    team_id: string
+                    client_id?: string | null
+                    role: string
+                    message: string
+                    song_id?: string | null
+                    song_title?: string | null
+                    page?: number
+                    section?: string | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    session_id?: string
+                    team_id?: string
+                    client_id?: string | null
+                    role?: string
+                    message?: string
+                    song_id?: string | null
+                    song_title?: string | null
+                    page?: number
+                    section?: string | null
+                    created_at?: string
+                }
+            }
         }
     }
 }

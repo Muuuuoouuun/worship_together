@@ -124,6 +124,27 @@ create table sessions (
   ended_at timestamp with time zone
 );
 
+-- Session feedback: durable live cues and team messages for a session
+create table session_feedback (
+  id uuid default uuid_generate_v4() primary key,
+  session_id uuid references sessions(id) on delete cascade not null,
+  team_id uuid references teams(id) on delete cascade not null,
+  client_id text,
+  role text not null check (role in ('leader', 'instrument', 'broadcast')),
+  message text not null check (char_length(trim(message)) between 1 and 220),
+  song_id uuid references songs(id) on delete set null,
+  song_title text,
+  page integer not null default 1 check (page >= 1),
+  section text,
+  created_at timestamp with time zone default now()
+);
+
+create index session_feedback_session_created_idx
+  on session_feedback (session_id, created_at desc);
+
+create index session_feedback_team_created_idx
+  on session_feedback (team_id, created_at desc);
+
 -- Session State: Real-time synchronization state (Ephemeral-ish)
 -- Can be stored in database for persistence or relied on Realtime channel presence
 create table session_state (

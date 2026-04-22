@@ -3,8 +3,10 @@ import { supabase } from '@/lib/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import {
     isSessionFeedbackRole,
+    sessionFeedbackRowToEntry,
     type SessionFeedbackBroadcastPayload,
     type SessionFeedbackEntry,
+    type SessionFeedbackRow,
     type SessionRow,
 } from '@/types/session';
 
@@ -36,6 +38,14 @@ export const useRealtimeSession = ({ sessionId, teamId }: UseRealtimeSessionOpti
         mergeFeedbackEntry(broadcastPayload.entry);
     });
 
+    const handleFeedbackInsert = useEffectEvent((row: SessionFeedbackRow) => {
+        if (!teamId || row.team_id !== teamId) {
+            return;
+        }
+
+        mergeFeedbackEntry(sessionFeedbackRowToEntry(row));
+    });
+
     useEffect(() => {
         if (!supabase || !sessionId || !teamId) {
             return;
@@ -61,6 +71,18 @@ export const useRealtimeSession = ({ sessionId, teamId }: UseRealtimeSessionOpti
                 },
                 (payload) => {
                     handleSessionUpdate(payload.new as SessionRow);
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'session_feedback',
+                    filter: `session_id=eq.${sessionId}`,
+                },
+                (payload) => {
+                    handleFeedbackInsert(payload.new as SessionFeedbackRow);
                 }
             )
             .on('broadcast', { event: 'session-feedback' }, (message) => {

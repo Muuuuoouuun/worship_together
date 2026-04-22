@@ -1,8 +1,12 @@
 import { DEMO_TEAM_ID } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
 import {
+    MAX_SESSION_FEEDBACK_LOG,
     normalizeSessionState,
+    sessionFeedbackRowToEntry,
     type SessionDetail,
+    type SessionFeedbackEntry,
+    type SessionFeedbackRow,
     type SetlistRow,
     type SongRow,
     type TeamRow,
@@ -538,6 +542,33 @@ async function getSongsInOrder(songIds: string[]): Promise<Song[]> {
     return orderSongsByIds(songIds, await getSongsByIds(songIds));
 }
 
+async function getSessionFeedback(
+    sessionId: string,
+    teamId: string | null
+): Promise<SessionFeedbackEntry[]> {
+    if (!supabase || !teamId) {
+        return [];
+    }
+
+    const { data: rows, error } = await supabase
+        .from('session_feedback')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('team_id', teamId)
+        .order('created_at', { ascending: false })
+        .limit(MAX_SESSION_FEEDBACK_LOG);
+
+    if (error || !rows) {
+        if (error) {
+            console.error('Failed to fetch session feedback:', error);
+        }
+
+        return [];
+    }
+
+    return (rows as SessionFeedbackRow[]).reverse().map(sessionFeedbackRowToEntry);
+}
+
 function buildBundleFromRows({
     servicePreparation,
     setlist,
@@ -737,13 +768,19 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
 
     const songIds = getSongIdsFromOrder(setlist?.song_order ?? null);
     const songs = await getSongsInOrder(songIds);
+    const normalizedState = normalizeSessionState(session.current_state, songs);
+    const feedbackLog = await getSessionFeedback(session.id, session.team_id);
+    const currentState = {
+        ...normalizedState,
+        feedbackLog: feedbackLog.length > 0 ? feedbackLog : normalizedState.feedbackLog,
+    };
 
     return {
         session,
         setlist,
         songs,
         team,
-        currentState: normalizeSessionState(session.current_state, songs),
+        currentState,
     };
 }
 

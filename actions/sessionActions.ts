@@ -7,8 +7,10 @@ import {
     MAX_SESSION_FEEDBACK_LOG,
     MAX_SESSION_FEEDBACK_PRESETS,
     normalizeSessionState,
+    sessionFeedbackRowToEntry,
     type SessionCurrentState,
     type SessionFeedbackEntry,
+    type SessionFeedbackRow,
     type SessionFeedbackRole,
     type SessionRow,
 } from '@/types/session';
@@ -159,7 +161,6 @@ export async function appendSessionFeedback(
         throw new Error('Invalid feedback role');
     }
 
-    const currentState = normalizeSessionState(session.current_state);
     const entry: SessionFeedbackEntry = {
         id: crypto.randomUUID(),
         clientId: payload.clientId,
@@ -172,29 +173,35 @@ export async function appendSessionFeedback(
         page: payload.page,
         section: payload.section,
     };
-    const nextFeedbackLog = [
-        ...currentState.feedbackLog,
-        entry,
-    ].slice(-MAX_SESSION_FEEDBACK_LOG);
 
-    const nextState: SessionCurrentState = {
-        ...currentState,
-        feedbackLog: nextFeedbackLog,
-    };
-
-    const { error } = await supabase
-        .from('sessions')
-        .update({ current_state: nextState })
-        .eq('id', sessionId)
-        .eq('team_id', teamId);
+    const { data: insertedFeedback, error } = await supabase
+        .from('session_feedback')
+        .insert({
+            id: entry.id,
+            session_id: sessionId,
+            team_id: teamId,
+            client_id: entry.clientId,
+            role: entry.role,
+            message: entry.message,
+            song_id: entry.songId,
+            song_title: entry.songTitle,
+            page: entry.page,
+            section: entry.section,
+            created_at: entry.createdAt,
+        })
+        .select('*')
+        .single();
 
     if (error) {
         console.error('Failed to append session feedback:', error);
         throw new Error('Failed to append session feedback');
     }
 
+    const savedEntry = sessionFeedbackRowToEntry(insertedFeedback as SessionFeedbackRow);
+    const nextFeedbackLog = await getRecentSessionFeedback(supabase, sessionId, teamId);
+
     return {
-        entry,
+        entry: savedEntry,
         feedbackLog: nextFeedbackLog,
     };
 }
@@ -306,4 +313,28 @@ function ensureActiveSession(session: Pick<SessionRow, 'is_active'>) {
     if (!session.is_active) {
         throw new Error('Session is already closed');
     }
+}
+
+async function getRecentSessionFeedback(
+    supabase: ReturnType<typeof getSupabaseClient>,
+    sessionId: string,
+    teamId: string
+): Promise<SessionFeedbackEntry[]> {
+    const { data: rows, error } = await supabase
+        .from('session_feedback')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('team_id', teamId)
+        .order('created_at', { ascending: false })
+        .limit(MAX_SESSION_FEEDBACK_LOG);
+
+    if (error || !rows) {
+        if (error) {
+            console.error('Failed to fetch recent session feedback:', error);
+        }
+
+        return [];
+    }
+
+    return (rows as SessionFeedbackRow[]).reverse().map(sessionFeedbackRowToEntry);
 }

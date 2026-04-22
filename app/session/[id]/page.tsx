@@ -14,7 +14,7 @@ export default async function SessionPage({ params }: SessionPageProps) {
         notFound();
     }
 
-    const { session, songs, setlist, team } = sessionDetail;
+    const { currentState, session, songs, setlist, team } = sessionDetail;
 
     if (!session.team_id) {
         notFound();
@@ -34,6 +34,7 @@ export default async function SessionPage({ params }: SessionPageProps) {
             session={session}
             songs={songs}
             teamId={session.team_id}
+            initialState={currentState}
             teamName={team?.name ?? 'Worship Team'}
             setlistTitle={setlist?.title ?? 'Live Session'}
             worshipDateLabel={worshipDateLabel}

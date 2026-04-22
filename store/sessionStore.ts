@@ -49,7 +49,7 @@ interface SessionState {
     feedbackLog: SessionFeedbackEntry[];
     quickFeedbackPresets: SessionFeedbackPreset[];
     selectedFeedbackRole: SessionFeedbackRole;
-    initializeSession: (session: Session, songs: Song[]) => void;
+    initializeSession: (session: Session, songs: Song[], initialState?: SessionCurrentState) => void;
     setSessionMeta: (session: Session) => void;
     mergeFeedbackEntry: (entry: SessionFeedbackEntry) => void;
     syncFeedbackLog: (feedbackLog: SessionFeedbackEntry[]) => void;
@@ -79,8 +79,8 @@ export const useSessionStore = create<SessionState>((set) => ({
     quickFeedbackPresets: [],
     selectedFeedbackRole: DEFAULT_SESSION_FEEDBACK_ROLE,
 
-    initializeSession: (session, songs) => {
-        const state = normalizeSessionState(session.current_state, songs);
+    initializeSession: (session, songs, initialState) => {
+        const state = initialState ?? normalizeSessionState(session.current_state, songs);
         const currentSong = resolveSong(state.songId, songs);
 
         set({
@@ -128,7 +128,7 @@ export const useSessionStore = create<SessionState>((set) => ({
                 bpmEnabled: payload.bpmEnabled,
                 currentBpm: payload.bpmValue,
                 autoBpmSync: payload.autoBpmSync,
-                feedbackLog: payload.feedbackLog,
+                feedbackLog: payload.feedbackLog.length > 0 ? payload.feedbackLog : state.feedbackLog,
                 quickFeedbackPresets: payload.quickFeedbackPresets,
             };
         }),
