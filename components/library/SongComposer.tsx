@@ -16,9 +16,9 @@ export default function SongComposer({ disabled = false }: SongComposerProps) {
                     <FilePlus2 size={20} />
                 </div>
                 <div>
-                    <h2 className="text-xl font-serif font-bold text-primary">Add Song</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-primary/50">
-                        Register a worship song with its key, tempo, and optional MusicXML source.
+                        <h2 className="text-xl font-serif font-bold text-primary">곡 추가</h2>
+                        <p className="mt-1 text-sm leading-relaxed text-primary/50">
+                        예배곡의 키, BPM, 선택적 MusicXML 악보 소스를 등록합니다.
                     </p>
                 </div>
             </div>
@@ -27,18 +27,18 @@ export default function SongComposer({ disabled = false }: SongComposerProps) {
                 <fieldset disabled={disabled} className="space-y-4 disabled:cursor-not-allowed disabled:opacity-60">
                     <div className="grid gap-4 md:grid-cols-2">
                         <label className="space-y-2">
-                            <span className="text-sm font-semibold text-primary">Title</span>
-                            <Input name="title" placeholder="How Great Is Our God" required />
+                            <span className="text-sm font-semibold text-primary">곡명</span>
+                            <Input name="title" placeholder="믿음으로 서리라" required />
                         </label>
                         <label className="space-y-2">
-                            <span className="text-sm font-semibold text-primary">Artist</span>
-                            <Input name="artist" placeholder="Chris Tomlin" />
+                            <span className="text-sm font-semibold text-primary">팀/아티스트</span>
+                            <Input name="artist" placeholder="주일 2부팀" />
                         </label>
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
                         <label className="space-y-2">
-                            <span className="text-sm font-semibold text-primary">Original Key</span>
+                            <span className="text-sm font-semibold text-primary">원키</span>
                             <Input name="originalKey" placeholder="G" />
                         </label>
                         <label className="space-y-2">
@@ -53,7 +53,7 @@ export default function SongComposer({ disabled = false }: SongComposerProps) {
                     </label>
 
                     <label className="space-y-2">
-                        <span className="text-sm font-semibold text-primary">Raw MusicXML</span>
+                            <span className="text-sm font-semibold text-primary">MusicXML 원문</span>
                         <textarea
                             name="dataXml"
                             rows={6}
@@ -63,7 +63,7 @@ export default function SongComposer({ disabled = false }: SongComposerProps) {
                     </label>
 
                     <Button type="submit" className="h-11 w-full rounded-full px-6 sm:w-auto">
-                        Save Song
+                        곡 저장
                     </Button>
                 </fieldset>
             </form>

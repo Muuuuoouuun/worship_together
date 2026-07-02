@@ -5,52 +5,52 @@ export default function GroupsPage() {
     return (
         <CommunityRoutePage
             currentPath="/groups"
-            eyebrow="Groups & Fellowship"
-            title="Help people find a smaller room inside the church."
-            description="Groups give newcomers and members a relational next step after worship, care, or serving. This route frames the future group discovery flow."
-            primaryAction={{ href: '#newcomer', label: 'Start newcomer path' }}
-            secondaryAction={{ href: '/community', label: 'Community center' }}
+            eyebrow="그룹"
+            title="예배팀과 소그룹을 함께 묶어 다음 만남으로 연결합니다."
+            description="팀별 예배 준비, 예배 후 묵상, 새가족 후속 안내가 흩어지지 않도록 그룹 단위로 정리합니다."
+            primaryAction={{ href: '/community', label: '팀 커뮤니티' }}
+            secondaryAction={{ href: '/dashboard', label: '오늘 운영판' }}
             metrics={[
                 {
-                    label: 'Groups',
-                    value: '8 sample',
-                    detail: 'Bible study, prayer, fellowship, and ministry teams.',
+                    label: '예배팀',
+                    value: '3개',
+                    detail: '주일, 청년, 금요기도회 팀을 분리해 봅니다.',
                 },
                 {
-                    label: 'Next meet',
-                    value: 'Wed',
-                    detail: 'The route should prioritize what someone can join soon.',
+                    label: '소그룹',
+                    value: '8개',
+                    detail: '말씀 묵상과 새가족 연결을 담당합니다.',
                 },
                 {
-                    label: 'Newcomer',
-                    value: 'Step 1',
-                    detail: 'A gentle path for people who are not ready to commit.',
+                    label: '다음 만남',
+                    value: '수요일',
+                    detail: '가장 가까운 모임을 우선 보여줍니다.',
                 },
             ]}
             sections={[
                 {
                     icon: UsersRound,
-                    title: 'Small groups',
-                    description: 'Show people-centered gatherings rather than only calendar events.',
-                    items: ['Bible study', 'Young adults', 'Family fellowship'],
+                    title: '예배팀 그룹',
+                    description: '세션과 역할을 팀 안에서 묶어 준비 상태를 봅니다.',
+                    items: ['주일 2부팀', '청년 예배팀', '금요기도회팀'],
                 },
                 {
                     icon: UserPlus,
-                    title: 'Newcomer path',
-                    description: 'Offer a low-pressure sequence for first-time visitors.',
-                    items: ['Meet a host', 'Ask a question', 'Choose a next gathering'],
+                    title: '새가족 연결',
+                    description: '예배 후 바로 부담 없는 첫 단계를 제안합니다.',
+                    items: ['호스트 만나기', '질문 남기기', '다음 모임 선택'],
                 },
                 {
                     icon: BookOpen,
-                    title: 'Discipleship',
-                    description: 'Connect sermon reflection with learning and accountability.',
-                    items: ['Message reflection', 'Class sign-up', 'Reading plan'],
+                    title: '말씀 나눔',
+                    description: '설교 묵상 질문을 그룹별로 이어갑니다.',
+                    items: ['본문 질문', '나눔 댓글', '읽음 확인'],
                 },
                 {
                     icon: CalendarDays,
-                    title: 'Fellowship events',
-                    description: 'Make near-term gatherings easy to discover from the dashboard.',
-                    items: ['Community meal', 'Prayer night', 'Testimony evening'],
+                    title: '모임 일정',
+                    description: '팀 리허설, 소그룹, 기도회 일정을 함께 봅니다.',
+                    items: ['리허설', '소그룹', '중보기도'],
                 },
             ]}
         />

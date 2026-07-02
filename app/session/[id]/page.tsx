@@ -21,13 +21,13 @@ export default async function SessionPage({ params }: SessionPageProps) {
     }
 
     const worshipDateLabel = setlist
-        ? new Date(setlist.worship_date).toLocaleString('en-US', {
+        ? new Date(setlist.worship_date).toLocaleString('ko-KR', {
             month: 'short',
             day: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
         })
-        : 'Schedule pending';
+        : '일정 미정';
 
     return (
         <SessionWorkspace
@@ -35,8 +35,8 @@ export default async function SessionPage({ params }: SessionPageProps) {
             songs={songs}
             teamId={session.team_id}
             initialState={currentState}
-            teamName={team?.name ?? 'Worship Team'}
-            setlistTitle={setlist?.title ?? 'Live Session'}
+            teamName={team?.name ?? '예배팀'}
+            setlistTitle={setlist?.title ?? '라이브 세션'}
             worshipDateLabel={worshipDateLabel}
             theme={setlist?.theme ?? null}
         />

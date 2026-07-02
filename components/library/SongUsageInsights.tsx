@@ -31,21 +31,21 @@ export default function SongUsageInsights({ setlists, songs }: SongUsageInsights
                         <BarChart3 size={20} />
                     </div>
                     <div>
-                        <h2 className="text-xl font-serif font-bold text-primary">Song Rotation</h2>
+                        <h2 className="text-xl font-serif font-bold text-primary">선곡 통계</h2>
                         <p className="mt-1 text-sm leading-relaxed text-primary/50">
-                            Track how often songs appear in planned setlists before the team repeats them too soon.
+                            최근 콘티에서 곡이 얼마나 자주 사용됐는지 확인해 반복 선곡을 조절합니다.
                         </p>
                     </div>
                 </div>
                 <span className="rounded-full bg-primary/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-primary/45">
-                    {setlists.length} plans
+                    {setlists.length}개 콘티
                 </span>
             </div>
 
             <div className="space-y-4">
                 {topSongs.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-primary/10 px-4 py-8 text-center text-sm text-primary/45">
-                        Add songs to setlists to see rotation frequency.
+                        콘티에 곡을 추가하면 사용 빈도가 표시됩니다.
                     </div>
                 ) : (
                     <div className="space-y-3">
@@ -60,8 +60,8 @@ export default function SongUsageInsights({ setlists, songs }: SongUsageInsights
                                         <p className="mt-1 flex items-center gap-2 text-xs text-primary/45">
                                             <Clock3 size={12} />
                                             {insight.lastUsedAt
-                                                ? `Last planned ${formatUsageDate(insight.lastUsedAt)}`
-                                                : 'No date found'}
+                                                ? `마지막 사용 ${formatUsageDate(insight.lastUsedAt)}`
+                                                : '날짜 없음'}
                                         </p>
                                     </div>
                                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-secondary/10 px-3 py-1 text-xs font-bold text-secondary">
@@ -76,7 +76,7 @@ export default function SongUsageInsights({ setlists, songs }: SongUsageInsights
 
                 {restingSongs.length > 0 && (
                     <div className="rounded-2xl border border-primary/10 bg-background/70 px-4 py-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">Resting songs</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">쉬어가는 곡</p>
                         <p className="mt-2 text-sm leading-relaxed text-primary/55">
                             {restingSongs.map((insight) => insight.song.title).join(', ')}
                         </p>
@@ -138,7 +138,7 @@ function resolveLatestDate(currentDate: string | null, candidateDate: string): s
 }
 
 function formatUsageDate(value: string): string {
-    return new Intl.DateTimeFormat('en-US', {
+    return new Intl.DateTimeFormat('ko-KR', {
         month: 'short',
         day: 'numeric',
     }).format(new Date(value));

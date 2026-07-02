@@ -42,7 +42,7 @@ export default function SetlistShareButton({ shareText }: SetlistShareButtonProp
             className="inline-flex items-center justify-center gap-2 rounded-full border border-primary/10 bg-white/70 px-3 py-2 text-xs font-semibold text-primary transition hover:border-primary/20 hover:bg-white"
         >
             {copied ? <Check size={13} /> : <Share2 size={13} />}
-            {copied ? 'Copied' : 'Copy plan'}
+            {copied ? '복사됨' : '콘티 공유'}
         </button>
     );
 }

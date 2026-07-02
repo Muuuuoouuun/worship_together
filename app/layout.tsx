@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     default: "Worship Together",
     template: "%s | Worship Together",
   },
-  description: "Worship, prayer, serving, and group connection tools for church communities.",
+  description: "팀별 콘티, 세션 준비, 라이브 큐, 악보 알림, 말씀 묵상을 함께 다루는 예배 운영 앱.",
   applicationName: "Worship Together",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -57,7 +57,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="ko">
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${merriweather.variable} antialiased font-sans`}
       >

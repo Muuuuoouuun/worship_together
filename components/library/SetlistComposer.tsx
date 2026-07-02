@@ -20,9 +20,9 @@ export default function SetlistComposer({ songs, disabled = false }: SetlistComp
                     <CalendarRange size={20} />
                 </div>
                 <div>
-                    <h2 className="text-xl font-serif font-bold text-primary">Plan Setlist</h2>
+                    <h2 className="text-xl font-serif font-bold text-primary">콘티 생성</h2>
                     <p className="mt-1 text-sm leading-relaxed text-primary/50">
-                        Schedule the next worship service and choose which songs should feed the live session.
+                        다음 예배 일정을 잡고 라이브 세션에 들어갈 곡 순서를 선택합니다.
                     </p>
                 </div>
             </div>
@@ -31,31 +31,31 @@ export default function SetlistComposer({ songs, disabled = false }: SetlistComp
                 <fieldset disabled={disabled} className="space-y-4 disabled:cursor-not-allowed disabled:opacity-60">
                     <div className="grid gap-4 md:grid-cols-2">
                         <label className="space-y-2">
-                            <span className="text-sm font-semibold text-primary">Service Title</span>
-                            <Input name="title" placeholder="Sunday Main Service" required />
+                            <span className="text-sm font-semibold text-primary">예배 제목</span>
+                            <Input name="title" placeholder="주일 2부 예배" required />
                         </label>
                         <label className="space-y-2">
-                            <span className="text-sm font-semibold text-primary">Theme</span>
-                            <Input name="theme" placeholder="Grace and Renewal" />
+                            <span className="text-sm font-semibold text-primary">주제</span>
+                            <Input name="theme" placeholder="신실하신 하나님" />
                         </label>
                     </div>
 
                     <label className="space-y-2">
-                        <span className="text-sm font-semibold text-primary">Worship Date</span>
+                        <span className="text-sm font-semibold text-primary">예배 일시</span>
                         <Input name="worshipDate" type="datetime-local" required />
                     </label>
 
                     <div className="space-y-2">
                         <div>
-                            <p className="text-sm font-semibold text-primary">Song Order</p>
+                            <p className="text-sm font-semibold text-primary">곡 순서</p>
                             <p className="mt-1 text-xs text-primary/45">
-                                Select songs in the order they should appear in the service.
+                                예배에 들어갈 곡을 순서대로 선택하세요.
                             </p>
                         </div>
                         <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-primary/10 bg-background/70 p-3">
                             {songs.length === 0 ? (
                                 <div className="rounded-xl border border-dashed border-primary/10 px-4 py-6 text-sm text-primary/45">
-                                    Add songs first to build a setlist.
+                                    콘티를 만들려면 먼저 곡을 추가하세요.
                                 </div>
                             ) : (
                                 songs.map((song, index) => (
@@ -74,9 +74,9 @@ export default function SetlistComposer({ songs, disabled = false }: SetlistComp
                                                 {index + 1}. {song.title}
                                             </p>
                                             <p className="text-xs text-primary/45">
-                                                {[song.artist, song.original_key ? `${song.original_key} key` : null, song.bpm ? `${song.bpm} BPM` : null]
+                                                {[song.artist, song.original_key ? `${song.original_key} 키` : null, song.bpm ? `${song.bpm} BPM` : null]
                                                     .filter(Boolean)
-                                                    .join(' | ') || 'Metadata pending'}
+                                                    .join(' | ') || '메타데이터 대기'}
                                             </p>
                                         </div>
                                     </label>
@@ -86,7 +86,7 @@ export default function SetlistComposer({ songs, disabled = false }: SetlistComp
                     </div>
 
                     <Button type="submit" className="h-11 w-full rounded-full px-6 sm:w-auto" disabled={songs.length === 0}>
-                        Save Setlist
+                        콘티 저장
                     </Button>
                 </fieldset>
             </form>

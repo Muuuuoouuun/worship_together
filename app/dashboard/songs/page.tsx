@@ -18,24 +18,24 @@ interface LibraryPageProps {
 }
 
 const successMessages: Record<string, string> = {
-    bpm: 'Song BPM preset updated.',
-    song: 'Song saved to the library.',
-    setlist: 'Setlist scheduled successfully.',
-    template: 'Setlist duplicated for next week.',
+    bpm: '곡 BPM 프리셋을 업데이트했습니다.',
+    song: '곡을 라이브러리에 저장했습니다.',
+    setlist: '콘티를 일정에 추가했습니다.',
+    template: '콘티를 다음 주 템플릿으로 복제했습니다.',
 };
 
 const errorMessages: Record<string, string> = {
     'missing-song-id': 'Song target is missing.',
-    'missing-song-title': 'Song title is required.',
-    'invalid-bpm': 'BPM must be a positive number.',
-    'create-song': 'Song could not be saved. Check Supabase permissions and try again.',
-    'update-song-bpm': 'BPM preset could not be saved. Check Supabase permissions and try again.',
-    'missing-setlist-title': 'Setlist title is required.',
-    'missing-setlist-id': 'Setlist target is missing.',
-    'missing-worship-date': 'Worship date is required.',
-    'invalid-worship-date': 'Worship date format is invalid.',
-    'create-setlist': 'Setlist could not be saved. Check Supabase permissions and try again.',
-    'duplicate-setlist': 'Setlist could not be duplicated. Check Supabase permissions and try again.',
+    'missing-song-title': '곡명이 필요합니다.',
+    'invalid-bpm': 'BPM은 양수여야 합니다.',
+    'create-song': '곡을 저장하지 못했습니다. Supabase 권한을 확인해주세요.',
+    'update-song-bpm': 'BPM 프리셋을 저장하지 못했습니다. Supabase 권한을 확인해주세요.',
+    'missing-setlist-title': '콘티 제목이 필요합니다.',
+    'missing-setlist-id': '콘티 대상이 없습니다.',
+    'missing-worship-date': '예배 일시가 필요합니다.',
+    'invalid-worship-date': '예배 일시 형식이 올바르지 않습니다.',
+    'create-setlist': '콘티를 저장하지 못했습니다. Supabase 권한을 확인해주세요.',
+    'duplicate-setlist': '콘티를 복제하지 못했습니다. Supabase 권한을 확인해주세요.',
 };
 
 export default async function SongLibraryPage({ searchParams }: LibraryPageProps) {
@@ -55,24 +55,24 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
                 <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                     <div className="space-y-3">
                         <span className="inline-flex rounded-full bg-secondary/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-secondary">
-                            Library Workspace
+                            콘티 워크스페이스
                         </span>
                         <div>
                             <h1 className="text-4xl font-serif font-black tracking-tight text-primary md:text-5xl">
-                                Songs, Setlists, and Service Prep
+                                악보, 콘티, 예배 준비
                             </h1>
                             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-primary/55 md:text-base">
-                                Build the source material that powers the live worship session. This is the planning layer before conductor sync.
+                                라이브 예배 세션의 기반이 되는 곡, BPM, 악보, 콘티를 준비합니다.
                             </p>
                         </div>
                     </div>
 
                     <div className="grid w-full grid-cols-1 gap-3 sm:w-auto sm:grid-cols-3">
-                        <MetricCard icon={Music4} label="Songs" value={songs.length} />
-                        <MetricCard icon={CalendarRange} label="Setlists" value={setlists.length} />
+                        <MetricCard icon={Music4} label="곡" value={songs.length} />
+                        <MetricCard icon={CalendarRange} label="콘티" value={setlists.length} />
                         <MetricCard
                             icon={RadioTower}
-                            label="Ready"
+                            label="라이브 가능"
                             value={setlists.filter((setlist) => setlist.songs.length > 0).length}
                         />
                     </div>
@@ -92,9 +92,9 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
 
                 {!hasSupabase && (
                     <GlassCard className="border-amber-500/20 bg-amber-500/10">
-                        <p className="text-sm font-semibold text-amber-700">Supabase env vars are empty.</p>
+                        <p className="text-sm font-semibold text-amber-700">Supabase 환경 변수가 비어 있습니다.</p>
                         <p className="mt-2 text-sm leading-relaxed text-amber-700/80">
-                            The library UI is available, but create actions stay disabled until `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set in `.env.local`.
+                            라이브러리 UI는 볼 수 있지만 `.env.local`에 `NEXT_PUBLIC_SUPABASE_URL`과 `NEXT_PUBLIC_SUPABASE_ANON_KEY`가 설정될 때까지 생성 액션은 비활성화됩니다.
                         </p>
                     </GlassCard>
                 )}

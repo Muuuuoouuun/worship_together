@@ -5,52 +5,52 @@ export default function ServePage() {
     return (
         <CommunityRoutePage
             currentPath="/serve"
-            eyebrow="Serve This Week"
-            title="Move from willingness to a confirmed ministry commitment."
-            description="Serving should feel concrete: what is needed, when it happens, who owns it, and what someone should prepare before arriving."
-            primaryAction={{ href: '#open-roles', label: 'View open roles' }}
-            secondaryAction={{ href: '/groups', label: 'Find a team' }}
+            eyebrow="섬김"
+            title="예배 후 마음이 실제 섬김 약속으로 이어지게 합니다."
+            description="필요한 역할, 시간, 준비사항, 담당자를 명확히 보여주어 예배팀과 공동체 섬김이 자연스럽게 연결됩니다."
+            primaryAction={{ href: '#open-roles', label: '열린 역할 보기' }}
+            secondaryAction={{ href: '/groups', label: '그룹 찾기' }}
             metrics={[
                 {
-                    label: 'Needs',
-                    value: '6 open',
-                    detail: 'Sample ministry slots for the first UX pass.',
+                    label: '필요',
+                    value: '6개',
+                    detail: '이번 주 열린 섬김 역할 샘플입니다.',
                 },
                 {
-                    label: 'Commit',
-                    value: '1 tap',
-                    detail: 'Future sign-ups should confirm without extra coordination.',
+                    label: '확정',
+                    value: '1탭',
+                    detail: '추가 조율 없이 가능 여부를 빠르게 확인합니다.',
                 },
                 {
-                    label: 'Prep',
-                    value: 'Clear',
-                    detail: 'Every role should include arrival time and expectations.',
+                    label: '준비',
+                    value: '명확',
+                    detail: '도착 시간과 기대 역할을 같이 보여줍니다.',
                 },
             ]}
             sections={[
                 {
                     icon: BadgeCheck,
-                    title: 'Open ministry needs',
-                    description: 'List concrete gaps instead of a vague call for volunteers.',
-                    items: ['Welcome team for Sunday morning', 'Meal train support', 'Youth night setup'],
+                    title: '열린 섬김',
+                    description: '막연한 모집 대신 구체적인 빈자리를 보여줍니다.',
+                    items: ['주일 안내팀', '청년부 세팅', '기도회 케어 follow-up'],
                 },
                 {
                     icon: CalendarDays,
-                    title: 'Serving schedule',
-                    description: 'Make the next date, arrival time, and owner obvious.',
-                    items: ['Upcoming role calendar', 'Leader contact', 'Preparation notes'],
+                    title: '섬김 일정',
+                    description: '날짜, 도착 시간, 담당자를 한 번에 확인합니다.',
+                    items: ['다가오는 역할', '리더 연락처', '준비 메모'],
                 },
                 {
                     icon: CheckCircle2,
-                    title: 'Commitment status',
-                    description: 'People should know whether they are requested, confirmed, or waiting.',
-                    items: ['Confirm availability', 'See pending requests', 'Track completed service'],
+                    title: '확정 상태',
+                    description: '요청, 대기, 확정, 완료를 분리합니다.',
+                    items: ['가능 여부 확인', '대기 요청', '완료 기록'],
                 },
                 {
                     icon: ClipboardList,
-                    title: 'Leader overview',
-                    description: 'Ministry leads need the unanswered gaps surfaced first.',
-                    items: ['Unfilled roles', 'Recently confirmed volunteers', 'Follow-up reminders'],
+                    title: '리더 보기',
+                    description: '아직 응답이 없는 빈자리를 먼저 보여줍니다.',
+                    items: ['미충원 역할', '최근 확정', '후속 알림'],
                 },
             ]}
         />

@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Worship Together",
     short_name: "Worship",
-    description: "Worship, prayer, serving, and group connection tools for church communities.",
+    description: "팀별 콘티, 세션 준비, 라이브 큐, 악보 알림, 말씀 묵상을 함께 다루는 예배 운영 앱.",
     start_url: "/dashboard",
     scope: "/",
     display: "standalone",

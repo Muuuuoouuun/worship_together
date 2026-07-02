@@ -1,76 +1,68 @@
 import CommunityRoutePage from '@/components/community/CommunityRoutePage';
-import { CalendarDays, HandHeart, HeartHandshake, Music2, UsersRound } from 'lucide-react';
+import { BookOpenCheck, HeartHandshake, MessageSquareText, Music2, UsersRound } from 'lucide-react';
 
 export default function CommunityPage() {
     return (
         <CommunityRoutePage
             currentPath="/community"
-            eyebrow="Community Center"
-            title="One place for worship, care, serving, and belonging."
-            description="See what is happening in the church today, choose a meaningful next step, and help leaders notice the people and needs that deserve attention."
-            primaryAction={{ href: '/care', label: 'Ask for prayer' }}
-            secondaryAction={{ href: '/serve', label: 'Find a place to serve' }}
+            eyebrow="팀 커뮤니티"
+            title="예배 후 말씀, 묵상, 피드백이 팀별로 이어집니다."
+            description="각 예배팀은 콘티와 라이브 큐 로그를 바탕으로 설교 묵상, 세션 피드백, 케어 follow-up, 다음 예배 준비를 같은 공간에서 나눕니다."
+            primaryAction={{ href: '/dashboard', label: '오늘 예배 보기' }}
+            secondaryAction={{ href: '/dashboard/songs', label: '콘티 열기' }}
             metrics={[
                 {
-                    label: 'Today',
-                    value: '4 paths',
-                    detail: 'Worship, prayer, serving, and groups stay visible together.',
+                    label: '팀',
+                    value: '3개',
+                    detail: '주일 2부팀, 청년 예배팀, 금요기도회팀을 그룹별로 분리합니다.',
                 },
                 {
-                    label: 'Care',
-                    value: '24h',
-                    detail: 'Requests are designed around quick first response.',
+                    label: '묵상',
+                    value: '2개',
+                    detail: '말씀 질문과 팀 피드백 스레드가 예배 후 열립니다.',
                 },
                 {
-                    label: 'Next step',
-                    value: '1 action',
-                    detail: 'The dashboard should point each person toward one clear action.',
+                    label: '후속조치',
+                    value: '5건',
+                    detail: '케어, 공지, 다음 리허설 준비를 한 곳에서 추적합니다.',
                 },
             ]}
             sections={[
                 {
                     icon: Music2,
-                    title: 'Worship with the church',
-                    description: 'Keep the existing live worship workflow close at hand.',
-                    items: ['Join an active worship session', 'Review the upcoming setlist', 'Move from worship into reflection'],
+                    title: '예배팀별 공간',
+                    description: '예배팀마다 콘티, 세션, 공지, 묵상 스레드가 따로 묶입니다.',
+                    items: ['주일 2부팀', '청년 예배팀', '금요기도회팀'],
                     href: '/dashboard',
-                    actionLabel: 'Open today',
+                    actionLabel: '운영판 보기',
                 },
                 {
-                    icon: HandHeart,
-                    title: 'Prayer and care',
-                    description: 'Make it easier to ask for help and easier for leaders to respond.',
-                    items: ['Choose a privacy level', 'Mark urgency clearly', 'Track pastoral follow-up'],
-                    href: '/care',
-                    actionLabel: 'Open care',
+                    icon: BookOpenCheck,
+                    title: '말씀 묵상 공유',
+                    description: '설교 본문과 나눔 질문을 예배 후 팀 커뮤니티에 고정합니다.',
+                    items: ['본문과 핵심 질문', '소그룹 나눔', '읽음과 댓글'],
+                },
+                {
+                    icon: MessageSquareText,
+                    title: '라이브 큐 피드백',
+                    description: '예배 중 보낸 빠르요, 느려요, 섹션 큐를 다음 리허설 자료로 남깁니다.',
+                    items: ['큐 로그 리뷰', '악기장 코멘트', '다음 주 보완점'],
                 },
                 {
                     icon: HeartHandshake,
-                    title: 'Serve this week',
-                    description: 'Turn broad volunteer interest into concrete ministry commitments.',
-                    items: ['See open ministry needs', 'Confirm a serving slot', 'Know preparation details'],
-                    href: '/serve',
-                    actionLabel: 'Open serving',
+                    title: '케어와 follow-up',
+                    description: '기도제목과 케어 요청은 공개 범위에 맞춰 안전하게 이어집니다.',
+                    items: ['공개/리더/비공개 분류', '담당자 지정', '응답 기록'],
+                    href: '/care',
+                    actionLabel: '케어 보기',
                 },
                 {
                     icon: UsersRound,
-                    title: 'Groups and fellowship',
-                    description: 'Give newcomers and members a lower-pressure path into relationship.',
-                    items: ['Join a small group', 'Find newcomer gatherings', 'Follow up after worship'],
+                    title: '그룹 연결',
+                    description: '예배 후 묵상이 소그룹과 섬김팀의 다음 만남으로 연결됩니다.',
+                    items: ['소그룹 초대', '섬김 요청', '새가족 후속 안내'],
                     href: '/groups',
-                    actionLabel: 'Open groups',
-                },
-                {
-                    icon: CalendarDays,
-                    title: 'Community rhythm',
-                    description: 'Help leaders see what needs attention before the week gets noisy.',
-                    items: ['Upcoming church moments', 'Unread follow-ups', 'Open care tasks'],
-                },
-                {
-                    icon: HeartHandshake,
-                    title: 'Belonging loop',
-                    description: 'Every visit should lead to worship, care, service, fellowship, or reflection.',
-                    items: ['One primary action per person', 'Clear pastoral boundaries', 'Simple ways to return'],
+                    actionLabel: '그룹 보기',
                 },
             ]}
         />

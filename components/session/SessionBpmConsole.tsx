@@ -34,20 +34,20 @@ export default function SessionBpmConsole({
 }: SessionBpmConsoleProps) {
     const { activeBeat, blinkActive } = useBlinkMetronome(bpmEnabled && isActive, currentBpm);
     const statusLabel = bpmEnabled && currentBpm
-        ? 'Blink click live'
+        ? 'BPM 블링크 켜짐'
         : bpmEnabled
-            ? 'Waiting for BPM preset'
-            : 'Blink click off';
+            ? 'BPM 프리셋 대기'
+            : 'BPM 블링크 꺼짐';
     const statusTone = bpmEnabled && currentBpm
         ? 'bg-emerald-500/10 text-emerald-700'
         : bpmEnabled
             ? 'bg-amber-500/10 text-amber-700'
             : 'bg-primary/5 text-primary/50';
     const controlHelpText = !canControlLocally
-        ? 'Leader is currently controlling the shared BPM console.'
+        ? '현재 인도자가 공유 BPM 콘솔을 제어 중입니다.'
         : autoBpmSync
-            ? 'Song changes automatically load the saved BPM preset.'
-            : 'Auto apply is paused. You can fine-tune manually.';
+            ? '곡이 바뀌면 저장된 BPM 프리셋을 자동으로 불러옵니다.'
+            : '자동 적용이 꺼져 있습니다. 수동으로 미세 조정할 수 있습니다.';
     const displayBeat = bpmEnabled && isActive && currentBpm ? activeBeat : 0;
     const displayBlink = bpmEnabled && isActive && currentBpm ? blinkActive : false;
     const beatDots = useMemo(() => Array.from({ length: 4 }, (_, index) => index + 1), []);
@@ -60,9 +60,9 @@ export default function SessionBpmConsole({
                         <AudioLines size={20} />
                     </div>
                     <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">Instrument BPM</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">드럼 BPM</p>
                         <p className="mt-2 text-sm leading-relaxed text-primary/55">
-                            Visual blink metronome for the band. Save presets per song, then let the live room auto-load them as worship moves forward.
+                            밴드를 위한 시각 메트로놈입니다. 곡별 프리셋을 저장하면 예배 흐름에 따라 자동으로 불러옵니다.
                         </p>
                     </div>
                 </div>
@@ -75,13 +75,13 @@ export default function SessionBpmConsole({
                 <div className="rounded-3xl border border-primary/10 bg-[radial-gradient(circle_at_center,_rgba(212,175,55,0.18),_transparent_52%),linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.62))] p-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">Current pulse</p>
+                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">현재 박자</p>
                             <p className="mt-2 text-4xl font-serif font-black text-primary">
                                 {currentBpm ?? '--'}
                                 <span className="ml-2 text-base font-semibold text-primary/40">BPM</span>
                             </p>
                             <p className="mt-2 text-sm text-primary/50">
-                                {currentSongTitle ? `${currentSongTitle}` : 'No song selected'}
+                                {currentSongTitle ? `${currentSongTitle}` : '곡이 선택되지 않았습니다'}
                             </p>
                         </div>
                         <div className="flex flex-col items-center gap-3">
@@ -104,18 +104,18 @@ export default function SessionBpmConsole({
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <ControlMetric
                             icon={Music2}
-                            label="Song preset"
-                            value={songPresetBpm ? `${songPresetBpm} BPM` : 'Not set'}
+                            label="곡 프리셋"
+                            value={songPresetBpm ? `${songPresetBpm} BPM` : '미설정'}
                         />
                         <ControlMetric
                             icon={Gauge}
-                            label="Auto apply"
-                            value={autoBpmSync ? 'On' : 'Off'}
+                            label="자동 적용"
+                            value={autoBpmSync ? '켜짐' : '꺼짐'}
                         />
                     </div>
 
                     <div className="rounded-3xl border border-primary/10 bg-white/65 p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">Live controls</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">라이브 제어</p>
                         <p className="mt-2 text-sm leading-relaxed text-primary/50">{controlHelpText}</p>
 
                         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -126,7 +126,7 @@ export default function SessionBpmConsole({
                                 className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${bpmEnabled ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-white'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 {bpmEnabled ? <EyeOff size={16} /> : <Eye size={16} />}
-                                {bpmEnabled ? 'Turn blink off' : 'Turn blink on'}
+                                {bpmEnabled ? '블링크 끄기' : '블링크 켜기'}
                             </button>
                             <button
                                 type="button"
@@ -135,7 +135,7 @@ export default function SessionBpmConsole({
                                 className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${autoBpmSync ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-white'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 <Zap size={16} />
-                                {autoBpmSync ? 'Auto apply on' : 'Auto apply off'}
+                                {autoBpmSync ? '자동 적용 켜짐' : '자동 적용 꺼짐'}
                             </button>
                         </div>
 
@@ -160,7 +160,7 @@ export default function SessionBpmConsole({
                             className="tap-target mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-surface transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
                         >
                             <AudioLines size={16} />
-                            Apply current song preset
+                            현재 곡 BPM 적용
                         </button>
                     </div>
                 </div>

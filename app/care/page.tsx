@@ -5,52 +5,52 @@ export default function CarePage() {
     return (
         <CommunityRoutePage
             currentPath="/care"
-            eyebrow="Prayer & Care"
-            title="Ask for prayer and help without wondering who will see it."
-            description="Care workflows need trust first: privacy, urgency, and follow-up ownership should be visible before a person shares something sensitive."
-            primaryAction={{ href: '#request', label: 'Start a care request' }}
-            secondaryAction={{ href: '/community', label: 'Back to community' }}
+            eyebrow="케어"
+            title="기도와 돌봄 요청은 공개 범위와 담당자를 분명히 합니다."
+            description="예배 후 말씀과 묵상에서 이어지는 기도제목을 안전하게 받고, 리더가 놓치지 않도록 후속조치를 큐로 관리합니다."
+            primaryAction={{ href: '#request', label: '기도 요청 시작' }}
+            secondaryAction={{ href: '/community', label: '팀 커뮤니티' }}
             metrics={[
                 {
-                    label: 'Privacy',
-                    value: '4 levels',
-                    detail: 'Private, leaders, group, or church-visible requests.',
+                    label: '공개 범위',
+                    value: '4단계',
+                    detail: '비공개, 리더, 그룹, 전체 공개를 구분합니다.',
                 },
                 {
-                    label: 'Response',
-                    value: '< 24h',
-                    detail: 'A clear first-response target for urgent care needs.',
+                    label: '응답 목표',
+                    value: '24h',
+                    detail: '긴급 케어는 하루 안에 첫 응답을 목표로 합니다.',
                 },
                 {
-                    label: 'Queue',
-                    value: 'Open',
-                    detail: 'Leader-facing follow-up work will live here next.',
+                    label: '담당',
+                    value: '지정',
+                    detail: '리더 follow-up이 필요한 요청을 앞에 둡니다.',
                 },
             ]}
             sections={[
                 {
                     icon: ShieldCheck,
-                    title: 'Request boundaries',
-                    description: 'People should know exactly where their request goes.',
-                    items: ['Pick a visibility level before submitting', 'Flag urgent pastoral attention', 'Invite follow-up without public exposure'],
+                    title: '요청 경계',
+                    description: '기도제목이 어디까지 공유되는지 먼저 보여줍니다.',
+                    items: ['공개 범위 선택', '긴급도 표시', '비공개 follow-up'],
                 },
                 {
                     icon: HandHeart,
-                    title: 'Respond with care',
-                    description: 'Members and leaders need practical response actions.',
-                    items: ['Pray for someone', 'Offer a meal, ride, or visit', 'Mark follow-up as complete'],
+                    title: '돌봄 응답',
+                    description: '기도, 식사, 방문, 연락 같은 실제 응답을 기록합니다.',
+                    items: ['기도하기', '도움 제안', '완료 표시'],
                 },
                 {
                     icon: ClipboardList,
-                    title: 'Leader triage',
-                    description: 'Care should not depend on memory or scattered messages.',
-                    items: ['Assign an owner', 'Track status', 'See unresolved requests first'],
+                    title: '리더 큐',
+                    description: '흩어진 메시지 대신 담당자와 상태를 한 곳에 둡니다.',
+                    items: ['담당자 지정', '상태 추적', '미해결 우선'],
                 },
                 {
                     icon: MessageCircle,
-                    title: 'Gentle language',
-                    description: 'The interface should lower pressure while staying spiritually grounded.',
-                    items: ['Use pastoral wording', 'Avoid public-feed mechanics', 'Keep the next step calm and concrete'],
+                    title: '조심스러운 언어',
+                    description: '공개 피드가 아니라 목회적 대화처럼 느껴지게 합니다.',
+                    items: ['부담 낮은 문장', '공개 압박 방지', '구체적 다음 단계'],
                 },
             ]}
         />
