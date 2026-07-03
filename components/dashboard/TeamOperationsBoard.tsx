@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -128,6 +128,47 @@ export default function TeamOperationsBoard({
 
     return (
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
+            <section className="grid gap-3 lg:hidden">
+                <div className="grid grid-cols-2 gap-3">
+                    <MobileActionLink
+                        href={liveHref}
+                        icon={Mic2}
+                        label={currentSessionId ? '라이브 입장' : '세션 준비'}
+                        value={`${selectedTeam.live.page}p · ${selectedTeam.live.bpm} BPM`}
+                    />
+                    <MobileActionLink
+                        href={libraryHref}
+                        icon={ListMusic}
+                        label="콘티"
+                        value={`${selectedTeam.setlist.length}곡 · 공유`}
+                    />
+                    <MobileActionLink
+                        href="/community"
+                        icon={MessageSquareText}
+                        label="묵상"
+                        value={`${selectedTeam.community.length}개 스레드`}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setSelectedPhase('during')}
+                        data-testid="mobile-phase-during"
+                        className="rounded-md border border-primary/10 bg-card/75 px-4 py-3 text-left shadow-sm transition hover:bg-card"
+                    >
+                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-primary/35">
+                            <Radio size={14} />
+                            예배 중
+                        </div>
+                        <p className="mt-2 text-sm font-black text-primary">{selectedTeam.live.section}</p>
+                    </button>
+                </div>
+                <div className="rounded-md border border-primary/10 bg-primary px-4 py-4 text-surface shadow-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-surface/55">
+                        {selectedTeam.name} 다음 할 일
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-relaxed">{selectedTeam.nextAction}</p>
+                </div>
+            </section>
+
             <section className="grid gap-5 xl:grid-cols-[1.28fr_0.72fr]">
                 <GlassCard className="overflow-hidden border-primary/10 bg-primary p-0 text-surface">
                     <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[0.95fr_1.05fr] lg:p-8">
@@ -225,7 +266,7 @@ export default function TeamOperationsBoard({
                     </div>
                 </GlassCard>
 
-                <GlassCard className="border-primary/10 bg-white/70 p-5">
+                <GlassCard className="border-primary/10 bg-card/70 p-5">
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">악보와 공지사항</p>
@@ -250,7 +291,7 @@ export default function TeamOperationsBoard({
                                     }`}
                                 >
                                     <div className="flex items-start gap-3">
-                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/75 text-primary/65">
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-card/75 text-primary/65">
                                             <Icon size={16} />
                                         </div>
                                         <div className="min-w-0">
@@ -267,7 +308,7 @@ export default function TeamOperationsBoard({
                         {selectedTeam.stats.map((stat) => (
                             <div
                                 key={stat.label}
-                                className="grid grid-cols-[5.5rem_1fr] items-center gap-3 rounded-md border border-primary/10 bg-white/65 px-4 py-3"
+                                className="grid grid-cols-[5.5rem_1fr] items-center gap-3 rounded-md border border-primary/10 bg-card/65 px-4 py-3"
                             >
                                 <div>
                                     <p className="text-[11px] font-bold uppercase text-primary/35">{stat.label}</p>
@@ -281,7 +322,7 @@ export default function TeamOperationsBoard({
             </section>
 
             <section className="grid gap-6 xl:grid-cols-[0.86fr_1.14fr]">
-                <GlassCard className="border-primary/10 bg-white/68 p-5">
+                <GlassCard className="border-primary/10 bg-card/68 p-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">예배 흐름</p>
@@ -303,7 +344,7 @@ export default function TeamOperationsBoard({
                                         className={`rounded-md border px-3 py-2 text-sm font-bold transition ${
                                             selected
                                                 ? 'border-primary bg-primary text-surface'
-                                                : 'border-primary/10 bg-white/70 text-primary/60 hover:bg-white hover:text-primary'
+                                                : 'border-primary/10 bg-card/70 text-primary/60 hover:bg-card hover:text-primary'
                                         }`}
                                     >
                                         {phaseLabels[phase]}
@@ -348,7 +389,7 @@ export default function TeamOperationsBoard({
                         </Link>
                         <Link
                             href="/community"
-                            className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/10 bg-white/75 px-4 py-3 text-sm font-bold text-primary transition hover:bg-white"
+                            className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/10 bg-card/75 px-4 py-3 text-sm font-bold text-primary transition hover:bg-card"
                         >
                             <MessageSquareText size={16} />
                             묵상 공유
@@ -356,7 +397,7 @@ export default function TeamOperationsBoard({
                     </div>
                 </GlassCard>
 
-                <GlassCard className="border-primary/10 bg-white/68 p-5">
+                <GlassCard className="border-primary/10 bg-card/68 p-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">세션 준비</p>
@@ -371,7 +412,7 @@ export default function TeamOperationsBoard({
                         </div>
                     </div>
 
-                    <div className="mt-5 overflow-hidden rounded-md border border-primary/10 bg-white/60">
+                    <div className="mt-5 overflow-hidden rounded-md border border-primary/10 bg-card/60">
                         <div className="grid grid-cols-[1.1fr_0.9fr_0.7fr_0.9fr] gap-2 border-b border-primary/10 px-4 py-3 text-[11px] font-bold uppercase text-primary/35 max-md:hidden">
                             <span>세션</span>
                             <span>멤버</span>
@@ -410,7 +451,7 @@ export default function TeamOperationsBoard({
             </section>
 
             <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-                <GlassCard className="border-primary/10 bg-white/72 p-5">
+                <GlassCard className="border-primary/10 bg-card/72 p-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="flex items-start gap-3">
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-secondary/10 text-secondary">
@@ -446,7 +487,7 @@ export default function TeamOperationsBoard({
                                 <button
                                     type="button"
                                     onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                                    className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-primary/10 bg-white/75 text-primary transition hover:bg-white"
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-primary/10 bg-card/75 text-primary transition hover:bg-card"
                                     aria-label="이전 악보 페이지"
                                 >
                                     <ChevronLeft size={18} />
@@ -462,7 +503,7 @@ export default function TeamOperationsBoard({
                                 <button
                                     type="button"
                                     onClick={() => setCurrentPage((page) => Math.min(maxPages, page + 1))}
-                                    className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-primary/10 bg-white/75 text-primary transition hover:bg-white"
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-primary/10 bg-card/75 text-primary transition hover:bg-card"
                                     aria-label="다음 악보 페이지"
                                 >
                                     <ChevronRight size={18} />
@@ -471,7 +512,7 @@ export default function TeamOperationsBoard({
                         </div>
 
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="rounded-md border border-primary/10 bg-white/65 p-4">
+                            <div className="rounded-md border border-primary/10 bg-card/65 p-4">
                                 <div className="flex items-center justify-between gap-3">
                                     <div>
                                         <p className="text-xs font-bold uppercase text-primary/35">드럼 BPM</p>
@@ -488,7 +529,7 @@ export default function TeamOperationsBoard({
                                             key={delta}
                                             type="button"
                                             onClick={() => setCurrentBpm((bpm) => Math.max(40, Math.min(220, bpm + delta)))}
-                                            className="rounded-md border border-primary/10 bg-background/75 px-2 py-2 text-sm font-bold text-primary transition hover:bg-white"
+                                            className="rounded-md border border-primary/10 bg-background/75 px-2 py-2 text-sm font-bold text-primary transition hover:bg-card"
                                         >
                                             {delta > 0 ? `+${delta}` : delta}
                                         </button>
@@ -496,7 +537,7 @@ export default function TeamOperationsBoard({
                                 </div>
                             </div>
 
-                            <div className="rounded-md border border-primary/10 bg-white/65 p-4">
+                            <div className="rounded-md border border-primary/10 bg-card/65 p-4">
                                 <p className="text-xs font-bold uppercase text-primary/35">버튼 알림</p>
                                 <div className="mt-4 grid grid-cols-2 gap-2">
                                     {cueButtons.map((cue) => (
@@ -524,7 +565,7 @@ export default function TeamOperationsBoard({
                         </div>
                         <div className="mt-3 grid gap-2 md:grid-cols-3">
                             {sentCues.slice(0, 3).map((cue) => (
-                                <div key={cue} className="rounded-md border border-primary/10 bg-white/68 px-3 py-3 text-sm font-semibold text-primary/70">
+                                <div key={cue} className="rounded-md border border-primary/10 bg-card/68 px-3 py-3 text-sm font-semibold text-primary/70">
                                     {cue}
                                 </div>
                             ))}
@@ -532,7 +573,7 @@ export default function TeamOperationsBoard({
                     </div>
                 </GlassCard>
 
-                <GlassCard className="border-primary/10 bg-white/72 p-5">
+                <GlassCard className="border-primary/10 bg-card/72 p-5">
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">팀 커뮤니티</p>
@@ -562,7 +603,7 @@ export default function TeamOperationsBoard({
 
                     <Link
                         href="/community"
-                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/10 bg-white/75 px-4 py-3 text-sm font-bold text-primary transition hover:bg-white"
+                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/10 bg-card/75 px-4 py-3 text-sm font-bold text-primary transition hover:bg-card"
                     >
                         커뮤니티 전체 보기
                         <ArrowRight size={16} />
@@ -572,7 +613,7 @@ export default function TeamOperationsBoard({
 
             <section className="grid gap-4 md:grid-cols-3">
                 {worshipPrototypeTeams.map((team) => (
-                    <GlassCard key={team.id} className="border-primary/10 bg-white/62 p-5">
+                    <GlassCard key={team.id} className="border-primary/10 bg-card/62 p-5">
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">
@@ -588,6 +629,31 @@ export default function TeamOperationsBoard({
                 ))}
             </section>
         </div>
+    );
+}
+
+function MobileActionLink({
+    href,
+    icon: Icon,
+    label,
+    value,
+}: {
+    href: string;
+    icon: LucideIcon;
+    label: string;
+    value: string;
+}) {
+    return (
+        <Link
+            href={href}
+            className="rounded-md border border-primary/10 bg-card/75 px-4 py-3 shadow-sm transition hover:bg-card"
+        >
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-primary/35">
+                <Icon size={14} />
+                {label}
+            </div>
+            <p className="mt-2 text-sm font-black text-primary">{value}</p>
+        </Link>
     );
 }
 

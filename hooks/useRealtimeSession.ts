@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useRef } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSessionStore } from '@/store/sessionStore';
 import {
@@ -15,8 +15,16 @@ interface UseRealtimeSessionOptions {
     teamId: string | null;
 }
 
+export type RealtimeConnectionStatus = 'idle' | 'connected' | 'reconnecting' | 'offline' | 'error';
+
 export const useRealtimeSession = ({ sessionId, teamId }: UseRealtimeSessionOptions) => {
     const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
+    const [realtimeStatus, setRealtimeStatus] = useState<RealtimeConnectionStatus>(() => (
+        typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'idle'
+    ));
+    const [lastRealtimeAt, setLastRealtimeAt] = useState<string | null>(null);
+    const [lastSubscribedAt, setLastSubscribedAt] = useState<string | null>(null);
+    const [lastErrorAt, setLastErrorAt] = useState<string | null>(null);
     const setSessionMeta = useSessionStore((state) => state.setSessionMeta);
     const mergeFeedbackEntry = useSessionStore((state) => state.mergeFeedbackEntry);
 
@@ -25,6 +33,7 @@ export const useRealtimeSession = ({ sessionId, teamId }: UseRealtimeSessionOpti
             return;
         }
 
+        setLastRealtimeAt(new Date().toISOString());
         setSessionMeta(newSession);
     });
 
@@ -35,6 +44,7 @@ export const useRealtimeSession = ({ sessionId, teamId }: UseRealtimeSessionOpti
             return;
         }
 
+        setLastRealtimeAt(new Date().toISOString());
         mergeFeedbackEntry(broadcastPayload.entry);
     });
 
@@ -43,8 +53,24 @@ export const useRealtimeSession = ({ sessionId, teamId }: UseRealtimeSessionOpti
             return;
         }
 
+        setLastRealtimeAt(new Date().toISOString());
         mergeFeedbackEntry(sessionFeedbackRowToEntry(row));
     });
+
+    useEffect(() => {
+        const handleOnline = () => setRealtimeStatus((status) => (
+            status === 'connected' ? status : 'reconnecting'
+        ));
+        const handleOffline = () => setRealtimeStatus('offline');
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     useEffect(() => {
         if (!supabase || !sessionId || !teamId) {
@@ -88,7 +114,26 @@ export const useRealtimeSession = ({ sessionId, teamId }: UseRealtimeSessionOpti
             .on('broadcast', { event: 'session-feedback' }, (message) => {
                 handleFeedbackBroadcast(message.payload);
             })
-            .subscribe();
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    const now = new Date().toISOString();
+
+                    setRealtimeStatus('connected');
+                    setLastSubscribedAt(now);
+                    setLastRealtimeAt((lastEventAt) => lastEventAt ?? now);
+                    return;
+                }
+
+                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    setRealtimeStatus('reconnecting');
+                    setLastErrorAt(new Date().toISOString());
+                    return;
+                }
+
+                if (status === 'CLOSED') {
+                    setRealtimeStatus('offline');
+                }
+            });
 
         channelRef.current = channel;
 
@@ -117,7 +162,13 @@ export const useRealtimeSession = ({ sessionId, teamId }: UseRealtimeSessionOpti
         [sessionId, teamId]
     );
 
-    return { broadcastFeedback };
+    return {
+        broadcastFeedback,
+        lastErrorAt,
+        lastRealtimeAt,
+        lastSubscribedAt,
+        realtimeStatus,
+    };
 };
 
 function normalizeFeedbackBroadcastPayload(

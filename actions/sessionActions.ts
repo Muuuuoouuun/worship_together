@@ -134,6 +134,7 @@ async function getSongPresetBpm(songId: string): Promise<number | null> {
 }
 
 interface AppendSessionFeedbackPayload {
+    id?: string;
     clientId: string | null;
     role: SessionFeedbackRole;
     message: string;
@@ -162,7 +163,9 @@ export async function appendSessionFeedback(
     }
 
     const entry: SessionFeedbackEntry = {
-        id: crypto.randomUUID(),
+        id: typeof payload.id === 'string' && payload.id.trim().length > 0
+            ? payload.id.trim().slice(0, 64)
+            : crypto.randomUUID(),
         clientId: payload.clientId,
         role: payload.role,
         message,

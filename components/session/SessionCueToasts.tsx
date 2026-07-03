@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionFeedbackEntry, SessionFeedbackRole } from '@/types/session';
@@ -30,7 +30,7 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
     }, []);
 
     useEffect(() => {
-        if (knownEntryIdsRef.current === null) {
+        if (knownEntryIdsRef.current === null || knownEntryIdsRef.current.size === 0) {
             knownEntryIdsRef.current = new Set(entries.map((entry) => entry.id));
             return;
         }
@@ -112,7 +112,7 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
                                     <button
                                         type="button"
                                         onClick={() => dismissToast(entry.id)}
-                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/55 text-primary/45 transition hover:bg-white hover:text-primary"
+                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card/70 text-primary/45 transition hover:bg-card hover:text-primary"
                                         aria-label="Dismiss live cue"
                                     >
                                         <X size={14} />
@@ -136,7 +136,7 @@ function getToastRoleMeta(role: SessionFeedbackRole) {
     switch (role) {
         case 'instrument':
             return {
-                containerClassName: 'border-primary/15 bg-white/95 text-primary',
+                containerClassName: 'border-primary/15 bg-card/95 text-primary',
                 icon: Waves,
                 iconClassName: 'bg-primary/8 text-primary',
                 label: 'Band',

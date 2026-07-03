@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { ComponentType } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -72,7 +72,7 @@ export default function SessionBpmConsole({
             </div>
 
             <div className="mt-5 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-                <div className="rounded-3xl border border-primary/10 bg-[radial-gradient(circle_at_center,_rgba(212,175,55,0.18),_transparent_52%),linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.62))] p-5">
+                <div className="rounded-3xl border border-primary/10 bg-[radial-gradient(circle_at_center,_rgba(212,175,55,0.18),_transparent_52%),linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.62))] p-5 dark:bg-[radial-gradient(circle_at_center,_rgba(226,182,141,0.18),_transparent_54%),linear-gradient(180deg,rgba(22,33,31,0.92),rgba(22,33,31,0.70))]">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">현재 박자</p>
@@ -85,7 +85,7 @@ export default function SessionBpmConsole({
                             </p>
                         </div>
                         <div className="flex flex-col items-center gap-3">
-                            <div className={`relative flex h-20 w-20 items-center justify-center rounded-full border ${displayBlink ? 'border-secondary/40 bg-secondary/25 shadow-[0_0_40px_rgba(212,175,55,0.35)]' : 'border-primary/10 bg-white/70'} transition-all duration-150`}>
+                            <div className={`relative flex h-20 w-20 items-center justify-center rounded-full border ${displayBlink ? 'border-secondary/40 bg-secondary/25 shadow-[0_0_40px_rgba(212,175,55,0.35)]' : 'border-primary/10 bg-card/70'} transition-all duration-150`}>
                                 <div className={`h-8 w-8 rounded-full ${displayBlink ? 'bg-secondary' : 'bg-primary/15'} transition-all duration-150`} />
                             </div>
                             <div className="flex items-center gap-2">
@@ -114,7 +114,7 @@ export default function SessionBpmConsole({
                         />
                     </div>
 
-                    <div className="rounded-3xl border border-primary/10 bg-white/65 p-4">
+                    <div className="rounded-3xl border border-primary/10 bg-card/70 p-4">
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">라이브 제어</p>
                         <p className="mt-2 text-sm leading-relaxed text-primary/50">{controlHelpText}</p>
 
@@ -123,7 +123,7 @@ export default function SessionBpmConsole({
                                 type="button"
                                 onClick={onToggleBpmEnabled}
                                 disabled={!canControlLocally || (!currentBpm && !bpmEnabled)}
-                                className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${bpmEnabled ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-white'} disabled:cursor-not-allowed disabled:opacity-45`}
+                                className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${bpmEnabled ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 {bpmEnabled ? <EyeOff size={16} /> : <Eye size={16} />}
                                 {bpmEnabled ? '블링크 끄기' : '블링크 켜기'}
@@ -132,7 +132,7 @@ export default function SessionBpmConsole({
                                 type="button"
                                 onClick={onToggleAutoBpmSync}
                                 disabled={!canControlLocally}
-                                className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${autoBpmSync ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-white'} disabled:cursor-not-allowed disabled:opacity-45`}
+                                className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${autoBpmSync ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 <Zap size={16} />
                                 {autoBpmSync ? '자동 적용 켜짐' : '자동 적용 꺼짐'}
@@ -146,7 +146,7 @@ export default function SessionBpmConsole({
                                     type="button"
                                     onClick={() => onAdjustBpm(delta)}
                                     disabled={!canControlLocally}
-                                    className="tap-target rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                                    className="tap-target rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
                                 >
                                     {delta > 0 ? `+${delta}` : delta}
                                 </button>
@@ -179,7 +179,7 @@ function ControlMetric({
     value: string;
 }) {
     return (
-        <div className="rounded-2xl border border-primary/10 bg-white/65 p-4">
+        <div className="rounded-2xl border border-primary/10 bg-card/70 p-4">
             <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/5 text-primary/60">
                     <Icon size={16} />

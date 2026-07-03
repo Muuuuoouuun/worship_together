@@ -1,7 +1,8 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
     addSessionFeedbackPreset,
     appendSessionFeedback,
@@ -12,7 +13,8 @@ import SessionBpmConsole from '@/components/session/SessionBpmConsole';
 import SessionCueToasts from '@/components/session/SessionCueToasts';
 import GlassCard from '@/components/ui/GlassCard';
 import MeshBackground from '@/components/ui/MeshBackground';
-import { useRealtimeSession } from '@/hooks/useRealtimeSession';
+import ThemeToggle from '@/components/ui/ThemeToggle';
+import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRealtimeSession';
 import { DEMO_SESSION_ID } from '@/lib/constants';
 import { useSessionStore } from '@/store/sessionStore';
 import {
@@ -30,6 +32,7 @@ import {
     ArrowLeft,
     AudioLines,
     BadgeCheck,
+    Cable,
     ChevronLeft,
     ChevronRight,
     Clock3,
@@ -39,10 +42,13 @@ import {
     Mic2,
     Plus,
     Radio,
+    RefreshCw,
     Send,
     ShieldCheck,
+    Timer,
     UsersRound,
     Waves,
+    Wifi,
 } from 'lucide-react';
 
 interface SessionWorkspaceProps {
@@ -55,6 +61,71 @@ interface SessionWorkspaceProps {
     worshipDateLabel: string;
     theme: string | null;
 }
+
+type WakeLockSentinelLike = {
+    release: () => Promise<void>;
+    addEventListener?: (type: 'release', listener: () => void) => void;
+};
+
+type NavigatorWithWakeLock = Navigator & {
+    wakeLock?: {
+        request: (type: 'screen') => Promise<WakeLockSentinelLike>;
+    };
+};
+
+const STAGE_CONNECTIONS = [
+    {
+        label: '인도자',
+        method: '유선 LAN',
+        feature: '큐',
+        type: 'wired',
+        status: 'stable',
+        latency: '8ms',
+    },
+    {
+        label: '드럼',
+        method: '유선 IEM',
+        feature: 'BPM',
+        type: 'wired',
+        status: 'stable',
+        latency: '6ms',
+    },
+    {
+        label: '보컬',
+        method: 'Wi-Fi 5GHz',
+        feature: '악보',
+        type: 'wireless',
+        status: 'watch',
+        latency: '22ms',
+    },
+    {
+        label: '미디어',
+        method: 'Wi-Fi 5GHz',
+        feature: '송출',
+        type: 'wireless',
+        status: 'stable',
+        latency: '18ms',
+    },
+] as const;
+
+const CONNECTION_STATUS_META = {
+    stable: {
+        label: '정상',
+        dot: 'bg-emerald-500',
+        tone: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700',
+    },
+    watch: {
+        label: '확인',
+        dot: 'bg-amber-400',
+        tone: 'border-amber-400/30 bg-amber-400/12 text-amber-700',
+    },
+} as const;
+
+const WIRED_STAGE_CONNECTION_COUNT = STAGE_CONNECTIONS.filter((connection) => connection.type === 'wired').length;
+const WIRELESS_STAGE_CONNECTION_COUNT = STAGE_CONNECTIONS.filter((connection) => connection.type === 'wireless').length;
+const MAX_STAGE_CONNECTION_LATENCY = STAGE_CONNECTIONS.reduce((highest, connection) => (
+    Number.parseInt(connection.latency, 10) > Number.parseInt(highest.latency, 10) ? connection : highest
+)).latency;
 
 function formatSongMeta(song: SongRow | null) {
     if (!song) {
@@ -113,6 +184,63 @@ function formatFeedbackContext(songTitle: string | null, section: string | null,
     return [songTitle ?? '전체 큐', section, `${page}p`].filter(Boolean).join(' | ');
 }
 
+function getRealtimeStatusMeta(status: RealtimeConnectionStatus, isDemoMode: boolean) {
+    if (isDemoMode) {
+        return {
+            dot: 'bg-primary/45',
+            label: '데모',
+            tone: 'bg-primary/5 text-primary/50',
+        };
+    }
+
+    switch (status) {
+        case 'connected':
+            return {
+                dot: 'sync-pulse bg-emerald-500',
+                label: '실시간',
+                tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+            };
+        case 'reconnecting':
+            return {
+                dot: 'bg-amber-400',
+                label: '재연결',
+                tone: 'bg-amber-400/15 text-amber-700 dark:text-amber-200',
+            };
+        case 'offline':
+        case 'error':
+            return {
+                dot: 'bg-red-500',
+                label: '오프라인',
+                tone: 'bg-red-500/10 text-red-600 dark:text-red-300',
+            };
+        case 'idle':
+        default:
+            return {
+                dot: 'bg-primary/35',
+                label: '대기',
+                tone: 'bg-primary/5 text-primary/50',
+            };
+    }
+}
+
+function formatRealtimeAge(value: string | null) {
+    if (!value) {
+        return '동기화 대기';
+    }
+
+    const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+
+    if (!Number.isFinite(seconds) || seconds < 5) {
+        return '방금 동기화';
+    }
+
+    if (seconds < 60) {
+        return `${seconds}초 전`;
+    }
+
+    return `${Math.floor(seconds / 60)}분 전`;
+}
+
 export default function SessionWorkspace({
     session,
     songs,
@@ -123,6 +251,7 @@ export default function SessionWorkspace({
     worshipDateLabel,
     theme,
 }: SessionWorkspaceProps) {
+    const router = useRouter();
     const initializeSession = useSessionStore((state) => state.initializeSession);
     const applyRemoteState = useSessionStore((state) => state.applyRemoteState);
     const updateLocalState = useSessionStore((state) => state.updateState);
@@ -147,6 +276,11 @@ export default function SessionWorkspace({
     const [feedbackMessage, setFeedbackMessage] = useState('');
     const [clientId] = useState(() => crypto.randomUUID());
     const [quickPresetDraft, setQuickPresetDraft] = useState('');
+    const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(false);
+    const [autoAdvanceSeconds, setAutoAdvanceSeconds] = useState(12);
+    const [wakeLockState, setWakeLockState] = useState<'idle' | 'active' | 'unsupported' | 'released'>('idle');
+    const [recentSentPresetId, setRecentSentPresetId] = useState<string | null>(null);
+    const recentSentPresetTimeoutRef = useRef<number | null>(null);
     const [isStatePending, startStateTransition] = useTransition();
     const [isFeedbackPending, startFeedbackTransition] = useTransition();
     const [isPresetPending, startPresetTransition] = useTransition();
@@ -171,17 +305,32 @@ export default function SessionWorkspace({
         syncQuickFeedbackPresets(remoteState.quickFeedbackPresets);
     }, [applyRemoteState, currentSession, isMaster, songs, syncEnabled, syncQuickFeedbackPresets]);
 
-    const { broadcastFeedback } = useRealtimeSession({
+    const {
+        broadcastFeedback,
+        lastRealtimeAt,
+        realtimeStatus,
+    } = useRealtimeSession({
         sessionId: session.id,
         teamId,
     });
+    const previousRealtimeStatusRef = useRef<RealtimeConnectionStatus>(realtimeStatus);
 
     const canControlLocally = isActive && (isMaster || !syncEnabled);
     const currentIndex = songs.findIndex((song) => song.id === currentSongId);
     const currentSongPresetBpm = resolveSongPresetBpm(currentSongId, songs);
     const feedbackFeed = [...feedbackLog].reverse();
+    const latestFeedbackEntry = feedbackFeed[0] ?? null;
+    const mobileQuickFeedbackPresets = [
+        ...quickFeedbackPresets.filter((preset) => preset.role === 'instrument'),
+        ...quickFeedbackPresets.filter((preset) => preset.role !== 'instrument'),
+    ].slice(0, 3);
     const headerIsPending = isStatePending || isFeedbackPending || isPresetPending;
     const selectedRoleMeta = getFeedbackRoleMeta(selectedFeedbackRole);
+    const instrumentMode = selectedFeedbackRole === 'instrument';
+    const realtimeMeta = getRealtimeStatusMeta(realtimeStatus, isDemoMode);
+    const realtimeAgeLabel = formatRealtimeAge(lastRealtimeAt);
+    const mobileBpmLabel = currentBpm ?? currentSongPresetBpm ?? '--';
+    const latestCueLabel = latestFeedbackEntry ? latestFeedbackEntry.message : '큐 대기';
     const sessionStatusLabel = isMaster
         ? '인도자 모드'
         : syncEnabled
@@ -192,9 +341,21 @@ export default function SessionWorkspace({
         : syncEnabled
             ? 'bg-emerald-500/10 text-emerald-600'
             : 'bg-primary/5 text-primary/60';
+    const autoAdvanceStatusLabel = autoAdvanceEnabled
+        ? canControlLocally && isActive
+            ? '자동 넘김 실행 중'
+            : '자동 넘김 대기'
+        : '수동 넘김';
+    const wakeLockStatusLabel = wakeLockState === 'active'
+        ? '화면 켜짐 유지'
+        : wakeLockState === 'unsupported'
+            ? '브라우저 제한'
+            : wakeLockState === 'released'
+                ? '다시 활성화 필요'
+                : '대기';
     const endSessionAction = endSession.bind(null, session.id, teamId);
 
-    const commitState = (nextState: Partial<SessionCurrentState>) => {
+    const commitState = useCallback((nextState: Partial<SessionCurrentState>) => {
         if (!canControlLocally) {
             return;
         }
@@ -225,31 +386,189 @@ export default function SessionWorkspace({
         startStateTransition(async () => {
             await updateSessionState(session.id, teamId, payload);
         });
-    };
+    }, [
+        autoBpmSync,
+        bpmEnabled,
+        canControlLocally,
+        currentBpm,
+        currentPage,
+        currentSection,
+        currentSongId,
+        isDemoMode,
+        isMaster,
+        session.id,
+        songs,
+        startStateTransition,
+        teamId,
+        updateLocalState,
+    ]);
 
-    const sendFeedbackMessage = async (message: string, role: SessionFeedbackRole) => {
-        if (isDemoMode) {
-            const entry = {
-                id: crypto.randomUUID(),
-                clientId,
-                role,
-                message,
-                createdAt: new Date().toISOString(),
-                teamId,
-                songId: currentSongId,
-                songTitle: currentSong?.title ?? null,
-                page: currentPage,
-                section: currentSection,
-            };
+    const handleToggleAutoAdvance = () => {
+        const nextEnabled = !autoAdvanceEnabled;
 
-            updateLocalState({
-                feedbackLog: [...feedbackLog, entry].slice(-MAX_SESSION_FEEDBACK_LOG),
-            });
+        setAutoAdvanceEnabled(nextEnabled);
 
+        if (!nextEnabled) {
+            setWakeLockState('idle');
             return;
         }
 
+        setWakeLockState(
+            typeof navigator !== 'undefined' && !(navigator as NavigatorWithWakeLock).wakeLock
+                ? 'unsupported'
+                : 'idle'
+        );
+    };
+
+    useEffect(() => {
+        if (!autoAdvanceEnabled || typeof navigator === 'undefined') {
+            return;
+        }
+
+        const wakeLock = (navigator as NavigatorWithWakeLock).wakeLock;
+
+        if (!wakeLock) {
+            return;
+        }
+
+        let sentinel: WakeLockSentinelLike | null = null;
+        let cancelled = false;
+
+        const requestWakeLock = async () => {
+            try {
+                const lock = await wakeLock.request('screen');
+
+                if (cancelled) {
+                    await lock.release();
+                    return;
+                }
+
+                sentinel = lock;
+                setWakeLockState('active');
+                lock.addEventListener?.('release', () => {
+                    sentinel = null;
+                    setWakeLockState('released');
+                });
+            } catch {
+                setWakeLockState('unsupported');
+            }
+        };
+
+        void requestWakeLock();
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && !sentinel) {
+                void requestWakeLock();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            cancelled = true;
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+            if (sentinel) {
+                void sentinel.release();
+            }
+        };
+    }, [autoAdvanceEnabled]);
+
+    useEffect(() => {
+        if (!autoAdvanceEnabled || !canControlLocally || !isActive) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            commitState({ page: currentPage + 1 });
+        }, autoAdvanceSeconds * 1000);
+
+        return () => window.clearTimeout(timer);
+    }, [autoAdvanceEnabled, autoAdvanceSeconds, canControlLocally, commitState, currentPage, isActive]);
+
+    useEffect(() => {
+        const previousStatus = previousRealtimeStatusRef.current;
+
+        previousRealtimeStatusRef.current = realtimeStatus;
+
+        if (
+            isDemoMode ||
+            realtimeStatus !== 'connected' ||
+            !['error', 'offline', 'reconnecting'].includes(previousStatus)
+        ) {
+            return;
+        }
+
+        router.refresh();
+    }, [isDemoMode, realtimeStatus, router]);
+
+    useEffect(() => {
+        if (isDemoMode || !syncEnabled) {
+            return;
+        }
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                router.refresh();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [isDemoMode, router, syncEnabled]);
+
+    useEffect(() => () => {
+        if (recentSentPresetTimeoutRef.current) {
+            window.clearTimeout(recentSentPresetTimeoutRef.current);
+        }
+    }, []);
+
+    const showPresetSentState = useCallback((presetId?: string) => {
+        if (!presetId) {
+            return;
+        }
+
+        setRecentSentPresetId(presetId);
+
+        if (recentSentPresetTimeoutRef.current) {
+            window.clearTimeout(recentSentPresetTimeoutRef.current);
+        }
+
+        recentSentPresetTimeoutRef.current = window.setTimeout(() => {
+            setRecentSentPresetId((currentPresetId) => (
+                currentPresetId === presetId ? null : currentPresetId
+            ));
+            recentSentPresetTimeoutRef.current = null;
+        }, 1200);
+    }, []);
+
+    const sendFeedbackMessage = async (message: string, role: SessionFeedbackRole) => {
+        const entry = {
+            id: crypto.randomUUID(),
+            clientId,
+            role,
+            message,
+            createdAt: new Date().toISOString(),
+            teamId,
+            songId: currentSongId,
+            songTitle: currentSong?.title ?? null,
+            page: currentPage,
+            section: currentSection,
+        };
+
+        updateLocalState({
+            feedbackLog: [...feedbackLog, entry].slice(-MAX_SESSION_FEEDBACK_LOG),
+        });
+
+        if (isDemoMode) {
+            return;
+        }
+
+        void broadcastFeedback(entry);
+
         const result = await appendSessionFeedback(session.id, teamId, {
+            id: entry.id,
             clientId,
             role,
             message,
@@ -260,7 +579,6 @@ export default function SessionWorkspace({
         });
 
         updateLocalState({ feedbackLog: result.feedbackLog });
-        void broadcastFeedback(result.entry);
     };
 
     const handleFeedbackSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -367,10 +685,12 @@ export default function SessionWorkspace({
         });
     };
 
-    const handleQuickPresetSend = (message: string, role: SessionFeedbackRole) => {
+    const handleQuickPresetSend = (message: string, role: SessionFeedbackRole, presetId?: string) => {
         if (!isActive || isFeedbackPending) {
             return;
         }
+
+        showPresetSentState(presetId);
 
         startFeedbackTransition(async () => {
             try {
@@ -382,7 +702,7 @@ export default function SessionWorkspace({
     };
 
     return (
-        <div className="safe-area-x relative min-h-screen overflow-hidden bg-background py-6 pb-32 text-primary sm:px-6 sm:py-8 sm:pb-36 md:px-10 lg:pb-10">
+        <div className="safe-area-x relative min-h-screen overflow-x-hidden bg-background py-6 pb-32 text-primary sm:px-6 sm:py-8 sm:pb-36 md:px-10 lg:pb-10">
             <MeshBackground />
             <SessionCueToasts entries={feedbackLog} isActive={isActive} currentClientId={clientId} />
 
@@ -410,7 +730,7 @@ export default function SessionWorkspace({
                             )}
                         </div>
                         <div>
-                            <h1 className="break-words text-3xl font-serif font-black tracking-tight text-primary sm:text-4xl md:text-5xl">
+                            <h1 className="break-words text-2xl font-serif font-black tracking-tight text-primary sm:text-4xl md:text-5xl">
                                 {setlistTitle}
                             </h1>
                             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-primary/55 md:text-base">
@@ -427,22 +747,23 @@ export default function SessionWorkspace({
                         </div>
                     </div>
 
-                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap">
+                        <ThemeToggle />
                         <button
                             type="button"
                             onClick={toggleMaster}
-                            className={`tap-target w-full rounded-full border px-5 py-3 text-sm font-semibold transition sm:w-auto ${isMaster ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-white/70 text-primary hover:border-primary/20 hover:bg-white'}`}
+                            className={`tap-target hidden w-full rounded-full border px-5 py-3 text-sm font-semibold transition sm:w-auto xl:inline-flex ${isMaster ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-card/70 text-primary hover:border-primary/20 hover:bg-card'}`}
                         >
                             {isMaster ? '팔로워로 보기' : '인도자 제어 잡기'}
                         </button>
                         <button
                             type="button"
                             onClick={toggleSync}
-                            className={`tap-target w-full rounded-full border px-5 py-3 text-sm font-semibold transition sm:w-auto ${syncEnabled ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600' : 'border-primary/10 bg-white/70 text-primary hover:border-primary/20 hover:bg-white'}`}
+                            className={`tap-target hidden w-full rounded-full border px-5 py-3 text-sm font-semibold transition sm:w-auto xl:inline-flex ${syncEnabled ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600' : 'border-primary/10 bg-card/70 text-primary hover:border-primary/20 hover:bg-card'}`}
                         >
                             {syncEnabled ? '라이브 동기화 켜짐' : '라이브 동기화 꺼짐'}
                         </button>
-                        <form action={endSessionAction} className="w-full sm:w-auto">
+                        <form action={endSessionAction} className="hidden w-full sm:w-auto xl:block">
                             <button
                                 type="submit"
                                 className="tap-target w-full rounded-full border border-red-500/20 bg-red-500/10 px-5 py-3 text-sm font-semibold text-red-500 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
@@ -455,7 +776,7 @@ export default function SessionWorkspace({
                 </header>
 
                 {!isActive && (
-                    <GlassCard className="border-primary/10 bg-white/60">
+                    <GlassCard className="border-primary/10 bg-card/60">
                         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                             <div>
                                 <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/40">
@@ -475,10 +796,240 @@ export default function SessionWorkspace({
                     </GlassCard>
                 )}
 
+                <GlassCard className="sticky top-3 z-40 border-primary/10 bg-card/90 p-3 shadow-lg xl:hidden" data-testid="mobile-live-panel">
+                    <div className="flex items-center justify-between gap-2">
+                        <span
+                            className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold ${realtimeMeta.tone}`}
+                            data-testid="sync-health-badge"
+                        >
+                            <span className={`h-2 w-2 rounded-full ${realtimeMeta.dot}`} />
+                            {realtimeMeta.label}
+                            <span className="opacity-45">·</span>
+                            {realtimeAgeLabel}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setFeedbackRole('instrument')}
+                            className={`min-h-8 rounded-full px-3 text-[11px] font-bold transition motion-safe:active:scale-[0.98] ${instrumentMode ? 'bg-secondary/15 text-secondary' : 'bg-primary/5 text-primary/45'}`}
+                        >
+                            악기
+                        </button>
+                    </div>
+
+                    <div className="mt-3 flex items-end justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="truncate text-[11px] font-bold text-primary/40">
+                                {currentSection ?? 'Prelude'}
+                            </p>
+                            <h2 className="truncate text-xl font-serif font-black text-primary">
+                                {currentSong?.title ?? '곡 선택 대기'}
+                            </h2>
+                        </div>
+                        <div className="shrink-0 text-right">
+                            <p className="text-[10px] font-bold uppercase text-primary/35">BPM</p>
+                            <p className="font-serif text-2xl font-black leading-none text-secondary">
+                                {mobileBpmLabel}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-primary/10 bg-background/70 px-3 py-2" data-testid="mobile-latest-cue">
+                        <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase text-primary/35">최근 큐</p>
+                            <p className="truncate text-sm font-semibold text-primary/75">
+                                {latestCueLabel}
+                            </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-primary/5 px-3 py-1 text-xs font-bold text-primary/60">
+                            {currentPage}p
+                        </span>
+                    </div>
+
+                    {mobileQuickFeedbackPresets.length > 0 ? (
+                        <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto">
+                            {mobileQuickFeedbackPresets.map((preset) => {
+                                const isSent = recentSentPresetId === preset.id;
+
+                                return (
+                                    <button
+                                        key={`mobile-${preset.id}`}
+                                        type="button"
+                                        onClick={() => handleQuickPresetSend(preset.message, preset.role, preset.id)}
+                                        disabled={!isActive || isFeedbackPending}
+                                        data-testid={`mobile-cue-${preset.id}`}
+                                        className={`tap-target min-w-[6.75rem] rounded-md border px-3 py-2 text-left text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-45 motion-safe:active:scale-[0.98] ${isSent ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/10 bg-card/80 text-primary hover:border-secondary/30 hover:bg-secondary/10'}`}
+                                    >
+                                        <span className="block truncate">{preset.label}</span>
+                                        {isSent ? (
+                                            <span className="mt-0.5 block text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-300">
+                                                전송
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : null}
+                </GlassCard>
+
+                <GlassCard className="border-primary/10 bg-card/72 p-4 sm:p-5" data-testid="live-stage-link-panel">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                        <div className="min-w-0">
+                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">
+                                예배 중 핵심
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <h2 className="text-2xl font-serif font-black text-primary">
+                                    연결 · BPM · 악보
+                                </h2>
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${autoAdvanceEnabled ? 'bg-emerald-500/10 text-emerald-700' : 'bg-primary/5 text-primary/45'}`}>
+                                    <RefreshCw size={13} />
+                                    {autoAdvanceStatusLabel}
+                                </span>
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${realtimeMeta.tone}`}>
+                                    <span className={`h-2 w-2 rounded-full ${realtimeMeta.dot}`} />
+                                    {realtimeMeta.label}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-xs font-bold text-primary/55 sm:flex">
+                            <span className="inline-flex items-center justify-center gap-1.5 rounded-md bg-background/75 px-3 py-2">
+                                <Cable size={13} />
+                                유선 {WIRED_STAGE_CONNECTION_COUNT}
+                            </span>
+                            <span className="inline-flex items-center justify-center gap-1.5 rounded-md bg-background/75 px-3 py-2">
+                                <Wifi size={13} />
+                                Wi-Fi {WIRELESS_STAGE_CONNECTION_COUNT}
+                            </span>
+                            <span className="inline-flex items-center justify-center gap-1.5 rounded-md bg-background/75 px-3 py-2">
+                                <Timer size={13} />
+                                {MAX_STAGE_CONNECTION_LATENCY}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+                        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                            {STAGE_CONNECTIONS.map((connection) => {
+                                const statusMeta = CONNECTION_STATUS_META[connection.status];
+                                const ConnectionIcon = connection.type === 'wireless' ? Wifi : Cable;
+
+                                return (
+                                    <div
+                                        key={connection.label}
+                                        className="flex min-w-0 items-center justify-between gap-2 rounded-md border border-primary/10 bg-card/65 px-3 py-2.5"
+                                        data-testid={`stage-connection-${connection.label}`}
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`h-2 w-2 shrink-0 rounded-full ${statusMeta.dot}`} />
+                                                <p className="truncate text-sm font-bold text-primary">
+                                                    {connection.label}
+                                                </p>
+                                            </div>
+                                            <p className="mt-1 flex items-center gap-1.5 text-xs text-primary/45">
+                                                <ConnectionIcon size={12} />
+                                                <span className="truncate">{connection.method} · {connection.feature}</span>
+                                            </p>
+                                        </div>
+                                        <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${statusMeta.tone}`}>
+                                            {statusMeta.label}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="grid grid-cols-[auto_1fr_auto] gap-2 sm:grid-cols-[auto_1fr_auto_auto] lg:w-[23rem]">
+                            <button
+                                type="button"
+                                onClick={() => setAutoAdvanceSeconds((seconds) => Math.max(6, seconds - 2))}
+                                disabled={!canControlLocally}
+                                data-testid="auto-advance-decrease"
+                                className="tap-target rounded-md border border-primary/10 bg-background/80 px-3 py-2 text-sm font-bold text-primary transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
+                            >
+                                -2초
+                            </button>
+                            <div className="flex min-w-0 items-center justify-center gap-2 rounded-md border border-primary/10 bg-background/80 px-3 py-2 text-sm font-bold text-primary">
+                                <Timer size={15} />
+                                <span>{autoAdvanceSeconds}초</span>
+                                <span className="text-xs font-semibold text-primary/35">| {wakeLockStatusLabel}</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setAutoAdvanceSeconds((seconds) => Math.min(30, seconds + 2))}
+                                disabled={!canControlLocally}
+                                data-testid="auto-advance-increase"
+                                className="tap-target rounded-md border border-primary/10 bg-background/80 px-3 py-2 text-sm font-bold text-primary transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
+                            >
+                                +2초
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleToggleAutoAdvance}
+                                disabled={!isActive || (!canControlLocally && !autoAdvanceEnabled)}
+                                data-testid="auto-advance-toggle"
+                                className={`tap-target col-span-3 rounded-md px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-1 ${autoAdvanceEnabled ? 'bg-emerald-600 text-white' : 'bg-primary text-surface'}`}
+                            >
+                                {autoAdvanceEnabled ? '끄기' : '켜기'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex gap-2 overflow-x-auto pb-1" data-testid="song-link-check-list">
+                        {songs.length === 0 ? (
+                            <div className="w-full rounded-md border border-dashed border-primary/10 px-4 py-4 text-center text-sm text-primary/45">
+                                연결할 곡이 없습니다.
+                            </div>
+                        ) : (
+                            songs.map((song) => {
+                                const isCurrent = song.id === currentSongId;
+                                const presetBpm = resolveSongPresetBpm(song.id, songs);
+                                const hasSheet = Boolean(song.music_xml_url || song.data_xml);
+
+                                return (
+                                    <div
+                                        key={`song-link-${song.id}`}
+                                        data-testid={`song-link-check-${song.id}`}
+                                        className={`min-w-[12rem] rounded-md border px-3 py-3 ${isCurrent ? 'border-secondary/30 bg-secondary/10' : 'border-primary/10 bg-card/55'}`}
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="truncate text-sm font-bold text-primary">{song.title}</p>
+                                            {isCurrent && (
+                                                <span className="shrink-0 rounded-full bg-card/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-secondary">
+                                                    Live
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="mt-2 text-xs font-semibold text-primary/45">
+                                            {hasSheet ? '악보 연결' : '악보 대기'} · {presetBpm ? `${presetBpm} BPM` : 'BPM 대기'}
+                                        </p>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-primary/40">
+                        <span>{currentIndex >= 0 ? `${currentIndex + 1}/${songs.length}곡` : '곡 대기'}</span>
+                        <span>|</span>
+                        <span>{realtimeAgeLabel}</span>
+                        <span>|</span>
+                        <span>잠금/완전 백그라운드는 앱 보강 필요</span>
+                        {!canControlLocally && (
+                            <>
+                                <span>|</span>
+                                <span>팔로워 모드</span>
+                            </>
+                        )}
+                    </div>
+                </GlassCard>
+
                 <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
                     <div className="flex flex-col gap-6">
                         <GlassCard className="overflow-hidden border-primary/10 p-0">
-                            <div className="border-b border-primary/10 bg-white/50 px-4 py-4 sm:px-6">
+                            <div className="border-b border-primary/10 bg-card/50 px-4 py-4 sm:px-6">
                                 <div className="flex flex-wrap items-center justify-between gap-4">
                                     <div className="min-w-0">
                                         <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary/35">
@@ -503,7 +1054,7 @@ export default function SessionWorkspace({
                             </div>
 
                             <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[1.1fr_0.9fr]">
-                                <div className="rounded-3xl border border-primary/10 bg-[radial-gradient(circle_at_top,_rgba(212,175,55,0.16),_transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.85),rgba(255,255,255,0.55))] p-5 sm:rounded-[2rem] sm:p-8">
+                                <div className="rounded-3xl border border-primary/10 bg-[radial-gradient(circle_at_top,_rgba(212,175,55,0.16),_transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.85),rgba(255,255,255,0.55))] p-5 dark:bg-[radial-gradient(circle_at_top,_rgba(226,182,141,0.16),_transparent_48%),linear-gradient(180deg,rgba(22,33,31,0.92),rgba(22,33,31,0.66))] sm:rounded-[2rem] sm:p-8">
                                     <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.2em] text-primary/35">
                                         <Waves size={16} />
                                         스테이지 모니터
@@ -519,7 +1070,7 @@ export default function SessionWorkspace({
                                             </p>
                                         </div>
                                         <div className="grid gap-3 sm:grid-cols-2">
-                                            <div className="rounded-2xl border border-primary/10 bg-white/70 p-5">
+                                            <div className="rounded-2xl border border-primary/10 bg-card/70 p-5">
                                                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-primary/35">
                                                     <AudioLines size={14} />
                                                     큐 상태
@@ -528,7 +1079,7 @@ export default function SessionWorkspace({
                                                     라이브 동기화가 켜져 있으면 팔로워 화면에 즉시 반영됩니다.
                                                 </p>
                                             </div>
-                                            <div className="rounded-2xl border border-primary/10 bg-white/70 p-5">
+                                            <div className="rounded-2xl border border-primary/10 bg-card/70 p-5">
                                                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-primary/35">
                                                     <ShieldCheck size={14} />
                                                     다음 보강
@@ -542,7 +1093,7 @@ export default function SessionWorkspace({
                                 </div>
 
                                 <div className="space-y-5">
-                                    <div className="rounded-3xl border border-primary/10 bg-white/60 p-5">
+                                    <div className="rounded-3xl border border-primary/10 bg-card/60 p-5">
                                         <div className="flex items-center justify-between gap-3">
                                             <div>
                                                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">악보 넘기기</p>
@@ -559,7 +1110,7 @@ export default function SessionWorkspace({
                                                 type="button"
                                                 onClick={() => commitState({ page: Math.max(1, currentPage - 1) })}
                                                 disabled={!canControlLocally || currentPage <= 1}
-                                                className="tap-target flex flex-1 items-center justify-center gap-2 rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                                                className="tap-target flex flex-1 items-center justify-center gap-2 rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
                                             >
                                                 <ChevronLeft size={16} />
                                                 이전
@@ -568,7 +1119,7 @@ export default function SessionWorkspace({
                                                 type="button"
                                                 onClick={() => commitState({ page: currentPage + 1 })}
                                                 disabled={!canControlLocally}
-                                                className="tap-target flex flex-1 items-center justify-center gap-2 rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                                                className="tap-target flex flex-1 items-center justify-center gap-2 rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
                                             >
                                                 다음
                                                 <ChevronRight size={16} />
@@ -576,7 +1127,7 @@ export default function SessionWorkspace({
                                         </div>
                                     </div>
 
-                                    <div className="rounded-3xl border border-primary/10 bg-white/60 p-5">
+                                    <div className="rounded-3xl border border-primary/10 bg-card/60 p-5">
                                         <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">섹션 알림</p>
                                         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                             {DEFAULT_SESSION_SECTIONS.map((sectionName) => (
@@ -587,7 +1138,7 @@ export default function SessionWorkspace({
                                                     disabled={!canControlLocally}
                                                     className={`tap-target rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${currentSection === sectionName
                                                         ? 'border-secondary/30 bg-secondary/10 text-secondary'
-                                                        : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-white'} disabled:cursor-not-allowed disabled:opacity-45`}
+                                                        : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                                                 >
                                                     {sectionName}
                                                 </button>
@@ -633,7 +1184,7 @@ export default function SessionWorkspace({
                         />
 
                         <GlassCard className="border-primary/10 p-0">
-                            <div className="border-b border-primary/10 bg-white/55 px-5 py-5">
+                            <div className="border-b border-primary/10 bg-card/55 px-5 py-5">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div className="flex items-start gap-3">
                                         <div className={`flex h-11 w-11 items-center justify-center rounded-full ${selectedRoleMeta.iconTone}`}>
@@ -664,7 +1215,7 @@ export default function SessionWorkspace({
                                                 key={role}
                                                 type="button"
                                                 onClick={() => setFeedbackRole(role)}
-                                                className={`tap-target rounded-2xl border px-4 py-4 text-left transition ${isSelected ? roleMeta.tone : 'border-primary/10 bg-background/70 text-primary hover:border-primary/20 hover:bg-white'}`}
+                                                className={`tap-target rounded-2xl border px-4 py-4 text-left transition ${isSelected ? roleMeta.tone : 'border-primary/10 bg-background/70 text-primary hover:border-primary/20 hover:bg-card'}`}
                                             >
                                                 <div className="flex items-start gap-3">
                                                     <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${isSelected ? roleMeta.iconTone : 'bg-primary/5 text-primary/55'}`}>
@@ -703,13 +1254,13 @@ export default function SessionWorkspace({
                                             onChange={(event) => setQuickPresetDraft(event.target.value)}
                                             maxLength={32}
                                             placeholder="예: 보컬 올려주세요, 다음 절"
-                                            className="tap-target flex-1 rounded-2xl border border-primary/10 bg-white/80 px-4 py-3 text-sm text-primary outline-none transition placeholder:text-primary/35 focus:border-secondary/30 focus:ring-2 focus:ring-secondary/10"
+                                            className="tap-target flex-1 rounded-2xl border border-primary/10 bg-card/80 px-4 py-3 text-sm text-primary outline-none transition placeholder:text-primary/35 focus:border-secondary/30 focus:ring-2 focus:ring-secondary/10"
                                             disabled={!isActive || isPresetPending}
                                         />
                                         <button
                                             type="submit"
                                             disabled={!isActive || isPresetPending || quickPresetDraft.trim().length === 0}
-                                            className="tap-target inline-flex items-center justify-center gap-2 rounded-full border border-primary/10 bg-white/80 px-5 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                                            className="tap-target inline-flex items-center justify-center gap-2 rounded-full border border-primary/10 bg-card/80 px-5 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
                                         >
                                             <Plus size={15} />
                                             버튼 저장
@@ -728,14 +1279,15 @@ export default function SessionWorkspace({
                                                 .map((preset) => {
                                                     const presetMeta = getFeedbackRoleMeta(preset.role);
                                                     const PresetIcon = presetMeta.icon;
+                                                    const isSent = recentSentPresetId === preset.id;
 
                                                     return (
                                                         <button
                                                             key={preset.id}
                                                             type="button"
-                                                            onClick={() => handleQuickPresetSend(preset.message, preset.role)}
+                                                            onClick={() => handleQuickPresetSend(preset.message, preset.role, preset.id)}
                                                             disabled={!isActive || isFeedbackPending}
-                                                            className={`tap-target rounded-2xl border px-4 py-4 text-left transition ${presetMeta.tone} disabled:cursor-not-allowed disabled:opacity-45`}
+                                                            className={`tap-target rounded-2xl border px-4 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${isSent ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : presetMeta.tone}`}
                                                         >
                                                             <div className="flex items-start gap-3">
                                                                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${presetMeta.iconTone}`}>
@@ -747,7 +1299,7 @@ export default function SessionWorkspace({
                                                                             {preset.label}
                                                                         </p>
                                                                         <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/45">
-                                                                            Tap
+                                                                            {isSent ? 'Sent' : 'Tap'}
                                                                         </span>
                                                                     </div>
                                                                     <p className="mt-1 text-xs leading-relaxed text-primary/55">
@@ -779,7 +1331,7 @@ export default function SessionWorkspace({
                                             maxLength={220}
                                             rows={4}
                                             placeholder="Share a quick cue, balance note, or broadcast issue for the team."
-                                            className="mt-3 w-full resize-none rounded-2xl border border-primary/10 bg-white/80 px-4 py-3 text-base text-primary outline-none transition placeholder:text-primary/35 focus:border-secondary/30 focus:ring-2 focus:ring-secondary/10 sm:text-sm"
+                                            className="mt-3 w-full resize-none rounded-2xl border border-primary/10 bg-card/80 px-4 py-3 text-base text-primary outline-none transition placeholder:text-primary/35 focus:border-secondary/30 focus:ring-2 focus:ring-secondary/10 sm:text-sm"
                                             disabled={!isActive || isFeedbackPending}
                                         />
                                         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -818,7 +1370,7 @@ export default function SessionWorkspace({
                                                 return (
                                                     <div
                                                         key={entry.id}
-                                                        className="rounded-3xl border border-primary/10 bg-white/70 p-4"
+                                                        className="rounded-3xl border border-primary/10 bg-card/70 p-4"
                                                     >
                                                         <div className="flex items-start gap-3">
                                                             <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${roleMeta.iconTone}`}>
@@ -881,7 +1433,7 @@ export default function SessionWorkspace({
                                                 disabled={!canControlLocally}
                                                 className={`tap-target rounded-2xl border px-4 py-4 text-left transition ${isCurrent
                                                     ? 'border-secondary/30 bg-secondary/10'
-                                                    : 'border-primary/10 bg-white/60 hover:border-primary/20 hover:bg-white'} disabled:cursor-not-allowed disabled:opacity-60`}
+                                                    : 'border-primary/10 bg-card/60 hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-60`}
                                             >
                                                 <div className="flex items-start gap-4">
                                                     <span className={`mt-1 text-lg font-black ${isCurrent ? 'text-secondary' : 'text-primary/20'}`}>
@@ -891,7 +1443,7 @@ export default function SessionWorkspace({
                                                         <div className="flex items-center justify-between gap-3">
                                                             <p className="truncate text-sm font-semibold text-primary">{song.title}</p>
                                                             {isCurrent && (
-                                                                <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-secondary">
+                                                                <span className="rounded-full bg-card/80 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-secondary">
                                                                     진행 중
                                                                 </span>
                                                             )}
@@ -908,7 +1460,7 @@ export default function SessionWorkspace({
                             </div>
                         </GlassCard>
 
-                        <GlassCard className="border-primary/10 bg-white/60">
+                        <GlassCard className="border-primary/10 bg-card/60">
                             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                                 <div className="flex items-start gap-4">
                                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-secondary/10 text-secondary">
@@ -929,21 +1481,21 @@ export default function SessionWorkspace({
                                 <div className="grid gap-3 sm:grid-cols-3 lg:w-[28rem]">
                                     <Link
                                         href="/care"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/10 bg-white/75 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-white"
+                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/10 bg-card/75 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-card"
                                     >
                                         <HandHeart size={16} />
                                         기도
                                     </Link>
                                     <Link
                                         href="/serve"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/10 bg-white/75 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-white"
+                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/10 bg-card/75 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-card"
                                     >
                                         <BadgeCheck size={16} />
                                         섬김
                                     </Link>
                                     <Link
                                         href="/groups"
-                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/10 bg-white/75 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-white"
+                                        className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/10 bg-card/75 px-4 py-3 text-sm font-semibold text-primary transition hover:bg-card"
                                     >
                                         <UsersRound size={16} />
                                         그룹
@@ -976,21 +1528,29 @@ export default function SessionWorkspace({
                         aria-label="이전 악보 페이지"
                         onClick={() => commitState({ page: Math.max(1, currentPage - 1) })}
                         disabled={!canControlLocally || currentPage <= 1}
-                        className="tap-target inline-flex items-center justify-center gap-2 rounded-2xl border border-primary/10 bg-white/85 px-3 py-3 text-sm font-semibold text-primary shadow-sm disabled:cursor-not-allowed disabled:opacity-45"
+                        className="tap-target inline-flex items-center justify-center gap-2 rounded-2xl border border-primary/10 bg-card/85 px-3 py-3 text-sm font-semibold text-primary shadow-sm disabled:cursor-not-allowed disabled:opacity-45"
                     >
                         <ChevronLeft size={16} />
                         이전
                     </button>
-                    <div className="min-w-0 rounded-2xl border border-primary/10 bg-primary px-4 py-3 text-center text-surface shadow-sm">
+                    <div
+                        key={`mobile-page-${currentPage}`}
+                        className="min-w-0 rounded-2xl border border-primary/10 bg-primary px-4 py-3 text-center text-surface shadow-sm motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95"
+                    >
                         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-surface/60">악보</p>
                         <p className="mt-1 text-lg font-black leading-none">{currentPage}</p>
+                        {autoAdvanceEnabled && (
+                            <p className="mt-1 text-[10px] font-bold leading-none text-surface/65">
+                                {autoAdvanceSeconds}초
+                            </p>
+                        )}
                     </div>
                     <button
                         type="button"
                         aria-label="다음 악보 페이지"
                         onClick={() => commitState({ page: currentPage + 1 })}
                         disabled={!canControlLocally}
-                        className="tap-target inline-flex items-center justify-center gap-2 rounded-2xl border border-primary/10 bg-white/85 px-3 py-3 text-sm font-semibold text-primary shadow-sm disabled:cursor-not-allowed disabled:opacity-45"
+                        className="tap-target inline-flex items-center justify-center gap-2 rounded-2xl border border-primary/10 bg-card/85 px-3 py-3 text-sm font-semibold text-primary shadow-sm disabled:cursor-not-allowed disabled:opacity-45"
                     >
                         다음
                         <ChevronRight size={16} />

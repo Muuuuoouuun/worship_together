@@ -92,9 +92,9 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
 
                 {!hasSupabase && (
                     <GlassCard className="border-amber-500/20 bg-amber-500/10">
-                        <p className="text-sm font-semibold text-amber-700">Supabase 환경 변수가 비어 있습니다.</p>
+                        <p className="text-sm font-semibold text-amber-700">데모 모드로 보는 중입니다.</p>
                         <p className="mt-2 text-sm leading-relaxed text-amber-700/80">
-                            라이브러리 UI는 볼 수 있지만 `.env.local`에 `NEXT_PUBLIC_SUPABASE_URL`과 `NEXT_PUBLIC_SUPABASE_ANON_KEY`가 설정될 때까지 생성 액션은 비활성화됩니다.
+                            곡과 콘티 화면은 확인할 수 있고, 생성 버튼은 Supabase 연결 후 활성화됩니다.
                         </p>
                     </GlassCard>
                 )}

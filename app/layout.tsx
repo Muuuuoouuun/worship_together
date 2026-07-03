@@ -48,8 +48,24 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#F7F5EF",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F7F5EF" },
+    { media: "(prefers-color-scheme: dark)", color: "#101817" },
+  ],
 };
+
+const themeInitScript = `
+(() => {
+  try {
+    const stored = window.localStorage.getItem('worship-theme');
+    const theme = stored === 'light' || stored === 'dark'
+      ? stored
+      : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    document.documentElement.style.colorScheme = theme;
+  } catch {}
+})();
+`;
 
 export default function RootLayout({
   children,
@@ -57,10 +73,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${merriweather.variable} antialiased font-sans`}
       >
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <PwaProvider />
         {children}
       </body>
