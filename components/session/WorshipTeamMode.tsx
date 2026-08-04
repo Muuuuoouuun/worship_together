@@ -23,6 +23,7 @@ import {
 } from '@/types/session';
 import {
     ArrowLeft,
+    Check,
     ChevronsUp,
     CornerDownRight,
     Pause,
@@ -50,42 +51,51 @@ type StageAction = {
     group: SessionFeedbackPresetGroup;
     target: string;
     tone: string;
+    accent: string;
     Icon: LucideIcon;
     cooldown?: boolean;
 };
 
 type StageFlash = {
     id: string;
+    token: string;
     label: string;
     message: string;
-    tone: string;
+    target: string;
+    role: SessionFeedbackRole;
+    accent: string;
 };
 
 const ACTION_GROUP_META: Record<SessionFeedbackPresetGroup, {
     label: string;
     tone: string;
+    accent: string;
     Icon: LucideIcon;
     cooldown?: boolean;
 }> = {
     flow: {
         label: '흐름',
         tone: 'border-sky-300/25 bg-sky-300/12 text-sky-50',
+        accent: '125 211 252',
         Icon: CornerDownRight,
         cooldown: true,
     },
     tempo: {
         label: '템포',
         tone: 'border-amber-300/25 bg-amber-300/12 text-amber-50',
+        accent: '252 211 77',
         Icon: ChevronsUp,
     },
     band: {
         label: '반주',
         tone: 'border-emerald-300/25 bg-emerald-300/12 text-emerald-50',
+        accent: '110 231 183',
         Icon: Pause,
     },
     media: {
         label: '미디어',
         tone: 'border-violet-300/25 bg-violet-300/12 text-violet-50',
+        accent: '196 181 253',
         Icon: Radio,
     },
 };
@@ -108,6 +118,7 @@ function createStageAction(preset: SessionFeedbackPreset): StageAction {
         group: preset.group,
         target: preset.target || getDefaultSessionFeedbackTarget(preset.role, preset.group),
         tone: groupMeta.tone,
+        accent: groupMeta.accent,
         Icon: groupMeta.Icon,
         cooldown: groupMeta.cooldown,
     };
@@ -258,13 +269,22 @@ export default function WorshipTeamMode({
     }, []);
 
     const showActionFeedback = (action: StageAction) => {
+        const flashToken = crypto.randomUUID();
+
         setRecentActionId(action.id);
         setStageFlash({
             id: action.id,
+            token: flashToken,
             label: action.label,
             message: action.message,
-            tone: action.tone,
+            target: action.target,
+            role: action.role,
+            accent: action.accent,
         });
+
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate([18, 24, 32]);
+        }
 
         if (flashTimeoutRef.current) {
             window.clearTimeout(flashTimeoutRef.current);
@@ -275,10 +295,10 @@ export default function WorshipTeamMode({
                 currentActionId === action.id ? null : currentActionId
             ));
             setStageFlash((currentFlash) => (
-                currentFlash?.id === action.id ? null : currentFlash
+                currentFlash?.token === flashToken ? null : currentFlash
             ));
             flashTimeoutRef.current = null;
-        }, 1800);
+        }, 2200);
     };
 
     const beginCooldown = (action: StageAction) => {
@@ -361,11 +381,24 @@ export default function WorshipTeamMode({
     return (
         <main className="safe-area-x min-h-dvh overflow-x-hidden bg-[#050b0a] text-[#fff7e8]">
             {stageFlash ? (
-                <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-5">
-                    <div className={`stage-cue-flash w-full max-w-xl rounded-lg border px-6 py-7 text-center shadow-[0_0_70px_rgba(255,224,184,0.18)] backdrop-blur-xl ${stageFlash.tone}`}>
-                        <p className="text-sm font-black uppercase tracking-[0.2em] opacity-70">Cue Sent</p>
-                        <p className="mt-3 text-4xl font-black leading-none sm:text-6xl">{stageFlash.label}</p>
-                        <p className="mt-4 text-base font-bold text-white/70">{stageFlash.message}</p>
+                <div key={stageFlash.token} className="stage-cue-layer pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-5">
+                    <div className="stage-cue-backdrop absolute inset-0" />
+                    <div
+                        className="stage-cue-shell relative w-full max-w-xl overflow-hidden rounded-lg border px-5 py-6 text-center backdrop-blur-xl sm:px-8 sm:py-8"
+                        style={{ '--cue-accent': stageFlash.accent } as CSSProperties}
+                    >
+                        <div className="stage-cue-mark mx-auto flex h-11 w-11 items-center justify-center rounded-full border sm:h-12 sm:w-12">
+                            <Check size={23} strokeWidth={3} />
+                        </div>
+                        <p className="stage-cue-kicker mt-3 text-[10px] font-black uppercase tracking-[0.2em] sm:text-xs">Cue sent</p>
+                        <p className="stage-cue-title mt-2 text-4xl font-black leading-none sm:text-6xl">{stageFlash.label}</p>
+                        <p className="stage-cue-message mt-3 text-sm font-bold text-white/72 sm:mt-4 sm:text-base">{stageFlash.message}</p>
+                        <div className="stage-cue-meta mt-4 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] sm:text-xs">
+                            <span>{stageFlash.target}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{ROLE_LABELS[stageFlash.role]}</span>
+                        </div>
+                        <span className="stage-cue-timer absolute inset-x-0 bottom-0 h-1" />
                     </div>
                 </div>
             ) : null}
@@ -406,7 +439,7 @@ export default function WorshipTeamMode({
 
                 <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[minmax(0,1fr)_auto]">
                     <section
-                        className="order-1 relative overflow-hidden rounded-lg border border-[#f0b56b]/20 bg-[#f0b56b]/[0.075] p-3 sm:p-5 lg:order-none lg:col-start-1 lg:row-start-1"
+                        className={`stage-bpm-panel order-1 relative overflow-hidden rounded-lg border border-[#f0b56b]/20 bg-[#f0b56b]/[0.075] p-3 sm:p-5 lg:order-none lg:col-start-1 lg:row-start-1 ${blinkActive ? 'stage-bpm-panel--beat' : ''} ${blinkActive && activeBeat === 1 ? 'stage-bpm-panel--downbeat' : ''}`}
                         style={beatDurationStyle}
                         data-testid="team-mode-bpm"
                     >
@@ -433,7 +466,7 @@ export default function WorshipTeamMode({
                             <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] items-end gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:gap-5">
                                 <div>
                                     <div className="flex items-end gap-3">
-                                        <p className={`font-serif text-6xl font-black leading-none text-[#ffe0b8] sm:text-8xl ${metronomeActive ? 'bpm-digit-pulse' : ''}`}>
+                                        <p className={`stage-bpm-value font-serif text-6xl font-black leading-none text-[#ffe0b8] sm:text-8xl ${blinkActive ? 'stage-bpm-value--beat' : ''} ${blinkActive && activeBeat === 1 ? 'stage-bpm-value--downbeat' : ''}`}>
                                             {currentBpm ?? '--'}
                                         </p>
                                         <div className="flex flex-col items-start gap-1 pb-1 sm:gap-2 sm:pb-2">
@@ -456,14 +489,14 @@ export default function WorshipTeamMode({
                                             return (
                                                 <span
                                                     key={beat}
-                                                    className={`h-3 rounded-full transition sm:h-4 ${isActiveBeat ? 'bg-[#ffe0b8] shadow-[0_0_26px_rgba(255,224,184,0.46)]' : 'bg-white/18'} ${isDownBeat ? 'h-4 sm:h-5' : ''}`}
+                                                    className={`stage-beat-track rounded-full ${isActiveBeat ? 'stage-beat-track--active' : ''} ${isActiveBeat && isDownBeat ? 'stage-beat-track--downbeat' : ''} ${isDownBeat ? 'h-4 sm:h-5' : 'h-3 sm:h-4'}`}
                                                 />
                                             );
                                         })}
                                     </div>
                                 </div>
 
-                                <div className="relative h-28 overflow-hidden rounded-lg border border-[#ffe0b8]/20 bg-black/22 sm:h-44">
+                                <div className={`stage-metronome-shell relative h-28 overflow-hidden rounded-lg border border-[#ffe0b8]/20 bg-black/22 sm:h-44 ${blinkActive ? 'stage-metronome-shell--beat' : ''}`}>
                                     <div className="absolute inset-x-5 bottom-6 h-1 rounded-full bg-[#ffe0b8]/16 sm:inset-x-9 sm:bottom-9" />
                                     <div className={`absolute left-1/2 top-6 h-16 w-1 -translate-x-1/2 rounded-full bg-[#ffe0b8] sm:top-9 sm:h-24 ${metronomeActive ? 'bpm-metronome-arm' : 'opacity-35'}`}>
                                         <span className="absolute -top-1 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full bg-[#ffe0b8] shadow-[0_0_32px_rgba(255,224,184,0.48)] sm:-top-1.5 sm:h-5 sm:w-5" />
@@ -478,7 +511,7 @@ export default function WorshipTeamMode({
                     </section>
 
                     <aside
-                        className="order-2 rounded-lg border border-white/10 bg-white/[0.052] px-3 py-2.5 lg:hidden"
+                        className={`order-2 rounded-lg border border-white/10 bg-white/[0.052] px-3 py-2.5 lg:hidden ${recentActionId ? 'stage-latest-cue-active' : ''}`}
                         aria-live="polite"
                         data-testid="team-latest-cue-mobile"
                     >
@@ -528,7 +561,7 @@ export default function WorshipTeamMode({
                                                     onClick={() => sendStageAction(action)}
                                                     disabled={disabled}
                                                     data-testid={`team-action-${action.id}`}
-                                                    className={`tap-target min-h-12 rounded-lg border px-2.5 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-[4.75rem] sm:px-4 sm:py-3 motion-safe:active:scale-[0.98] ${isFailed ? 'border-red-300/40 bg-red-400/[0.18] text-red-50' : isSent ? 'border-emerald-300/40 bg-emerald-300/[0.2] text-emerald-50 shadow-[0_0_30px_rgba(110,231,183,0.14)]' : action.tone}`}
+                                                    className={`tap-target min-h-12 rounded-lg border px-2.5 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-[4.75rem] sm:px-4 sm:py-3 motion-safe:active:scale-[0.98] ${isFailed ? 'border-red-300/40 bg-red-400/[0.18] text-red-50' : isSent ? 'stage-action-sent border-emerald-300/40 bg-emerald-300/[0.2] text-emerald-50 shadow-[0_0_30px_rgba(110,231,183,0.14)]' : action.tone}`}
                                                 >
                                                     <span className="flex items-center justify-between gap-2">
                                                         <span className="flex min-w-0 items-center gap-1.5 sm:gap-2">
@@ -553,7 +586,7 @@ export default function WorshipTeamMode({
                     </aside>
 
                     <section className="order-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem] lg:order-none lg:col-start-1 lg:row-start-2">
-                        <aside className="hidden rounded-lg border border-white/10 bg-white/[0.052] p-4 lg:block" aria-live="polite" data-testid="team-latest-cue">
+                        <aside className={`hidden rounded-lg border border-white/10 bg-white/[0.052] p-4 lg:block ${recentActionId ? 'stage-latest-cue-active' : ''}`} aria-live="polite" data-testid="team-latest-cue">
                             <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/35">최근 큐</p>
                             <p className="mt-3 text-2xl font-black leading-tight text-white sm:text-3xl">
                                 {latestCue?.message ?? '큐 대기'}
