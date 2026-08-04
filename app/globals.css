@@ -125,6 +125,27 @@
   .sync-pulse {
     animation: sync-pulse 1.6s ease-out infinite;
   }
+
+  .bpm-metronome-arm {
+    animation: bpm-metronome-swing var(--beat-duration, 0.75s) ease-in-out infinite;
+    transform-origin: 50% 100%;
+  }
+
+  .bpm-beat-ring {
+    animation: bpm-beat-ring var(--beat-duration, 0.75s) ease-out infinite;
+  }
+
+  .bpm-digit-pulse {
+    animation: bpm-digit-pulse var(--beat-duration, 0.75s) ease-out infinite;
+  }
+
+  .bpm-step-dot {
+    animation: bpm-step-dot var(--beat-duration, 0.75s) ease-out infinite;
+  }
+
+  .stage-cue-flash {
+    animation: stage-cue-flash 1.8s ease-out both;
+  }
 }
 
 @keyframes sync-pulse {
@@ -141,6 +162,90 @@
   }
 }
 
+@keyframes bpm-metronome-swing {
+  0%,
+  100% {
+    transform: rotate(-24deg);
+  }
+
+  50% {
+    transform: rotate(24deg);
+  }
+}
+
+@keyframes bpm-beat-ring {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.76);
+  }
+
+  70% {
+    opacity: 0;
+    transform: scale(1.28);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.28);
+  }
+}
+
+@keyframes bpm-digit-pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+
+  55% {
+    opacity: 0.76;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes bpm-step-dot {
+  0% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+
+  65% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+}
+
+@keyframes stage-cue-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(0.6rem);
+  }
+
+  12% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+
+  78% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.02) translateY(-0.4rem);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -149,5 +254,11 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .stage-cue-flash {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

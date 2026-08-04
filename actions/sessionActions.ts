@@ -2,7 +2,10 @@
 
 import { getSupabaseClient } from '@/lib/supabase';
 import {
+    getDefaultSessionFeedbackTarget,
     getDefaultSessionFeedbackPresets,
+    inferSessionFeedbackPresetGroup,
+    isSessionFeedbackPresetGroup,
     isSessionFeedbackRole,
     MAX_SESSION_FEEDBACK_LOG,
     MAX_SESSION_FEEDBACK_PRESETS,
@@ -10,6 +13,7 @@ import {
     sessionFeedbackRowToEntry,
     type SessionCurrentState,
     type SessionFeedbackEntry,
+    type SessionFeedbackPresetGroup,
     type SessionFeedbackRow,
     type SessionFeedbackRole,
     type SessionRow,
@@ -210,9 +214,12 @@ export async function appendSessionFeedback(
 }
 
 interface AddSessionFeedbackPresetPayload {
+    id?: string;
     role: SessionFeedbackRole;
+    group?: SessionFeedbackPresetGroup;
     label: string;
     message: string;
+    target?: string;
 }
 
 export async function addSessionFeedbackPreset(
@@ -223,6 +230,9 @@ export async function addSessionFeedbackPreset(
     const { session, supabase } = await getTeamScopedSession(sessionId, teamId);
     const label = payload.label.trim().slice(0, 32);
     const message = payload.message.trim().slice(0, 220);
+    const presetId = typeof payload.id === 'string' && payload.id.trim().length > 0
+        ? payload.id.trim().slice(0, 64)
+        : crypto.randomUUID();
 
     ensureActiveSession(session);
 
@@ -236,16 +246,26 @@ export async function addSessionFeedbackPreset(
 
     const currentState = normalizeSessionState(session.current_state);
     const normalizedLabel = label || message;
+    const group = isSessionFeedbackPresetGroup(payload.group)
+        ? payload.group
+        : inferSessionFeedbackPresetGroup(payload.role, normalizedLabel, message);
+    const normalizedTarget = payload.target?.trim().slice(0, 24) ||
+        getDefaultSessionFeedbackTarget(payload.role, group);
     const dedupedPresets = currentState.quickFeedbackPresets.filter(
-        (preset) => !(preset.role === payload.role && preset.message === message)
+        (preset) => (
+            preset.id !== presetId &&
+            !(preset.role === payload.role && preset.message === message && preset.target === normalizedTarget)
+        )
     );
     const nextQuickFeedbackPresets = [
         ...dedupedPresets,
         {
-            id: crypto.randomUUID(),
+            id: presetId,
             role: payload.role,
+            group,
             label: normalizedLabel,
             message,
+            target: normalizedTarget,
             createdAt: new Date().toISOString(),
         },
     ].slice(-MAX_SESSION_FEEDBACK_PRESETS);

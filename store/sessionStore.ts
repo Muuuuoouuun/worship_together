@@ -33,6 +33,23 @@ function mergeFeedbackEntry(
     return [...feedbackLog, entry].slice(-MAX_SESSION_FEEDBACK_LOG);
 }
 
+function mergeFeedbackLogs(
+    currentLog: SessionFeedbackEntry[],
+    incomingLog: SessionFeedbackEntry[]
+): SessionFeedbackEntry[] {
+    const entriesById = new Map<string, SessionFeedbackEntry>();
+
+    [...currentLog, ...incomingLog].forEach((entry) => {
+        entriesById.set(entry.id, entry);
+    });
+
+    return Array.from(entriesById.values())
+        .sort((left, right) => (
+            new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+        ))
+        .slice(-MAX_SESSION_FEEDBACK_LOG);
+}
+
 interface SessionState {
     isActive: boolean;
     isMaster: boolean;
@@ -83,7 +100,7 @@ export const useSessionStore = create<SessionState>((set) => ({
         const state = initialState ?? normalizeSessionState(session.current_state, songs);
         const currentSong = resolveSong(state.songId, songs);
 
-        set({
+        set((current) => ({
             isActive: session.is_active,
             songs,
             currentSession: session,
@@ -95,8 +112,10 @@ export const useSessionStore = create<SessionState>((set) => ({
             currentBpm: state.bpmValue,
             autoBpmSync: state.autoBpmSync,
             feedbackLog: state.feedbackLog,
-            quickFeedbackPresets: state.quickFeedbackPresets,
-        });
+            quickFeedbackPresets: current.currentSession?.id === session.id && current.quickFeedbackPresets.length > 0
+                ? current.quickFeedbackPresets
+                : state.quickFeedbackPresets,
+        }));
     },
 
     setSessionMeta: (session) => set({ currentSession: session, isActive: session.is_active }),
@@ -128,7 +147,9 @@ export const useSessionStore = create<SessionState>((set) => ({
                 bpmEnabled: payload.bpmEnabled,
                 currentBpm: payload.bpmValue,
                 autoBpmSync: payload.autoBpmSync,
-                feedbackLog: payload.feedbackLog.length > 0 ? payload.feedbackLog : state.feedbackLog,
+                feedbackLog: payload.feedbackLog.length > 0
+                    ? mergeFeedbackLogs(state.feedbackLog, payload.feedbackLog)
+                    : state.feedbackLog,
                 quickFeedbackPresets: payload.quickFeedbackPresets,
             };
         }),

@@ -9,8 +9,15 @@ export type TeamRow = Database['public']['Tables']['teams']['Row'];
 export const SESSION_FEEDBACK_ROLES = ['leader', 'instrument', 'broadcast'] as const;
 export type SessionFeedbackRole = (typeof SESSION_FEEDBACK_ROLES)[number];
 export const DEFAULT_SESSION_FEEDBACK_ROLE: SessionFeedbackRole = 'leader';
+export const SESSION_FEEDBACK_PRESET_GROUPS = ['flow', 'tempo', 'band', 'media'] as const;
+export type SessionFeedbackPresetGroup = (typeof SESSION_FEEDBACK_PRESET_GROUPS)[number];
+export const DEFAULT_SESSION_FEEDBACK_PRESET_GROUP: SessionFeedbackPresetGroup = 'flow';
 export const MAX_SESSION_FEEDBACK_LOG = 18;
 export const MAX_SESSION_FEEDBACK_PRESETS = 12;
+
+export function getSessionFeedbackPresetStorageKey(sessionId: string): string {
+    return `worship-together:session:${sessionId}:feedback-presets`;
+}
 
 export interface SessionFeedbackEntry {
     id: string;
@@ -28,8 +35,10 @@ export interface SessionFeedbackEntry {
 export interface SessionFeedbackPreset {
     id: string;
     role: SessionFeedbackRole;
+    group: SessionFeedbackPresetGroup;
     label: string;
     message: string;
+    target: string;
     createdAt: string;
 }
 
@@ -37,46 +46,76 @@ const DEFAULT_SESSION_FEEDBACK_PRESET_CREATED_AT = '1970-01-01T00:00:00.000Z';
 
 const DEFAULT_SESSION_FEEDBACK_PRESET_DEFS = [
     {
+        id: 'cue-next-section',
+        role: 'leader',
+        group: 'flow',
+        label: '다음 섹션',
+        message: '다음 섹션으로 넘어갑니다.',
+        target: '전체',
+    },
+    {
+        id: 'cue-repeat-section',
+        role: 'leader',
+        group: 'flow',
+        label: '한 번 더',
+        message: '현재 섹션을 한 번 더 반복합니다.',
+        target: '전체',
+    },
+    {
         id: 'cue-slower-tempo',
         role: 'leader',
+        group: 'tempo',
         label: '느려요',
         message: '템포를 살짝 내려주세요.',
+        target: '리듬',
     },
     {
         id: 'cue-faster-tempo',
         role: 'leader',
+        group: 'tempo',
         label: '빨라요',
         message: '템포를 살짝 올려주세요.',
+        target: '리듬',
     },
     {
         id: 'cue-longer-accompaniment',
         role: 'instrument',
+        group: 'band',
         label: '반주 유지',
         message: '반주를 조금 더 길게 유지해주세요.',
+        target: '악기',
     },
     {
         id: 'cue-repeat-ending',
         role: 'leader',
-        label: '엔딩 반복',
-        message: '엔딩을 한 번 더 반복합니다.',
+        group: 'flow',
+        label: '엔딩',
+        message: '엔딩으로 들어갑니다.',
+        target: '전체',
     },
     {
         id: 'cue-next-lyrics',
         role: 'broadcast',
+        group: 'media',
         label: '다음 가사',
         message: '다음 가사 슬라이드를 준비해주세요.',
+        target: '미디어',
     },
     {
         id: 'cue-raise-vocal',
         role: 'broadcast',
+        group: 'media',
         label: '보컬 올림',
         message: '보컬 볼륨을 살짝 올려주세요.',
+        target: '미디어',
     },
 ] as const satisfies ReadonlyArray<{
     id: string;
     role: SessionFeedbackRole;
+    group: SessionFeedbackPresetGroup;
     label: string;
     message: string;
+    target: string;
 }>;
 
 export function getDefaultSessionFeedbackPresets(
@@ -206,12 +245,17 @@ function normalizeFeedbackPresets(value: Json | undefined): SessionFeedbackPrese
 function withDefaultFeedbackPresets(presets: SessionFeedbackPreset[]): SessionFeedbackPreset[] {
     const defaultPresets = getDefaultSessionFeedbackPresets();
     const defaultPresetIds = new Set(defaultPresets.map((preset) => preset.id));
+    const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
     const customPresets = presets.filter((preset) => !defaultPresetIds.has(preset.id));
+    const customLimit = Math.max(0, MAX_SESSION_FEEDBACK_PRESETS - defaultPresets.length);
 
     return [
-        ...defaultPresets,
-        ...customPresets,
-    ].slice(-MAX_SESSION_FEEDBACK_PRESETS);
+        ...defaultPresets.map((preset) => ({
+            ...preset,
+            ...presetsById.get(preset.id),
+        })),
+        ...customPresets.slice(-customLimit),
+    ];
 }
 
 function normalizeFeedbackEntry(
@@ -267,12 +311,20 @@ function normalizeFeedbackPreset(value: Json): SessionFeedbackPreset | null {
 
     const labelSource = typeof value.label === 'string' ? value.label.trim() : '';
     const label = labelSource || message;
+    const role = isSessionFeedbackRole(value.role) ? value.role : DEFAULT_SESSION_FEEDBACK_ROLE;
+    const group = isSessionFeedbackPresetGroup(value.group)
+        ? value.group
+        : inferSessionFeedbackPresetGroup(role, label, message);
+    const targetSource = typeof value.target === 'string' ? value.target.trim() : '';
+    const target = targetSource || getDefaultSessionFeedbackTarget(role, group);
 
     return {
         id: typeof value.id === 'string' ? value.id : `preset-${label.slice(0, 12)}`,
-        role: isSessionFeedbackRole(value.role) ? value.role : DEFAULT_SESSION_FEEDBACK_ROLE,
+        role,
+        group,
         label: label.slice(0, 32),
         message: message.slice(0, 220),
+        target: target.slice(0, 24),
         createdAt:
             typeof value.createdAt === 'string' && value.createdAt.trim().length > 0
                 ? value.createdAt
@@ -288,6 +340,52 @@ function isFeedbackEntryJson(
 
 export function isSessionFeedbackRole(value: Json | null | undefined): value is SessionFeedbackRole {
     return typeof value === 'string' && SESSION_FEEDBACK_ROLES.includes(value as SessionFeedbackRole);
+}
+
+export function isSessionFeedbackPresetGroup(
+    value: Json | null | undefined
+): value is SessionFeedbackPresetGroup {
+    return typeof value === 'string' &&
+        SESSION_FEEDBACK_PRESET_GROUPS.includes(value as SessionFeedbackPresetGroup);
+}
+
+export function inferSessionFeedbackPresetGroup(
+    role: SessionFeedbackRole,
+    label: string,
+    message: string
+): SessionFeedbackPresetGroup {
+    const source = `${label} ${message}`.toLowerCase();
+
+    if (/템포|느려|빨라|bpm|박자/.test(source)) {
+        return 'tempo';
+    }
+
+    if (role === 'broadcast') {
+        return 'media';
+    }
+
+    if (role === 'instrument') {
+        return 'band';
+    }
+
+    return DEFAULT_SESSION_FEEDBACK_PRESET_GROUP;
+}
+
+export function getDefaultSessionFeedbackTarget(
+    role: SessionFeedbackRole,
+    group: SessionFeedbackPresetGroup
+): string {
+    switch (group) {
+        case 'tempo':
+            return '리듬';
+        case 'band':
+            return '악기';
+        case 'media':
+            return '미디어';
+        case 'flow':
+        default:
+            return role === 'leader' ? '전체' : '팀';
+    }
 }
 
 function normalizePage(value: Json | undefined): number {

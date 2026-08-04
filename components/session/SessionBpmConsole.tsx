@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import type { ComponentType } from 'react';
+import type { ComponentType, CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
 import { AudioLines, Eye, EyeOff, Gauge, Music2, Zap } from 'lucide-react';
@@ -34,10 +34,10 @@ export default function SessionBpmConsole({
 }: SessionBpmConsoleProps) {
     const { activeBeat, blinkActive } = useBlinkMetronome(bpmEnabled && isActive, currentBpm);
     const statusLabel = bpmEnabled && currentBpm
-        ? 'BPM 블링크 켜짐'
+        ? '메트로놈 켜짐'
         : bpmEnabled
             ? 'BPM 프리셋 대기'
-            : 'BPM 블링크 꺼짐';
+            : '메트로놈 꺼짐';
     const statusTone = bpmEnabled && currentBpm
         ? 'bg-emerald-500/10 text-emerald-700'
         : bpmEnabled
@@ -51,12 +51,16 @@ export default function SessionBpmConsole({
     const displayBeat = bpmEnabled && isActive && currentBpm ? activeBeat : 0;
     const displayBlink = bpmEnabled && isActive && currentBpm ? blinkActive : false;
     const beatDots = useMemo(() => Array.from({ length: 4 }, (_, index) => index + 1), []);
+    const beatDurationStyle = useMemo(() => ({
+        '--beat-duration': `${currentBpm ? Math.max(0.24, 60 / currentBpm).toFixed(3) : '0.75'}s`,
+    }) as CSSProperties, [currentBpm]);
+    const metronomeActive = bpmEnabled && isActive && Boolean(currentBpm);
 
     return (
         <GlassCard className="border-primary/10">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-full ${displayBlink ? 'bg-secondary/20 text-secondary' : 'bg-secondary/10 text-secondary'}`}>
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-full ${displayBlink ? 'bg-secondary/20 text-secondary shadow-[0_0_22px_rgba(198,106,69,0.25)]' : 'bg-secondary/10 text-secondary'} transition duration-150`}>
                         <AudioLines size={20} />
                     </div>
                     <div>
@@ -76,7 +80,10 @@ export default function SessionBpmConsole({
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">현재 박자</p>
-                            <p className="mt-2 text-4xl font-serif font-black text-primary">
+                            <p
+                                className={`mt-2 inline-block text-4xl font-serif font-black text-primary ${metronomeActive ? 'bpm-digit-pulse' : ''}`}
+                                style={beatDurationStyle}
+                            >
                                 {currentBpm ?? '--'}
                                 <span className="ml-2 text-base font-semibold text-primary/40">BPM</span>
                             </p>
@@ -84,9 +91,22 @@ export default function SessionBpmConsole({
                                 {currentSongTitle ? `${currentSongTitle}` : '곡이 선택되지 않았습니다'}
                             </p>
                         </div>
-                        <div className="flex flex-col items-center gap-3">
-                            <div className={`relative flex h-20 w-20 items-center justify-center rounded-full border ${displayBlink ? 'border-secondary/40 bg-secondary/25 shadow-[0_0_40px_rgba(212,175,55,0.35)]' : 'border-primary/10 bg-card/70'} transition-all duration-150`}>
-                                <div className={`h-8 w-8 rounded-full ${displayBlink ? 'bg-secondary' : 'bg-primary/15'} transition-all duration-150`} />
+                        <div className="flex flex-col items-center gap-3" style={beatDurationStyle}>
+                            <div
+                                className={`relative h-24 w-28 overflow-hidden rounded-[1.25rem] border ${metronomeActive ? 'border-secondary/30 bg-secondary/10 shadow-[0_0_36px_rgba(198,106,69,0.22)]' : 'border-primary/10 bg-card/70'} transition duration-150`}
+                                aria-label="BPM 시각 메트로놈"
+                                data-testid="bpm-metronome"
+                            >
+                                <div className="absolute inset-x-5 bottom-4 h-1 rounded-full bg-primary/10" />
+                                <div className="absolute left-1/2 top-5 h-14 w-1 -translate-x-1/2 rounded-full bg-secondary/35" />
+                                <div className={`absolute left-1/2 top-5 h-14 w-1 -translate-x-1/2 rounded-full bg-secondary ${metronomeActive ? 'bpm-metronome-arm' : 'rotate-0 opacity-40'}`}>
+                                    <span className="absolute -top-1 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-secondary shadow-[0_0_18px_rgba(198,106,69,0.45)]" />
+                                </div>
+                                <div className="absolute bottom-3 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full bg-secondary" />
+                                {metronomeActive ? (
+                                    <div className="bpm-beat-ring absolute bottom-1 left-1/2 h-12 w-12 -translate-x-1/2 rounded-full border border-secondary/40" />
+                                ) : null}
+                                <div className={`absolute right-3 top-3 h-2.5 w-2.5 rounded-full ${displayBlink ? 'bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.45)]' : 'bg-primary/20'} transition duration-150`} />
                             </div>
                             <div className="flex items-center gap-2">
                                 {beatDots.map((beat) => (
@@ -126,7 +146,7 @@ export default function SessionBpmConsole({
                                 className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${bpmEnabled ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 {bpmEnabled ? <EyeOff size={16} /> : <Eye size={16} />}
-                                {bpmEnabled ? '블링크 끄기' : '블링크 켜기'}
+                                {bpmEnabled ? '메트로놈 끄기' : '메트로놈 켜기'}
                             </button>
                             <button
                                 type="button"

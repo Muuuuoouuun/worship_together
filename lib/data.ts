@@ -800,11 +800,7 @@ export async function getSetlistsByTeam(teamId: string): Promise<SetlistWithSong
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetail | null> {
-    if (!supabase) {
-        if (sessionId !== DEMO_SESSION_ID) {
-            return null;
-        }
-
+    if (sessionId === DEMO_SESSION_ID) {
         const currentState = normalizeSessionState(DEMO_SESSION_ROW.current_state, DEMO_SONGS);
 
         return {
@@ -814,6 +810,10 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
             team: DEMO_TEAM_ROW,
             currentState,
         };
+    }
+
+    if (!supabase) {
+        return null;
     }
 
     const { data: session, error: sessionError } = await supabase

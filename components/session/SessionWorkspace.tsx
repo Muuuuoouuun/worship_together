@@ -1,6 +1,7 @@
 "use client";
 
 import Link from 'next/link';
+import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -20,10 +21,15 @@ import { useSessionStore } from '@/store/sessionStore';
 import {
     DEFAULT_SESSION_SECTIONS,
     MAX_SESSION_FEEDBACK_LOG,
+    MAX_SESSION_FEEDBACK_PRESETS,
     SESSION_FEEDBACK_ROLES,
+    getDefaultSessionFeedbackTarget,
+    getSessionFeedbackPresetStorageKey,
     normalizeSessionState,
     resolveSongPresetBpm,
     type SessionCurrentState,
+    type SessionFeedbackPreset,
+    type SessionFeedbackPresetGroup,
     type SessionFeedbackRole,
     type SessionRow,
     type SongRow,
@@ -40,6 +46,7 @@ import {
     HeartHandshake,
     MessageSquare,
     Mic2,
+    Pencil,
     Plus,
     Radio,
     RefreshCw,
@@ -72,6 +79,22 @@ type NavigatorWithWakeLock = Navigator & {
         request: (type: 'screen') => Promise<WakeLockSentinelLike>;
     };
 };
+
+type QuickPresetDraft = {
+    id: string | null;
+    role: SessionFeedbackRole;
+    group: SessionFeedbackPresetGroup;
+    label: string;
+    message: string;
+    target: string;
+};
+
+const QUICK_PRESET_GROUP_OPTIONS: Array<{ id: SessionFeedbackPresetGroup; label: string }> = [
+    { id: 'flow', label: '흐름' },
+    { id: 'tempo', label: '템포' },
+    { id: 'band', label: '밴드' },
+    { id: 'media', label: '미디어' },
+];
 
 const STAGE_CONNECTIONS = [
     {
@@ -165,6 +188,34 @@ function getFeedbackRoleMeta(role: SessionFeedbackRole) {
                 tone: 'border-secondary/20 bg-secondary/10 text-secondary',
             };
     }
+}
+
+function createQuickPresetDraft(role: SessionFeedbackRole = 'leader'): QuickPresetDraft {
+    const group: SessionFeedbackPresetGroup = role === 'broadcast'
+        ? 'media'
+        : role === 'instrument'
+            ? 'band'
+            : 'flow';
+
+    return {
+        id: null,
+        role,
+        group,
+        label: '',
+        message: '',
+        target: getDefaultSessionFeedbackTarget(role, group),
+    };
+}
+
+function createQuickPresetDraftFromPreset(preset: SessionFeedbackPreset): QuickPresetDraft {
+    return {
+        id: preset.id,
+        role: preset.role,
+        group: preset.group,
+        label: preset.label,
+        message: preset.message,
+        target: preset.target,
+    };
 }
 
 function formatFeedbackTime(createdAt: string) {
@@ -275,7 +326,7 @@ export default function SessionWorkspace({
     const selectedFeedbackRole = useSessionStore((state) => state.selectedFeedbackRole);
     const [feedbackMessage, setFeedbackMessage] = useState('');
     const [clientId] = useState(() => crypto.randomUUID());
-    const [quickPresetDraft, setQuickPresetDraft] = useState('');
+    const [quickPresetDraft, setQuickPresetDraft] = useState<QuickPresetDraft>(() => createQuickPresetDraft());
     const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(false);
     const [autoAdvanceSeconds, setAutoAdvanceSeconds] = useState(12);
     const [wakeLockState, setWakeLockState] = useState<'idle' | 'active' | 'unsupported' | 'released'>('idle');
@@ -316,6 +367,7 @@ export default function SessionWorkspace({
     const previousRealtimeStatusRef = useRef<RealtimeConnectionStatus>(realtimeStatus);
 
     const canControlLocally = isActive && (isMaster || !syncEnabled);
+    const canManageQuickPresets = isActive && (isMaster || isDemoMode);
     const currentIndex = songs.findIndex((song) => song.id === currentSongId);
     const currentSongPresetBpm = resolveSongPresetBpm(currentSongId, songs);
     const feedbackFeed = [...feedbackLog].reverse();
@@ -330,6 +382,10 @@ export default function SessionWorkspace({
     const realtimeMeta = getRealtimeStatusMeta(realtimeStatus, isDemoMode);
     const realtimeAgeLabel = formatRealtimeAge(lastRealtimeAt);
     const mobileBpmLabel = currentBpm ?? currentSongPresetBpm ?? '--';
+    const mobileBpmActive = bpmEnabled && isActive && Boolean(currentBpm);
+    const mobileBpmBeatStyle = {
+        '--beat-duration': `${currentBpm ? Math.max(0.24, 60 / currentBpm).toFixed(3) : '0.75'}s`,
+    } as CSSProperties;
     const latestCueLabel = latestFeedbackEntry ? latestFeedbackEntry.message : '큐 대기';
     const sessionStatusLabel = isMaster
         ? '인도자 모드'
@@ -645,44 +701,68 @@ export default function SessionWorkspace({
     const handleQuickPresetSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
-        const message = quickPresetDraft.trim();
+        const label = quickPresetDraft.label.trim();
+        const message = quickPresetDraft.message.trim();
+        const target = quickPresetDraft.target.trim() ||
+            getDefaultSessionFeedbackTarget(quickPresetDraft.role, quickPresetDraft.group);
 
-        if (!message || !isActive) {
+        if (!message || !canManageQuickPresets) {
             return;
         }
 
-        setQuickPresetDraft('');
+        const nextPreset = {
+            id: quickPresetDraft.id ?? crypto.randomUUID(),
+            role: quickPresetDraft.role,
+            group: quickPresetDraft.group,
+            label: (label || message).slice(0, 32),
+            message,
+            target: target.slice(0, 24),
+            createdAt: new Date().toISOString(),
+        };
+        const nextDraft = createQuickPresetDraft(quickPresetDraft.role);
 
         if (isDemoMode) {
+            const nextQuickFeedbackPresets = [
+                ...quickFeedbackPresets.filter((preset) => preset.id !== nextPreset.id),
+                nextPreset,
+            ].slice(-MAX_SESSION_FEEDBACK_PRESETS);
+
             updateLocalState({
-                quickFeedbackPresets: [
-                    ...quickFeedbackPresets,
-                    {
-                        id: crypto.randomUUID(),
-                        role: selectedFeedbackRole,
-                        label: message.slice(0, 32),
-                        message,
-                        createdAt: new Date().toISOString(),
-                    },
-                ].slice(-12),
+                quickFeedbackPresets: nextQuickFeedbackPresets,
             });
+            window.sessionStorage.setItem(
+                getSessionFeedbackPresetStorageKey(session.id),
+                JSON.stringify(nextQuickFeedbackPresets)
+            );
+            setQuickPresetDraft(nextDraft);
             return;
         }
 
         startPresetTransition(async () => {
             try {
                 const nextQuickFeedbackPresets = await addSessionFeedbackPreset(session.id, teamId, {
-                    role: selectedFeedbackRole,
-                    label: message,
+                    id: quickPresetDraft.id ?? undefined,
+                    role: quickPresetDraft.role,
+                    group: quickPresetDraft.group,
+                    label: label || message,
                     message,
+                    target,
                 });
 
                 updateLocalState({ quickFeedbackPresets: nextQuickFeedbackPresets });
+                setQuickPresetDraft(nextDraft);
             } catch (error) {
                 console.error('Failed to add session feedback preset:', error);
-                setQuickPresetDraft(message);
             }
         });
+    };
+
+    const handleQuickPresetEdit = (preset: SessionFeedbackPreset) => {
+        setQuickPresetDraft(createQuickPresetDraftFromPreset(preset));
+    };
+
+    const handleQuickPresetReset = () => {
+        setQuickPresetDraft(createQuickPresetDraft(selectedFeedbackRole));
     };
 
     const handleQuickPresetSend = (message: string, role: SessionFeedbackRole, presetId?: string) => {
@@ -749,6 +829,13 @@ export default function SessionWorkspace({
 
                     <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap">
                         <ThemeToggle />
+                        <Link
+                            href={`/session/${session.id}/team`}
+                            className="tap-target inline-flex items-center justify-center gap-2 rounded-full border border-secondary/25 bg-secondary/[0.12] px-4 py-3 text-sm font-semibold text-secondary transition hover:bg-secondary/15 motion-safe:active:scale-[0.98]"
+                        >
+                            <Radio size={16} />
+                            예배팀 모드
+                        </Link>
                         <button
                             type="button"
                             onClick={toggleMaster}
@@ -825,9 +912,13 @@ export default function SessionWorkspace({
                                 {currentSong?.title ?? '곡 선택 대기'}
                             </h2>
                         </div>
-                        <div className="shrink-0 text-right">
+                        <div className="shrink-0 text-right" style={mobileBpmBeatStyle}>
                             <p className="text-[10px] font-bold uppercase text-primary/35">BPM</p>
-                            <p className="font-serif text-2xl font-black leading-none text-secondary">
+                            <div className="mt-1 flex items-center justify-end gap-1">
+                                <span className={`h-1.5 w-1.5 rounded-full bg-secondary/70 ${mobileBpmActive ? 'bpm-step-dot' : ''}`} />
+                                <span className={`h-1.5 w-1.5 rounded-full bg-secondary/35 ${mobileBpmActive ? 'bpm-step-dot [animation-delay:120ms]' : ''}`} />
+                            </div>
+                            <p className={`mt-1 inline-block font-serif text-2xl font-black leading-none text-secondary ${mobileBpmActive ? 'bpm-digit-pulse' : ''}`}>
                                 {mobileBpmLabel}
                             </p>
                         </div>
@@ -1248,23 +1339,125 @@ export default function SessionWorkspace({
                                         </span>
                                     </div>
 
-                                    <form onSubmit={handleQuickPresetSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row">
-                                        <input
-                                            value={quickPresetDraft}
-                                            onChange={(event) => setQuickPresetDraft(event.target.value)}
-                                            maxLength={32}
-                                            placeholder="예: 보컬 올려주세요, 다음 절"
-                                            className="tap-target flex-1 rounded-2xl border border-primary/10 bg-card/80 px-4 py-3 text-sm text-primary outline-none transition placeholder:text-primary/35 focus:border-secondary/30 focus:ring-2 focus:ring-secondary/10"
-                                            disabled={!isActive || isPresetPending}
-                                        />
-                                        <button
-                                            type="submit"
-                                            disabled={!isActive || isPresetPending || quickPresetDraft.trim().length === 0}
-                                            className="tap-target inline-flex items-center justify-center gap-2 rounded-full border border-primary/10 bg-card/80 px-5 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
-                                        >
-                                            <Plus size={15} />
-                                            버튼 저장
-                                        </button>
+                                    <form onSubmit={handleQuickPresetSubmit} className="mt-4 space-y-3">
+                                        <div className="grid gap-3 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
+                                            <label className="block">
+                                                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/35">버튼명</span>
+                                                <input
+                                                    value={quickPresetDraft.label}
+                                                    onChange={(event) => setQuickPresetDraft((draft) => ({
+                                                        ...draft,
+                                                        label: event.target.value,
+                                                    }))}
+                                                    maxLength={32}
+                                                    placeholder="예: 다음 섹션"
+                                                    className="tap-target mt-2 w-full rounded-2xl border border-primary/10 bg-card/80 px-4 py-3 text-sm text-primary outline-none transition placeholder:text-primary/35 focus:border-secondary/30 focus:ring-2 focus:ring-secondary/10"
+                                                    disabled={!canManageQuickPresets || isPresetPending}
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/35">전송 메시지</span>
+                                                <input
+                                                    value={quickPresetDraft.message}
+                                                    onChange={(event) => setQuickPresetDraft((draft) => ({
+                                                        ...draft,
+                                                        message: event.target.value,
+                                                    }))}
+                                                    maxLength={220}
+                                                    placeholder="예: 다음 섹션으로 넘어갑니다."
+                                                    className="tap-target mt-2 w-full rounded-2xl border border-primary/10 bg-card/80 px-4 py-3 text-sm text-primary outline-none transition placeholder:text-primary/35 focus:border-secondary/30 focus:ring-2 focus:ring-secondary/10"
+                                                    disabled={!canManageQuickPresets || isPresetPending}
+                                                />
+                                            </label>
+                                        </div>
+
+                                        <div className="grid gap-3 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
+                                            <label className="block">
+                                                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/35">대상</span>
+                                                <input
+                                                    value={quickPresetDraft.target}
+                                                    onChange={(event) => setQuickPresetDraft((draft) => ({
+                                                        ...draft,
+                                                        target: event.target.value,
+                                                    }))}
+                                                    maxLength={24}
+                                                    placeholder="예: 전체, 리듬, 미디어"
+                                                    className="tap-target mt-2 w-full rounded-2xl border border-primary/10 bg-card/80 px-4 py-3 text-sm text-primary outline-none transition placeholder:text-primary/35 focus:border-secondary/30 focus:ring-2 focus:ring-secondary/10"
+                                                    disabled={!canManageQuickPresets || isPresetPending}
+                                                />
+                                            </label>
+                                            <div className="grid gap-3 sm:grid-cols-2">
+                                                <div>
+                                                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/35">그룹</span>
+                                                    <div className="mt-2 grid grid-cols-2 gap-2">
+                                                        {QUICK_PRESET_GROUP_OPTIONS.map((group) => (
+                                                            <button
+                                                                key={group.id}
+                                                                type="button"
+                                                                onClick={() => setQuickPresetDraft((draft) => ({
+                                                                    ...draft,
+                                                                    group: group.id,
+                                                                    target: draft.target || getDefaultSessionFeedbackTarget(draft.role, group.id),
+                                                                }))}
+                                                                disabled={!canManageQuickPresets || isPresetPending}
+                                                                className={`tap-target rounded-2xl border px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${quickPresetDraft.group === group.id ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-card/70 text-primary/60 hover:bg-card'}`}
+                                                            >
+                                                                {group.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/35">채널</span>
+                                                    <div className="mt-2 grid grid-cols-3 gap-2">
+                                                        {SESSION_FEEDBACK_ROLES.map((role) => {
+                                                            const roleMeta = getFeedbackRoleMeta(role);
+
+                                                            return (
+                                                                <button
+                                                                    key={`preset-role-${role}`}
+                                                                    type="button"
+                                                                    onClick={() => setQuickPresetDraft((draft) => ({
+                                                                        ...draft,
+                                                                        role,
+                                                                        target: draft.target || getDefaultSessionFeedbackTarget(role, draft.group),
+                                                                    }))}
+                                                                    disabled={!canManageQuickPresets || isPresetPending}
+                                                                    className={`tap-target rounded-2xl border px-2 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${quickPresetDraft.role === role ? roleMeta.tone : 'border-primary/10 bg-card/70 text-primary/60 hover:bg-card'}`}
+                                                                >
+                                                                    {roleMeta.label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <p className="text-xs leading-relaxed text-primary/45">
+                                                {canManageQuickPresets ? '저장한 버튼은 예배팀 모드의 즉시 큐에 바로 반영됩니다.' : '버튼 설정은 관리자 또는 인도자 모드에서 변경할 수 있습니다.'}
+                                            </p>
+                                            <div className="flex gap-2">
+                                                {quickPresetDraft.id ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleQuickPresetReset}
+                                                        className="tap-target inline-flex items-center justify-center rounded-full border border-primary/10 bg-card/70 px-4 py-2 text-sm font-semibold text-primary/60 transition hover:bg-card"
+                                                    >
+                                                        새 버튼
+                                                    </button>
+                                                ) : null}
+                                                <button
+                                                    type="submit"
+                                                    disabled={!canManageQuickPresets || isPresetPending || quickPresetDraft.message.trim().length === 0}
+                                                    className="tap-target inline-flex items-center justify-center gap-2 rounded-full border border-primary/10 bg-card/80 px-5 py-2.5 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
+                                                >
+                                                    <Plus size={15} />
+                                                    {quickPresetDraft.id ? '버튼 수정' : '버튼 저장'}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </form>
 
                                     <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1282,32 +1475,49 @@ export default function SessionWorkspace({
                                                     const isSent = recentSentPresetId === preset.id;
 
                                                     return (
-                                                        <button
+                                                        <div
                                                             key={preset.id}
-                                                            type="button"
-                                                            onClick={() => handleQuickPresetSend(preset.message, preset.role, preset.id)}
-                                                            disabled={!isActive || isFeedbackPending}
-                                                            className={`tap-target rounded-2xl border px-4 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${isSent ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : presetMeta.tone}`}
+                                                            className={`rounded-2xl border p-2 transition ${isSent ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/10 bg-card/60'}`}
                                                         >
-                                                            <div className="flex items-start gap-3">
-                                                                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${presetMeta.iconTone}`}>
-                                                                    <PresetIcon size={16} />
-                                                                </div>
-                                                                <div className="min-w-0 flex-1">
-                                                                    <div className="flex items-center justify-between gap-3">
-                                                                        <p className="truncate text-sm font-semibold">
-                                                                            {preset.label}
-                                                                        </p>
-                                                                        <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/45">
-                                                                            {isSent ? 'Sent' : 'Tap'}
-                                                                        </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleQuickPresetSend(preset.message, preset.role, preset.id)}
+                                                                disabled={!isActive || isFeedbackPending}
+                                                                className="tap-target w-full rounded-xl px-2 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-45"
+                                                            >
+                                                                <div className="flex items-start gap-3">
+                                                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${presetMeta.iconTone}`}>
+                                                                        <PresetIcon size={15} />
                                                                     </div>
-                                                                    <p className="mt-1 text-xs leading-relaxed text-primary/55">
-                                                                        {presetMeta.label}로 전송
-                                                                    </p>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <div className="flex items-center justify-between gap-3">
+                                                                            <p className="truncate text-sm font-semibold">
+                                                                                {preset.label}
+                                                                            </p>
+                                                                            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary/45">
+                                                                                {isSent ? 'Sent' : 'Tap'}
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className="mt-1 truncate text-xs text-primary/55">
+                                                                            {preset.message}
+                                                                        </p>
+                                                                        <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-primary/45">
+                                                                            <span className="rounded-full bg-primary/5 px-2 py-1">{preset.target}</span>
+                                                                            <span className="rounded-full bg-primary/5 px-2 py-1">{presetMeta.label}</span>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        </button>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleQuickPresetEdit(preset)}
+                                                                disabled={!canManageQuickPresets || isPresetPending}
+                                                                className="tap-target mt-1 inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-primary/50 transition hover:bg-primary/5 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                                                            >
+                                                                <Pencil size={13} />
+                                                                설정
+                                                            </button>
+                                                        </div>
                                                     );
                                                 })
                                         )}
