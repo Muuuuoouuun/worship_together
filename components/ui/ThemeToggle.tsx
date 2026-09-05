@@ -11,7 +11,11 @@ function applyTheme(theme: ThemePreference) {
 
     root.classList.toggle('dark', theme === 'dark');
     root.style.colorScheme = theme;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+        // The current page can still change theme when browser storage is unavailable.
+    }
 }
 
 export default function ThemeToggle() {
@@ -24,11 +28,12 @@ export default function ThemeToggle() {
 
                 applyTheme(nextTheme);
             }}
-            className="tap-target inline-flex items-center justify-center gap-2 rounded-full border border-primary/10 bg-card/80 px-4 py-3 text-sm font-semibold text-primary shadow-sm transition hover:border-primary/20 hover:bg-card motion-safe:active:scale-[0.98]"
+            className="tap-target inline-flex min-w-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 py-3 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
         >
             <Moon size={16} className="dark:hidden" />
             <Sun size={16} className="hidden dark:block" />
-            <span className="hidden sm:inline">테마</span>
+            <span className="hidden sm:inline dark:sm:hidden">어둡게</span>
+            <span className="hidden dark:sm:inline">밝게</span>
         </button>
     );
 }

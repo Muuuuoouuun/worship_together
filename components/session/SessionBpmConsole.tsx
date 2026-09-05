@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import type { ComponentType, CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -32,8 +32,8 @@ export default function SessionBpmConsole({
     onToggleBpmEnabled,
     songPresetBpm,
 }: SessionBpmConsoleProps) {
-    const { activeBeat, blinkActive } = useBlinkMetronome(bpmEnabled && isActive, currentBpm);
-    const statusLabel = bpmEnabled && currentBpm
+    const { activeBeat, blinkActive } = useVisualMetronome(bpmEnabled && isActive, currentBpm);
+    const statusLabel = !isActive ? '세션 종료' : bpmEnabled && currentBpm
         ? '메트로놈 켜짐'
         : bpmEnabled
             ? 'BPM 프리셋 대기'
@@ -42,7 +42,7 @@ export default function SessionBpmConsole({
         ? 'bg-emerald-500/10 text-emerald-700'
         : bpmEnabled
             ? 'bg-amber-500/10 text-amber-700'
-            : 'bg-primary/5 text-primary/50';
+            : 'bg-primary/5 text-muted-foreground';
     const controlHelpText = !canControlLocally
         ? '현재 인도자가 공유 BPM 콘솔을 제어 중입니다.'
         : autoBpmSync
@@ -52,7 +52,7 @@ export default function SessionBpmConsole({
     const displayBlink = bpmEnabled && isActive && currentBpm ? blinkActive : false;
     const beatDots = useMemo(() => Array.from({ length: 4 }, (_, index) => index + 1), []);
     const beatDurationStyle = useMemo(() => ({
-        '--beat-duration': `${currentBpm ? Math.max(0.24, 60 / currentBpm).toFixed(3) : '0.75'}s`,
+        '--beat-duration': `${currentBpm ? (60 / currentBpm).toFixed(3) : '0.75'}s`,
     }) as CSSProperties, [currentBpm]);
     const metronomeActive = bpmEnabled && isActive && Boolean(currentBpm);
 
@@ -64,8 +64,8 @@ export default function SessionBpmConsole({
                         <AudioLines size={20} />
                     </div>
                     <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">드럼 BPM</p>
-                        <p className="mt-2 text-sm leading-relaxed text-primary/55">
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">드럼 BPM</p>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                             밴드를 위한 시각 메트로놈입니다. 곡별 프리셋을 저장하면 예배 흐름에 따라 자동으로 불러옵니다.
                         </p>
                     </div>
@@ -79,15 +79,15 @@ export default function SessionBpmConsole({
                 <div className="rounded-3xl border border-primary/10 bg-[radial-gradient(circle_at_center,_rgba(212,175,55,0.18),_transparent_52%),linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.62))] p-5 dark:bg-[radial-gradient(circle_at_center,_rgba(226,182,141,0.18),_transparent_54%),linear-gradient(180deg,rgba(22,33,31,0.92),rgba(22,33,31,0.70))]">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">현재 박자</p>
+                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">현재 박자</p>
                             <p
                                 className={`mt-2 inline-block text-4xl font-serif font-black text-primary ${metronomeActive ? 'bpm-digit-pulse' : ''}`}
                                 style={beatDurationStyle}
                             >
                                 {currentBpm ?? '--'}
-                                <span className="ml-2 text-base font-semibold text-primary/40">BPM</span>
+                                <span className="ml-2 text-base font-semibold text-muted-foreground">BPM</span>
                             </p>
-                            <p className="mt-2 text-sm text-primary/50">
+                            <p className="mt-2 text-sm text-muted-foreground">
                                 {currentSongTitle ? `${currentSongTitle}` : '곡이 선택되지 않았습니다'}
                             </p>
                         </div>
@@ -135,14 +135,14 @@ export default function SessionBpmConsole({
                     </div>
 
                     <div className="rounded-3xl border border-primary/10 bg-card/70 p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">라이브 제어</p>
-                        <p className="mt-2 text-sm leading-relaxed text-primary/50">{controlHelpText}</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">라이브 제어</p>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{controlHelpText}</p>
 
                         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <button
                                 type="button"
                                 onClick={onToggleBpmEnabled}
-                                disabled={!canControlLocally || (!currentBpm && !bpmEnabled)}
+                                disabled={!isActive || !canControlLocally || (!currentBpm && !bpmEnabled)}
                                 className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${bpmEnabled ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 {bpmEnabled ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -151,7 +151,7 @@ export default function SessionBpmConsole({
                             <button
                                 type="button"
                                 onClick={onToggleAutoBpmSync}
-                                disabled={!canControlLocally}
+                                disabled={!isActive || !canControlLocally}
                                 className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${autoBpmSync ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 <Zap size={16} />
@@ -165,7 +165,7 @@ export default function SessionBpmConsole({
                                     key={delta}
                                     type="button"
                                     onClick={() => onAdjustBpm(delta)}
-                                    disabled={!canControlLocally}
+                                    disabled={!isActive || !canControlLocally}
                                     className="tap-target rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
                                 >
                                     {delta > 0 ? `+${delta}` : delta}
@@ -176,7 +176,7 @@ export default function SessionBpmConsole({
                         <button
                             type="button"
                             onClick={onApplySongPreset}
-                            disabled={!canControlLocally || !songPresetBpm}
+                            disabled={!isActive || !canControlLocally || !songPresetBpm}
                             className="tap-target mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-surface transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
                         >
                             <AudioLines size={16} />
@@ -201,11 +201,11 @@ function ControlMetric({
     return (
         <div className="rounded-2xl border border-primary/10 bg-card/70 p-4">
             <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/5 text-primary/60">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/5 text-muted-foreground">
                     <Icon size={16} />
                 </div>
                 <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary/35">{label}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
                     <p className="mt-1 text-sm font-semibold text-primary">{value}</p>
                 </div>
             </div>
@@ -213,45 +213,35 @@ function ControlMetric({
     );
 }
 
-function useBlinkMetronome(enabled: boolean, bpm: number | null) {
+export function useVisualMetronome(enabled: boolean, bpm: number | null) {
     const [blinkActive, setBlinkActive] = useState(false);
     const [activeBeat, setActiveBeat] = useState(0);
 
     useEffect(() => {
-        if (!enabled || !bpm) {
+        if (!enabled || !bpm || !Number.isFinite(bpm) || bpm <= 0) {
             return;
         }
 
-        const intervalMs = Math.max(240, Math.floor(60000 / bpm));
-        const pulseMs = Math.min(180, Math.floor(intervalMs * 0.5));
-        let beat = 0;
-        let pulseTimeout: ReturnType<typeof setTimeout> | null = null;
-
-        const triggerBeat = () => {
-            beat = (beat % 4) + 1;
-            setActiveBeat(beat);
-            setBlinkActive(true);
-
-            if (pulseTimeout) {
-                clearTimeout(pulseTimeout);
-            }
-
-            pulseTimeout = setTimeout(() => {
-                setBlinkActive(false);
-            }, pulseMs);
+        const intervalMs = 60000 / bpm;
+        const pulseMs = Math.min(160, intervalMs * 0.35);
+        let timer: ReturnType<typeof setTimeout>;
+        // Use wall-clock phase so tabs on this device agree and background throttling
+        // doesn't accumulate drift. This is a tempo guide, not a shared bar/downbeat clock.
+        const tick = () => {
+            const now = Date.now();
+            const phase = now % intervalMs;
+            setActiveBeat((Math.floor(now / intervalMs) % 4) + 1);
+            setBlinkActive(phase < pulseMs && !document.hidden);
+            timer = setTimeout(tick, Math.max(8, (phase < pulseMs ? pulseMs : intervalMs) - phase));
         };
-
-        triggerBeat();
-        const interval = setInterval(triggerBeat, intervalMs);
-
+        timer = setTimeout(tick, 0);
+        const resume = () => { clearTimeout(timer); tick(); };
+        document.addEventListener('visibilitychange', resume);
         return () => {
-            clearInterval(interval);
-
-            if (pulseTimeout) {
-                clearTimeout(pulseTimeout);
-            }
+            clearTimeout(timer);
+            document.removeEventListener('visibilitychange', resume);
         };
     }, [enabled, bpm]);
 
-    return { activeBeat, blinkActive };
+    return { activeBeat: enabled ? activeBeat : 0, blinkActive: enabled ? blinkActive : false };
 }

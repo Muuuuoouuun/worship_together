@@ -1,5 +1,5 @@
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import TeamOperationsBoard from '@/components/dashboard/TeamOperationsBoard';
+import WorshipHome from '@/components/dashboard/WorshipHome';
 import MeshBackground from '@/components/ui/MeshBackground';
 import { DEMO_TEAM_ID } from '@/lib/constants';
 import { getCurrentSession } from '@/lib/data';
@@ -10,7 +10,7 @@ export default async function DashboardPage() {
     return (
         <DashboardLayout currentPath="/dashboard">
             <MeshBackground />
-            <TeamOperationsBoard currentSessionId={currentSession?.id} />
+            <WorshipHome currentSessionId={currentSession?.id} />
         </DashboardLayout>
     );
 }

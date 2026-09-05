@@ -3,21 +3,25 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { appendSessionFeedback } from '@/actions/sessionActions';
+import SessionCueToasts from '@/components/session/SessionCueToasts';
+import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
 import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRealtimeSession';
-import { DEMO_SESSION_ID } from '@/lib/constants';
+import { isPrototypeSessionId } from '@/lib/constants';
+import { createClientId } from '@/lib/clientId';
+import { useSongSections } from '@/hooks/useSongSections';
 import { useSessionStore } from '@/store/sessionStore';
 import {
-    DEFAULT_SESSION_SECTIONS,
     getDefaultSessionFeedbackTarget,
     getSessionFeedbackPresetStorageKey,
-    MAX_SESSION_FEEDBACK_LOG,
+    getCueDeliveryLabel,
+    getPresetRecipient,
     normalizeSessionState,
     type SessionCurrentState,
     type SessionFeedbackEntry,
     type SessionFeedbackPreset,
     type SessionFeedbackPresetGroup,
     type SessionFeedbackRole,
+    type SessionCueRecipient,
     type SessionRow,
     type SongRow,
 } from '@/types/session';
@@ -35,6 +39,7 @@ import {
 } from 'lucide-react';
 
 interface WorshipTeamModeProps {
+    workspaceHref?: string;
     session: SessionRow;
     songs: SongRow[];
     teamId: string;
@@ -169,6 +174,7 @@ function readStoredFeedbackPresets(sessionId: string): SessionFeedbackPreset[] |
 }
 
 export default function WorshipTeamMode({
+    workspaceHref,
     session,
     songs,
     teamId,
@@ -178,7 +184,6 @@ export default function WorshipTeamMode({
 }: WorshipTeamModeProps) {
     const initializeSession = useSessionStore((state) => state.initializeSession);
     const applyRemoteState = useSessionStore((state) => state.applyRemoteState);
-    const updateLocalState = useSessionStore((state) => state.updateState);
     const currentSession = useSessionStore((state) => state.currentSession);
     const currentSong = useSessionStore((state) => state.currentSong);
     const currentSongId = useSessionStore((state) => state.currentSongId);
@@ -189,7 +194,12 @@ export default function WorshipTeamMode({
     const feedbackLog = useSessionStore((state) => state.feedbackLog);
     const quickFeedbackPresets = useSessionStore((state) => state.quickFeedbackPresets);
     const isActive = useSessionStore((state) => state.isActive);
-    const [clientId] = useState(() => crypto.randomUUID());
+    const selectedFeedbackRole = useSessionStore((state) => state.selectedFeedbackRole);
+    const setFeedbackRole = useSessionStore((state) => state.setFeedbackRole);
+    const cueDeliveries = useSessionStore((state) => state.cueDeliveries);
+    const [recipientChoice, setRecipientChoice] = useState('preset');
+    const [lastSentEntryId, setLastSentEntryId] = useState<string | null>(null);
+    const [clientId] = useState(createClientId);
     const [recentActionId, setRecentActionId] = useState<string | null>(null);
     const [pendingActionId, setPendingActionId] = useState<string | null>(null);
     const [failedActionId, setFailedActionId] = useState<string | null>(null);
@@ -199,23 +209,27 @@ export default function WorshipTeamMode({
     const flashTimeoutRef = useRef<number | null>(null);
     const cooldownTimeoutRefs = useRef<Record<string, number>>({});
     const appliedSessionStateRef = useRef(JSON.stringify(session.current_state) ?? '');
-    const isDemoMode = session.id === DEMO_SESSION_ID;
-    const { activeBeat, blinkActive } = useStageMetronome(bpmEnabled && isActive, currentBpm);
+    const isDemoMode = isPrototypeSessionId(session.id);
+    const { activeBeat, blinkActive } = useVisualMetronome(bpmEnabled && isActive, currentBpm);
     const nowTick = useNowTick(5000);
-    const { broadcastFeedback, lastRealtimeAt, realtimeStatus } = useRealtimeSession({
+    const { sendFeedback, participants, localTransportAvailable, lastRealtimeAt, realtimeStatus } = useRealtimeSession({
         sessionId: session.id,
         teamId,
+        clientId,
     });
     useWakeLock(isActive);
 
-    const realtimeMeta = getRealtimeStatusMeta(realtimeStatus, isDemoMode);
+    const realtimeMeta = getRealtimeStatusMeta(realtimeStatus, localTransportAvailable);
     const realtimeAgeLabel = formatRealtimeAge(lastRealtimeAt, nowTick);
     const latestCue = feedbackLog[feedbackLog.length - 1] ?? null;
     const currentSongIndex = songs.findIndex((song) => song.id === currentSongId);
     const nextSong = currentSongIndex >= 0 ? songs[currentSongIndex + 1] ?? null : songs[1] ?? null;
-    const nextSection = getNextSectionLabel(currentSection);
+    const sections = useSongSections(currentSongId, teamId);
+    const displayedSection = currentSection ?? sections[0] ?? '대기';
+    const sectionIndex = sections.indexOf(displayedSection);
+    const nextSection = sectionIndex < 0 ? '섹션 확인' : sections[sectionIndex + 1] ?? '마지막 섹션';
     const beatDurationStyle = {
-        '--beat-duration': `${currentBpm ? Math.max(0.24, 60 / currentBpm).toFixed(3) : '0.75'}s`,
+        '--beat-duration': `${currentBpm ? (60 / currentBpm).toFixed(3) : '0.75'}s`,
     } as CSSProperties;
     const metronomeActive = bpmEnabled && isActive && Boolean(currentBpm);
 
@@ -269,7 +283,7 @@ export default function WorshipTeamMode({
     }, []);
 
     const showActionFeedback = (action: StageAction) => {
-        const flashToken = crypto.randomUUID();
+        const flashToken = createClientId();
 
         setRecentActionId(action.id);
         setStageFlash({
@@ -325,13 +339,17 @@ export default function WorshipTeamMode({
             return;
         }
 
-        showActionFeedback(action);
         beginCooldown(action);
         setFailedActionId(null);
 
-        const previousFeedbackLog = feedbackLog;
+        const recipient: SessionCueRecipient = recipientChoice.startsWith('member:')
+            ? { kind: 'member', clientId: recipientChoice.slice(7) }
+            : recipientChoice === 'everyone' ? { kind: 'everyone' }
+            : recipientChoice === 'preset'
+                ? getPresetRecipient(action)
+                : { kind: 'role', role: recipientChoice as SessionFeedbackRole };
         const entry: SessionFeedbackEntry = {
-            id: crypto.randomUUID(),
+            id: createClientId(),
             clientId,
             role: action.role,
             message: action.message,
@@ -341,37 +359,22 @@ export default function WorshipTeamMode({
             songTitle: currentSong?.title ?? null,
             page: currentPage,
             section: currentSection,
+            recipient,
         };
-
-        updateLocalState({
-            feedbackLog: [...feedbackLog, entry].slice(-MAX_SESSION_FEEDBACK_LOG),
-        });
-
-        if (isDemoMode) {
-            return;
-        }
-
+        setLastSentEntryId(entry.id);
         setPendingActionId(action.id);
 
         startTransition(async () => {
             try {
-                const result = await appendSessionFeedback(session.id, teamId, {
-                    id: entry.id,
-                    clientId,
-                    role: action.role,
-                    message: action.message,
-                    songId: currentSongId,
-                    songTitle: currentSong?.title ?? null,
-                    page: currentPage,
-                    section: currentSection,
-                });
-
-                updateLocalState({ feedbackLog: result.feedbackLog });
-                void broadcastFeedback(result.entry);
+                const result = await sendFeedback(entry);
+                if (result.status === 'failed') {
+                    setFailedActionId(action.id);
+                } else {
+                    showActionFeedback({ ...action, target: recipient.kind === 'everyone' ? '전체' : recipient.kind === 'role' ? ROLE_LABELS[recipient.role] : `기기 ${recipient.clientId.slice(0, 6)}` });
+                }
             } catch (error) {
                 console.error('Failed to send worship team action:', error);
                 setFailedActionId(action.id);
-                updateLocalState({ feedbackLog: previousFeedbackLog });
             } finally {
                 setPendingActionId(null);
             }
@@ -380,6 +383,7 @@ export default function WorshipTeamMode({
 
     return (
         <main className="safe-area-x min-h-dvh overflow-x-hidden bg-[#050b0a] text-[#fff7e8]">
+            <SessionCueToasts entries={feedbackLog} isActive={isActive} currentClientId={clientId} />
             {stageFlash ? (
                 <div key={stageFlash.token} className="stage-cue-layer pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-5">
                     <div className="stage-cue-backdrop absolute inset-0" />
@@ -390,7 +394,7 @@ export default function WorshipTeamMode({
                         <div className="stage-cue-mark mx-auto flex h-11 w-11 items-center justify-center rounded-full border sm:h-12 sm:w-12">
                             <Check size={23} strokeWidth={3} />
                         </div>
-                        <p className="stage-cue-kicker mt-3 text-[10px] font-black uppercase tracking-[0.2em] sm:text-xs">Cue sent</p>
+                        <p className="stage-cue-kicker mt-3 text-[10px] font-black uppercase tracking-[0.2em] sm:text-xs">{getCueDeliveryLabel(lastSentEntryId ? cueDeliveries[lastSentEntryId] : undefined)}</p>
                         <p className="stage-cue-title mt-2 text-4xl font-black leading-none sm:text-6xl">{stageFlash.label}</p>
                         <p className="stage-cue-message mt-3 text-sm font-bold text-white/72 sm:mt-4 sm:text-base">{stageFlash.message}</p>
                         <div className="stage-cue-meta mt-4 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] sm:text-xs">
@@ -406,15 +410,15 @@ export default function WorshipTeamMode({
             <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col gap-3 px-3 py-3 sm:gap-4 sm:px-6 sm:py-4 lg:px-8">
                 <header className="flex items-center justify-between gap-3">
                     <Link
-                        href={`/session/${session.id}`}
+                        href={workspaceHref ?? `/session/${session.id}`}
                         aria-label="기본 세션 화면으로 돌아가기"
-                        className="tap-target inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/50 transition hover:bg-white/10 hover:text-white"
+                        className="tap-target inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/75 transition hover:bg-white/10 hover:text-white"
                     >
                         <ArrowLeft size={14} />
                         <span className="hidden sm:inline">기본 화면</span>
                     </Link>
                     <div className="min-w-0 flex-1 text-center">
-                        <p className="truncate text-xs font-bold text-white/35">{currentSong?.title ?? '곡 대기'}</p>
+                        <p className="truncate text-xs font-bold text-white/75">{currentSong?.title ?? '곡 대기'}</p>
                     </div>
                     <span
                         className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold ${realtimeMeta.tone}`}
@@ -424,6 +428,24 @@ export default function WorshipTeamMode({
                         {realtimeMeta.label}
                     </span>
                 </header>
+
+                <div className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-3 sm:grid-cols-2">
+                    <label className="text-xs font-bold text-white/70">내 수신 역할
+                        <select aria-label="내 수신 역할" value={selectedFeedbackRole} onChange={(event) => setFeedbackRole(event.target.value as SessionFeedbackRole)} className="mt-2 block min-h-11 w-full rounded-lg bg-[#152321] px-3 text-sm text-white">
+                            {Object.entries(ROLE_LABELS).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
+                        </select>
+                    </label>
+                    <label className="text-xs font-bold text-white/70">큐 받을 대상
+                        <select aria-label="큐 받을 대상" value={recipientChoice} onChange={(event) => setRecipientChoice(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg bg-[#152321] px-3 text-sm text-white">
+                            <option value="preset">버튼에 지정된 대상</option>
+                            <option value="everyone">전체</option>
+                            {Object.entries(ROLE_LABELS).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
+                            {participants.map((participant) => <option key={participant.clientId} value={`member:${participant.clientId}`}>{ROLE_LABELS[participant.role]} · 기기 {participant.clientId.slice(0, 6)}</option>)}
+                        </select>
+                    </label>
+                    <p className="text-xs text-white/75 sm:col-span-2">{realtimeStatus === 'connected' ? '서버 연결됨' : localTransportAvailable ? '같은 브라우저의 열린 탭끼리만 연결됩니다.' : '전송 연결 없음'} · 다른 접속 기기 {participants.length}개 · 역할/기기 큐는 실시간 알림만 제공</p>
+                    {lastSentEntryId ? <p role="status" className="text-sm font-bold text-[#ffe0b8] sm:col-span-2">{getCueDeliveryLabel(cueDeliveries[lastSentEntryId])}{cueDeliveries[lastSentEntryId]?.error && cueDeliveries[lastSentEntryId]?.status !== 'failed' ? ` · ${cueDeliveries[lastSentEntryId].error}` : ''}</p> : null}
+                </div>
 
                 {!isActive ? (
                     <section className="rounded-lg border border-red-300/20 bg-red-500/10 p-4 text-red-50">
@@ -449,19 +471,25 @@ export default function WorshipTeamMode({
                                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffe0b8]/45 sm:text-xs sm:tracking-[0.2em]">
                                         현재 섹션
                                     </p>
-                                    <h1 className="mt-1.5 truncate text-4xl font-black leading-none text-[#ffe0b8] sm:mt-2 sm:text-7xl">
-                                        {currentSection ?? 'Ready'}
+                                    <h1 className="mt-1.5 break-words text-3xl font-black leading-tight text-[#ffe0b8] sm:mt-2 sm:text-6xl">
+                                        {displayedSection}
                                     </h1>
                                 </div>
                                 <div className="min-w-0 rounded-lg border border-[#ffe0b8]/16 bg-black/20 px-3 py-2.5 sm:px-4 sm:py-3">
                                     <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#ffe0b8]/45 sm:text-[10px] sm:tracking-[0.18em]">
                                         다음
                                     </p>
-                                    <p className="mt-1.5 truncate text-base font-black leading-none text-white sm:mt-2 sm:text-3xl">
+                                    <p className="mt-1.5 break-words text-base font-black leading-tight text-white sm:mt-2 sm:text-xl">
                                         {nextSection}
                                     </p>
                                 </div>
                             </div>
+
+                            <ol aria-label="송폼 진행 순서" className="flex flex-wrap gap-2">
+                                {sections.map((section, index) => <li key={`${index}:${section}`} aria-current={index === sectionIndex ? 'step' : undefined} className={`rounded-full border px-3 py-2 text-xs font-bold ${index === sectionIndex ? 'border-[#ffe0b8] bg-[#ffe0b8]/20 text-[#ffe0b8]' : index < sectionIndex ? 'border-emerald-300/25 text-emerald-200' : 'border-white/10 text-white/75'}`}>
+                                    {index < sectionIndex ? '✓ ' : index === sectionIndex ? '● ' : ''}{section}
+                                </li>)}
+                            </ol>
 
                             <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] items-end gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:gap-5">
                                 <div>
@@ -476,7 +504,7 @@ export default function WorshipTeamMode({
                                             <p className="inline-flex rounded-full bg-[#ffe0b8]/[0.12] px-2 py-1 text-[10px] font-black text-[#ffe0b8] sm:px-3 sm:text-xs">
                                                 Key {currentSong?.original_key ?? '-'}
                                             </p>
-                                            <p className={`hidden rounded-full px-2 py-1 text-[10px] font-bold sm:inline-flex sm:px-3 sm:text-xs ${metronomeActive ? 'bg-emerald-300/[0.12] text-emerald-100' : 'bg-white/10 text-white/45'}`}>
+                                            <p className={`hidden rounded-full px-2 py-1 text-[10px] font-bold sm:inline-flex sm:px-3 sm:text-xs ${metronomeActive ? 'bg-emerald-300/[0.12] text-emerald-100' : 'bg-white/10 text-white/75'}`}>
                                                 {metronomeActive ? '시각 템포' : '대기'}
                                             </p>
                                         </div>
@@ -516,11 +544,11 @@ export default function WorshipTeamMode({
                         data-testid="team-latest-cue-mobile"
                     >
                         <div className="flex items-center gap-3">
-                            <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">최근 큐</span>
+                            <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75">최근 큐</span>
                             <p className="min-w-0 flex-1 truncate text-sm font-black text-white">
                                 {latestCue?.message ?? '큐 대기'}
                             </p>
-                            <span className="shrink-0 text-[10px] font-bold text-white/35">
+                            <span className="shrink-0 text-[10px] font-bold text-white/75">
                                 {latestCue ? ROLE_LABELS[latestCue.role] : realtimeAgeLabel}
                             </span>
                         </div>
@@ -538,11 +566,11 @@ export default function WorshipTeamMode({
                                     ? 'grid-cols-1'
                                     : group.actions.length === 2
                                         ? 'grid-cols-2'
-                                        : 'grid-cols-3';
+                                        : 'grid-cols-2 sm:grid-cols-3';
 
                                 return (
                                 <div key={group.id}>
-                                    <p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-white/32 sm:mb-2 sm:tracking-[0.18em]">
+                                    <p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-white/75 sm:mb-2 sm:tracking-[0.18em]">
                                         {group.label}
                                     </p>
                                     <div className={`grid gap-2 sm:gap-3 lg:grid-cols-1 ${mobileColumns}`}>
@@ -566,14 +594,14 @@ export default function WorshipTeamMode({
                                                     <span className="flex items-center justify-between gap-2">
                                                         <span className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                                                             <Icon size={16} className="shrink-0 opacity-80 sm:h-[18px] sm:w-[18px]" />
-                                                            <span className="min-w-0 truncate whitespace-nowrap text-xs font-black leading-none sm:text-lg sm:leading-tight">{action.label}</span>
+                                                            <span className="min-w-0 text-xs font-black leading-snug sm:text-lg sm:leading-tight">{action.label}</span>
                                                         </span>
-                                                        <span className="hidden shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold uppercase text-white/65 sm:inline-flex">
+                                                        <span className="shrink-0 rounded-full bg-white/10 px-1 py-1 text-[9px] font-bold text-white/65 sm:px-2 sm:text-[10px]">
                                                             {isFailed ? '실패' : isPendingAction ? '전송 중' : isCoolingDown ? '대기' : isSent ? '전송' : action.target}
                                                         </span>
                                                     </span>
                                                     <span className="mt-1.5 hidden truncate text-xs font-semibold opacity-58 sm:block">
-                                                        {ROLE_LABELS[action.role]}에게 전달
+                                                        {recipientChoice === 'preset' ? action.target : recipientChoice === 'everyone' ? '전체' : recipientChoice.startsWith('member:') ? '선택한 기기' : ROLE_LABELS[recipientChoice as SessionFeedbackRole]} 대상
                                                     </span>
                                                 </button>
                                             );
@@ -587,21 +615,21 @@ export default function WorshipTeamMode({
 
                     <section className="order-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem] lg:order-none lg:col-start-1 lg:row-start-2">
                         <aside className={`hidden rounded-lg border border-white/10 bg-white/[0.052] p-4 lg:block ${recentActionId ? 'stage-latest-cue-active' : ''}`} aria-live="polite" data-testid="team-latest-cue">
-                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/35">최근 큐</p>
+                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/75">최근 큐</p>
                             <p className="mt-3 text-2xl font-black leading-tight text-white sm:text-3xl">
                                 {latestCue?.message ?? '큐 대기'}
                             </p>
-                            <p className="mt-3 text-sm font-semibold text-white/45">
+                            <p className="mt-3 text-sm font-semibold text-white/75">
                                 {latestCue ? `${ROLE_LABELS[latestCue.role]} · ${latestCue.section ?? '전체'} · ${latestCue.page}p` : '팀 액션을 기다리는 중'}
                             </p>
                         </aside>
 
                         <aside className="rounded-lg border border-white/10 bg-white/[0.052] p-4">
-                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/35">
+                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/75">
                                 {teamName}
                             </p>
                             <h3 className="mt-2 truncate text-xl font-black text-[#ffe0b8]">{currentSong?.title ?? '곡 대기'}</h3>
-                            <p className="mt-2 truncate text-sm font-semibold text-white/45">{setlistTitle}</p>
+                            <p className="mt-2 truncate text-sm font-semibold text-white/75">{setlistTitle}</p>
 
                             <div className="mt-4 grid grid-cols-2 gap-2">
                                 <StageMetric label="악보" value={`${currentPage}p`} />
@@ -610,7 +638,7 @@ export default function WorshipTeamMode({
                                 <StageMetric label="넘김" value="리더 따라감" />
                             </div>
 
-                            <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-white/45">
+                            <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-white/75">
                                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-2">
                                     <Radio size={13} />
                                     {realtimeAgeLabel}
@@ -631,57 +659,10 @@ export default function WorshipTeamMode({
 function StageMetric({ label, value }: { label: string; value: string }) {
     return (
         <div className="min-w-0 rounded-lg border border-white/10 bg-black/[0.14] px-3 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">{label}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/75">{label}</p>
             <p className="mt-2 truncate text-sm font-black text-white">{value}</p>
         </div>
     );
-}
-
-function useStageMetronome(enabled: boolean, bpm: number | null) {
-    const [blinkActive, setBlinkActive] = useState(false);
-    const [activeBeat, setActiveBeat] = useState(0);
-    const isEnabled = enabled && Boolean(bpm);
-
-    useEffect(() => {
-        if (!isEnabled || !bpm) {
-            return;
-        }
-
-        const intervalMs = Math.max(240, Math.floor(60000 / bpm));
-        const pulseMs = Math.min(180, Math.floor(intervalMs * 0.5));
-        let beat = 0;
-        let pulseTimeout: ReturnType<typeof setTimeout> | null = null;
-
-        const triggerBeat = () => {
-            beat = (beat % 4) + 1;
-            setActiveBeat(beat);
-            setBlinkActive(true);
-
-            if (pulseTimeout) {
-                clearTimeout(pulseTimeout);
-            }
-
-            pulseTimeout = setTimeout(() => {
-                setBlinkActive(false);
-            }, pulseMs);
-        };
-
-        triggerBeat();
-        const interval = setInterval(triggerBeat, intervalMs);
-
-        return () => {
-            clearInterval(interval);
-
-            if (pulseTimeout) {
-                clearTimeout(pulseTimeout);
-            }
-        };
-    }, [bpm, isEnabled]);
-
-    return {
-        activeBeat: isEnabled ? activeBeat : 0,
-        blinkActive: isEnabled ? blinkActive : false,
-    };
 }
 
 function useNowTick(intervalMs: number) {
@@ -737,21 +718,11 @@ function useWakeLock(enabled: boolean) {
     }, [enabled]);
 }
 
-function getNextSectionLabel(section: string | null) {
-    const currentIndex = DEFAULT_SESSION_SECTIONS.findIndex((item) => item === section);
-
-    if (currentIndex < 0) {
-        return '다음';
-    }
-
-    return DEFAULT_SESSION_SECTIONS[currentIndex + 1] ?? '엔딩';
-}
-
-function getRealtimeStatusMeta(status: RealtimeConnectionStatus, isDemoMode: boolean) {
-    if (isDemoMode) {
+function getRealtimeStatusMeta(status: RealtimeConnectionStatus, localTransportAvailable: boolean) {
+    if (status !== 'connected' && localTransportAvailable) {
         return {
             dot: 'bg-white/45',
-            label: '데모',
+            label: '브라우저 탭',
             tone: 'bg-white/[0.08] text-white/60',
         };
     }

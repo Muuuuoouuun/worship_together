@@ -1,69 +1,101 @@
-## Worship Together
+# Worship Together
 
-A modern, sacred space for choirs and worship leaders.
+모바일·태블릿에서 예배팀을 모으고, 콘티와 악보를 준비하고, 예배 중 큐를 전달하는 웹 프로토타입입니다.
 
-### Getting Started
+Google·네이버 로그인과 서버에 저장되는 팀·초대·역할 관리를 구현했습니다. 카카오톡 초대와 링크 복사도 연결되어 있습니다. 소셜 로그인·카카오 공유를 활성화하려면 운영자가 앱 키와 제공자 콘솔의 주소 설정을 완료해야 합니다. 설정하지 않은 로그인 버튼과 카카오 공유 버튼은 준비 상태로 표시됩니다.
 
-First, ensure you have your environment variables set in `.env.local`. Then, run the development server:
+[인증·초대 설정 및 운영 안내](docs/auth-and-invitations.md)에서 환경변수, Google·네이버 콜백, Kakao JavaScript SDK 2.8.3 도메인 설정을 확인하세요.
+
+## 사용 흐름
+
+1. **팀·초대:** Google 또는 네이버로 로그인하고 팀을 만듭니다. 팀 관리자가 초대 링크를 만든 뒤 카카오톡·링크 복사·다른 앱 공유 중 하나로 전달합니다.
+2. **팀 참여:** 받은 링크를 열어 로그인하고 참여를 확정합니다. 팀 관리자는 명단을 새로고침해 참여자를 확인하고 인도자·보컬·악기·음향 등의 역할을 배정합니다.
+3. **콘티·악보:** 팀별로 곡·BPM·콘티를 준비하고 순서를 편집하거나 다음 주 콘티로 복제합니다. 현재 곡·콘티·송폼 저장은 로컬 프로토타입 범위이며, 온라인 팀 참여만으로 다른 기기에 자동 공유되지 않습니다.
+4. **악보 필기·공유:** 예배 화면에서 PDF·이미지를 열고 손필기와 버튼 표시를 추가합니다. 악보와 필기를 함께 담은 공유 파일을 내보내 다른 기기에서 가져올 수 있습니다.
+5. **예배 진행:** 전체·역할·접속 기기별 큐를 전달하고 시각적 BPM·섹션을 확인합니다. 로컬 동기화는 같은 브라우저의 탭끼리 검증하는 방식입니다. ‘기기 수신’은 사람의 읽음 확인을 뜻하지 않습니다.
+6. **송폼 준비:** 유튜브 HTTPS 링크와 영상 설명의 챕터 텍스트를 입력하면 시간순 섹션으로 변환·편집합니다. URL만으로 오디오를 분석하는 기능은 아직 없습니다.
+7. **일정·요청:** 콘티 카드에서 인도자에게 질문·진행 확인(독촉)·수정 요청을 남깁니다. 요청 작성자와 수신 인도자, 팀 관리자만 요청을 조회·답변하며, 수신 인도자나 관리자가 접수·확인 중·완료 상태를 변경합니다. 요청 완료가 악보나 콘티 자체를 자동 수정하지는 않습니다.
+8. **연습·배치:** 인도자 또는 관리자가 연습·예배 시간과 장소를 저장하고 역할별 인원을 배치합니다. 본인이 참석 여부를 응답하며, 불참 시 긴급 대체 요청이 생성됩니다. 다른 팀원이 지원하면 인도자·관리자가 확정합니다. 시간은 한국 시간이며 같은 팀에서 겹치는 일정의 중복 배치를 차단합니다.
+
+초대 링크는 **7일간 유효**하며, 새 링크를 발급하면 이전 링크가 취소됩니다. 링크로 참여한 사용자는 일반 팀원입니다. 예배에서 맡는 역할과 팀 관리 권한은 별도로 관리합니다.
+
+## 저장과 공유 범위
+
+| 자료 | 현재 저장 위치·동작 |
+| --- | --- |
+| 로그인 세션 | NextAuth v4 JWT 쿠키. Google·네이버는 별도 계정이며 같은 이메일도 자동 병합하지 않음 |
+| 온라인 팀·팀원·역할·초대 | 서버 SQLite. 같은 서버를 사용하는 다른 기기에서도 로그인 후 조회·참여 가능 |
+| 온라인 콘티 요청·일정·배치·긴급 알림 | 같은 SQLite 서버에 저장. 요청·변경·결석·지원 알림을 앱이 열린 동안 자동 확인. 직접 확인 버튼을 누르면 확인 상태 저장 |
+| 기존 체험 팀 | 브라우저 localStorage. 온라인 팀으로 자동 이전되지 않음 |
+| 곡·콘티·송폼 | 현재 로컬 저장 흐름. 기존 Supabase 연결은 별도이며 온라인 팀 권한과 자동 연동되지 않음 |
+| 악보·필기 | 기기 내 저장, 공유 파일 내보내기·가져오기. 로그인 기반 자동 업로드·동기화 미지원 |
+| 예배 큐·BPM·섹션 | 로컬 탭 통신 및 기존 Realtime 연결 코드. 실제 기기 간 권한·전달 보장은 별도 검증 필요 |
+
+브라우저 데이터를 삭제하면 로컬 곡·악보·필기·체험 팀 자료가 지워질 수 있으므로 필요한 자료는 파일로 보관하세요. SQLite의 온라인 팀 명단은 브라우저 데이터와 별개입니다. 앱을 닫았을 때의 푸시 알림, 전체 팀원 읽음 확인, 기기 간 정밀한 박자 동기화는 지원하지 않습니다. 역할·기기별 큐는 수신 화면을 선택하는 기능이며 비공개 메시지 보안 경계가 아닙니다.
+
+‘일정·요청’의 온라인 알림은 화면이 보일 때 15초 간격 및 화면 복귀 시 확인합니다. 다른 대시보드 화면에서도 미확인 알림 배지가 표시됩니다. 발송·푸시 성공으로 표시하지 않으며, 앱이 닫혔거나 오프라인일 때는 즉시 수신을 보장하지 않습니다. 처리된 긴급 요청과 아직 확인하지 않은 과거 알림은 별도로 표시합니다. 로그인 없이도 예시 팀 또는 기존 체험 팀의 팀원을 바꿔가며 같은 흐름을 기기 저장으로 체험할 수 있습니다.
+
+새 일정·요청 데이터 테이블은 기존 SQLite DB에 자동으로 추가됩니다. 기존 팀·초대와 로컬 콘티를 삭제하거나 이전하지 않습니다. 현재 보관 범위는 팀당 요청 300개, 일정 200개, 최근 알림 500개입니다. 겹침 검사는 같은 팀에 한하며 다른 팀의 개인 일정과는 연동되지 않습니다.
+
+<details>
+<summary>로그인 없이 먼저 체험하기 · 기존 로컬 데모</summary>
+
+팀 화면 하단의 접힌 **로그인 없이 먼저 체험하기**를 열면 기존 브라우저 기반 팀 생성·코드 참여·역할 배분을 체험할 수 있습니다. 로그인한 상태에서는 **이전에 저장한 기기 체험 팀**으로 표시됩니다. 기존 체험용 초대 링크로 들어오면 이 영역이 펼쳐질 수 있습니다.
+
+체험 코드와 링크는 같은 브라우저의 자료를 대상으로 합니다. 명단 JSON 가져오기는 다른 기기에 독립된 사본을 만들며 서버 팀 참여나 온라인 초대로 전환하지 않습니다. 실제 팀 초대에는 화면 위쪽의 로그인 기반 팀 관리를 사용하세요.
+
+</details>
+
+## 개발 실행
+
+Node.js **22.13 이상**이 필요합니다(PDF.js 6의 실행 조건). 개발·빌드·운영 서버 모두 이 조건을 맞추세요.
+
+의존성을 설치하고 `.env.example`을 참고해 `.env.local`을 준비합니다. 기존 `.env.local`이 있으면 필요한 항목만 추가하세요. 새 인증·팀 저장 기능에는 Supabase 키가 필요하지 않습니다.
 
 ```bash
+npm ci
 npm run dev
 ```
 
-Open [http://localhost:4000](http://localhost:4000) with your browser to see the result.
+[로컬 앱](http://localhost:4000/dashboard) · [로그인](http://localhost:4000/login) · [팀·초대](http://localhost:4000/dashboard/team)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-## Mobile App
-
-This project is configured as both an installable PWA and a Capacitor Android shell.
-
-### PWA
-
-The app exposes `/manifest.webmanifest` and icons under `/public/icons`. After deploying over HTTPS, open the site on a mobile browser and use the browser's install or "Add to Home Screen" action.
-
-The service worker is registered in production builds. For local service worker testing, run the app with:
+`NEXTAUTH_SECRET`과 `NEXTAUTH_URL`을 설정하고 사용할 Google·네이버 제공자의 키를 추가합니다. Kakao 공유는 `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`와 등록된 공개 도메인이 필요합니다. `localhost` 초대는 다른 기기에서 열 수 없으며 카카오톡 공유 버튼도 비활성화됩니다. 상세 절차는 [인증·초대 문서](docs/auth-and-invitations.md)를 따릅니다.
 
 ```bash
+npm test
+npm run lint
+npm run build
+```
+
+자동 테스트의 OAuth 응답은 모의 통신을 사용합니다. 실제 제공자 로그인, 실제 카카오 발송, 실제 휴대폰·태블릿 확인은 앱 키 활성화 후 별도로 수행해야 합니다.
+
+## 프레임워크와 배포
+
+Next.js App Router + React + TypeScript + Tailwind + Zustand를 사용합니다. 인증은 NextAuth v4, 팀 저장은 `better-sqlite3`, 악보 렌더링은 PDF.js입니다. PDF worker는 개발·빌드 전에 설치된 PDF.js 버전과 맞춰 준비됩니다.
+
+현재 배포 형태는 **영속 디스크가 연결된 단일 Node.js 서버 인스턴스**입니다. 기본 DB는 작업 디렉터리의 `.data/teams.sqlite`이며, `TEAM_DATABASE_PATH`로 영속 볼륨의 절대 경로를 지정할 수 있습니다. 재배포 때 이 저장소를 유지해야 팀과 초대가 보존됩니다. **현재 서버리스·여러 인스턴스 배포는 지원하지 않습니다.** Vercel 기본 서버리스 배포나 파일이 매번 초기화되는 환경에 그대로 올리면 안 됩니다.
+
+운영에서는 공개 HTTPS 주소를 `NEXTAUTH_URL`에 설정하고 같은 주소의 OAuth 콜백과 Kakao 도메인을 등록합니다. 빌드 후 `npm run start -- --port 4000`으로 단일 서버를 실행할 수 있습니다. 공개 HTTPS는 배포 환경의 프록시 등에서 구성합니다. `NEXT_PUBLIC_` 키를 변경했다면 다시 빌드하세요.
+
+곡·악보까지 온라인으로 함께 사용하려면 별도 저장소·접근 권한·Realtime 연결을 확장해야 합니다. 기존 Supabase의 팀 RLS·Storage·Realtime 정책은 이번 SQLite 팀 권한과 통합되어 있지 않습니다.
+
+## 모바일·태블릿
+
+반응형 웹을 우선 사용합니다. `/manifest.webmanifest`와 앱 아이콘을 제공하며, HTTPS 배포 후 지원 브라우저에서 홈 화면에 추가할 수 있습니다. 서비스 워커는 프로덕션 빌드에서 등록되고, 오프라인 이동에는 `/offline.html`을 보여줍니다. 로그인·온라인 팀 조회·초대 참여에는 네트워크가 필요합니다.
+
+로컬 서비스 워커 확인용 PowerShell 명령:
+
+```powershell
 $env:NEXT_PUBLIC_ENABLE_SERVICE_WORKER="true"
 npm run dev
 ```
 
-Offline navigation falls back to `/offline.html`; live sync, library writes, and Supabase-backed data still require a network connection.
+Capacitor Android 셸도 포함되어 있습니다. Next.js 서버 기능을 사용하므로 실행 중인 웹 서버를 가리켜야 합니다. OAuth·카카오 공유의 네이티브 셸 동작은 웹과 별도 검증 대상입니다.
 
-### Android
-
-Capacitor is set up in `capacitor.config.ts`. Because this app uses Next.js server features, the Android shell should point at a running or deployed Next.js URL through `CAPACITOR_SERVER_URL`.
-
-For a deployed app:
-
-```bash
+```powershell
 $env:CAPACITOR_SERVER_URL="https://your-deployed-site.com"
 npm run mobile:sync
 npm run mobile:open:android
 ```
 
-For the Android emulator while `npm run dev` is running on this machine:
-
-```bash
-npm run mobile:run:emulator
-```
-
-For a physical Android device, use the computer's LAN IP instead of `10.0.2.2`.
+개발 서버가 실행 중인 Android 에뮬레이터에서는 `npm run mobile:run:emulator`를 사용할 수 있습니다. 실제 기기의 온라인 로그인·초대 검증에는 제공자에 등록된 공개 HTTPS 주소를 사용하세요.

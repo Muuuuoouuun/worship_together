@@ -30,6 +30,65 @@ export interface SessionFeedbackEntry {
     songTitle: string | null;
     page: number;
     section: string | null;
+    recipient?: SessionCueRecipient;
+    /** Local receipt time assigned by the transport; never inferred from saved history. */
+    receivedAt?: string;
+}
+
+// Recipients route live notifications; they are not an authorization boundary.
+export type SessionCueRecipient =
+    | { kind: 'everyone' }
+    | { kind: 'role'; role: SessionFeedbackRole }
+    | { kind: 'member'; clientId: string };
+
+export interface SessionParticipant {
+    clientId: string;
+    role: SessionFeedbackRole;
+    lastSeenAt: number;
+}
+
+export function getPresetRecipient(preset: { target: string; group: SessionFeedbackPresetGroup; role: SessionFeedbackRole }): SessionCueRecipient {
+    if (preset.target === '전체' || preset.target === '팀') return { kind: 'everyone' };
+    const role = preset.target === '인도자' ? 'leader' : preset.target === '미디어' ? 'broadcast'
+        : ['악기', '리듬'].includes(preset.target) ? 'instrument'
+        : preset.group === 'media' ? 'broadcast' : preset.group === 'tempo' || preset.group === 'band' ? 'instrument' : preset.role;
+    return { kind: 'role', role };
+}
+
+export interface SessionCueDelivery {
+    status: 'sending' | 'sent' | 'failed';
+    transport: 'local' | 'remote' | null;
+    receivedBy: string[];
+    saved: boolean;
+    error?: string;
+}
+
+export function normalizeCueRecipient(value: unknown): SessionCueRecipient | null {
+    if (value === undefined) return { kind: 'everyone' };
+    if (!value || typeof value !== 'object') return null;
+    const target = value as Record<string, unknown>;
+    if (target.kind === 'everyone') return { kind: 'everyone' };
+    if (target.kind === 'role' && typeof target.role === 'string' && isSessionFeedbackRole(target.role)) {
+        return { kind: 'role', role: target.role };
+    }
+    if (target.kind === 'member' && typeof target.clientId === 'string' && target.clientId.length > 0) {
+        return { kind: 'member', clientId: target.clientId };
+    }
+    return null;
+}
+
+export function isCueForParticipant(entry: SessionFeedbackEntry, clientId: string, role: SessionFeedbackRole): boolean {
+    const target = normalizeCueRecipient(entry.recipient);
+    return target?.kind === 'everyone' || (target?.kind === 'role' && target.role === role) ||
+        (target?.kind === 'member' && target.clientId === clientId);
+}
+
+export function getCueDeliveryLabel(delivery: SessionCueDelivery | undefined): string {
+    if (!delivery) return '전달 상태 없음';
+    if (delivery.receivedBy.length > 0) return `${delivery.transport === 'local' ? '이 브라우저 · ' : ''}${delivery.receivedBy.length}개 기기 수신 · 읽음 아님`;
+    if (delivery.status === 'sending') return '전송 중';
+    if (delivery.status === 'failed') return delivery.error ?? '전송 실패';
+    return delivery.transport === 'local' ? '이 브라우저 탭에 전송 · 수신 미확인' : '서버 전송 · 수신 미확인';
 }
 
 export interface SessionFeedbackPreset {

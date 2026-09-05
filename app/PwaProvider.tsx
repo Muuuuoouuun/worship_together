@@ -18,7 +18,11 @@ export default function PwaProvider() {
       });
     };
 
-    window.addEventListener("load", registerServiceWorker);
+    if (document.readyState === "complete") {
+      registerServiceWorker();
+    } else {
+      window.addEventListener("load", registerServiceWorker, { once: true });
+    }
 
     return () => {
       window.removeEventListener("load", registerServiceWorker);

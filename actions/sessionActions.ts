@@ -1,6 +1,7 @@
 'use server';
 
 import { getSupabaseClient } from '@/lib/supabase';
+import { createClientId } from '@/lib/clientId';
 import {
     getDefaultSessionFeedbackTarget,
     getDefaultSessionFeedbackPresets,
@@ -10,6 +11,7 @@ import {
     MAX_SESSION_FEEDBACK_LOG,
     MAX_SESSION_FEEDBACK_PRESETS,
     normalizeSessionState,
+    normalizeCueRecipient,
     sessionFeedbackRowToEntry,
     type SessionCurrentState,
     type SessionFeedbackEntry,
@@ -17,6 +19,7 @@ import {
     type SessionFeedbackRow,
     type SessionFeedbackRole,
     type SessionRow,
+    type SessionCueRecipient,
 } from '@/types/session';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -97,6 +100,13 @@ export async function updateSessionState(
 
     ensureActiveSession(session);
 
+    if (payload.page !== undefined && (!Number.isInteger(payload.page) || payload.page < 1)) {
+        throw new Error('Page must be a positive integer');
+    }
+    if (payload.bpmValue !== undefined && payload.bpmValue !== null &&
+        (!Number.isFinite(payload.bpmValue) || payload.bpmValue < 30 || payload.bpmValue > 300)) {
+        throw new Error('BPM must be between 30 and 300');
+    }
     const currentState = normalizeSessionState(session.current_state);
     const nextState: SessionCurrentState = {
         songId: payload.songId !== undefined ? payload.songId : currentState.songId,
@@ -109,13 +119,16 @@ export async function updateSessionState(
         quickFeedbackPresets: currentState.quickFeedbackPresets,
     };
 
-    const { error } = await supabase
+    const { data: updatedSession, error } = await supabase
         .from('sessions')
         .update({ current_state: nextState })
         .eq('id', sessionId)
-        .eq('team_id', teamId);
+        .eq('team_id', teamId)
+        .eq('is_active', true)
+        .select('id')
+        .maybeSingle();
 
-    if (error) {
+    if (error || !updatedSession) {
         console.error('Failed to update session state:', error);
         throw new Error('Failed to update session state');
     }
@@ -146,6 +159,7 @@ interface AppendSessionFeedbackPayload {
     songTitle: string | null;
     page: number;
     section: string | null;
+    recipient?: SessionCueRecipient;
 }
 
 export async function appendSessionFeedback(
@@ -166,10 +180,17 @@ export async function appendSessionFeedback(
         throw new Error('Invalid feedback role');
     }
 
+    if (normalizeCueRecipient(payload.recipient)?.kind !== 'everyone') {
+        throw new Error('Targeted cues are live-only until recipient storage is available');
+    }
+    if (!Number.isInteger(payload.page) || payload.page < 1) {
+        throw new Error('Page must be a positive integer');
+    }
+
     const entry: SessionFeedbackEntry = {
         id: typeof payload.id === 'string' && payload.id.trim().length > 0
             ? payload.id.trim().slice(0, 64)
-            : crypto.randomUUID(),
+            : createClientId(),
         clientId: payload.clientId,
         role: payload.role,
         message,
@@ -199,7 +220,18 @@ export async function appendSessionFeedback(
         .select('*')
         .single();
 
-    if (error) {
+    if (error?.code === '23505') {
+        // A retry must resolve to this exact cue in this session, never overwrite it.
+        const { data: existing } = await supabase.from('session_feedback').select('*')
+            .eq('id', entry.id).eq('session_id', sessionId).eq('team_id', teamId).maybeSingle();
+        if (existing && existing.client_id === entry.clientId && existing.message === entry.message &&
+            existing.role === entry.role && existing.song_id === entry.songId &&
+            existing.page === entry.page && existing.section === entry.section) {
+            return { entry: sessionFeedbackRowToEntry(existing as SessionFeedbackRow),
+                feedbackLog: await getRecentSessionFeedback(supabase, sessionId, teamId) };
+        }
+    }
+    if (error || !insertedFeedback) {
         console.error('Failed to append session feedback:', error);
         throw new Error('Failed to append session feedback');
     }
@@ -232,7 +264,7 @@ export async function addSessionFeedbackPreset(
     const message = payload.message.trim().slice(0, 220);
     const presetId = typeof payload.id === 'string' && payload.id.trim().length > 0
         ? payload.id.trim().slice(0, 64)
-        : crypto.randomUUID();
+        : createClientId();
 
     ensureActiveSession(session);
 

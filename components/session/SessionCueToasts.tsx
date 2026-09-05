@@ -1,7 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionFeedbackEntry, SessionFeedbackRole } from '@/types/session';
+import { isCueForParticipant } from '@/types/session';
+import { useSessionStore } from '@/store/sessionStore';
 import { Mic2, Radio, Waves, X } from 'lucide-react';
 
 interface SessionCueToastsProps {
@@ -14,6 +16,8 @@ const MAX_VISIBLE_TOASTS = 3;
 const TOAST_TTL_MS = 5200;
 
 export default function SessionCueToasts({ currentClientId, entries, isActive }: SessionCueToastsProps) {
+    const selectedFeedbackRole = useSessionStore((state) => state.selectedFeedbackRole);
+    const [mountedAt] = useState(() => Date.now());
     const [visibleToasts, setVisibleToasts] = useState<SessionFeedbackEntry[]>([]);
     const knownEntryIdsRef = useRef<Set<string> | null>(null);
     const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -30,7 +34,7 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
     }, []);
 
     useEffect(() => {
-        if (knownEntryIdsRef.current === null || knownEntryIdsRef.current.size === 0) {
+        if (knownEntryIdsRef.current === null) {
             knownEntryIdsRef.current = new Set(entries.map((entry) => entry.id));
             return;
         }
@@ -38,10 +42,13 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
         const knownEntryIds = knownEntryIdsRef.current;
         const incomingEntries = entries.filter((entry) => !knownEntryIds.has(entry.id));
         const toastEntries = incomingEntries.filter(
-            (entry) => !currentClientId || entry.clientId !== currentClientId
+            (entry) => (!currentClientId || entry.clientId !== currentClientId) &&
+                Boolean(entry.receivedAt && Date.parse(entry.receivedAt) >= mountedAt) &&
+                isCueForParticipant(entry, currentClientId ?? '', selectedFeedbackRole)
         );
 
         incomingEntries.forEach((entry) => knownEntryIds.add(entry.id));
+        if (knownEntryIds.size > 200) knownEntryIdsRef.current = new Set(entries.map((entry) => entry.id));
 
         if (!isActive || toastEntries.length === 0) {
             return;
@@ -65,7 +72,7 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
 
             timersRef.current.set(entry.id, timer);
         });
-    }, [currentClientId, dismissToast, entries, isActive]);
+    }, [currentClientId, dismissToast, entries, isActive, selectedFeedbackRole, mountedAt]);
 
     useEffect(() => {
         const timers = timersRef.current;
@@ -76,7 +83,7 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
         };
     }, []);
 
-    if (visibleToasts.length === 0) {
+    if (!isActive || visibleToasts.length === 0) {
         return null;
     }
 
@@ -102,7 +109,7 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
                             <div className="min-w-0 flex-1">
                                 <div className="flex items-start justify-between gap-3">
                                     <div>
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] opacity-55">
+                                        <p className="text-[11px] font-bold uppercase tracking-[0.2em]">
                                             Live cue | {meta.label}
                                         </p>
                                         <p className="mt-2 text-sm font-semibold leading-relaxed">
@@ -112,13 +119,13 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
                                     <button
                                         type="button"
                                         onClick={() => dismissToast(entry.id)}
-                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card/70 text-primary/45 transition hover:bg-card hover:text-primary"
-                                        aria-label="Dismiss live cue"
+                                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card/70 text-muted-foreground transition hover:bg-card hover:text-primary"
+                                        aria-label="라이브 큐 닫기"
                                     >
                                         <X size={14} />
                                     </button>
                                 </div>
-                                <p className="mt-3 truncate text-xs opacity-50">
+                                <p className="mt-3 truncate text-xs">
                                     {[entry.songTitle ?? 'General cue', entry.section, `Page ${entry.page}`]
                                         .filter(Boolean)
                                         .join(' | ')}
@@ -151,7 +158,7 @@ function getToastRoleMeta(role: SessionFeedbackRole) {
         case 'leader':
         default:
             return {
-                containerClassName: 'border-secondary/30 bg-[#fff9df]/95 text-primary',
+                containerClassName: 'border-secondary bg-card text-foreground',
                 icon: Mic2,
                 iconClassName: 'bg-secondary/15 text-secondary',
                 label: 'Leader',

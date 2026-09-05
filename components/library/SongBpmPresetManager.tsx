@@ -1,3 +1,4 @@
+'use client';
 import { updateSongBpmPreset } from '@/actions/libraryActions';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/button';
@@ -10,11 +11,13 @@ type Song = Database['public']['Tables']['songs']['Row'];
 interface SongBpmPresetManagerProps {
     songs: Song[];
     disabled?: boolean;
+    saveAction?: (formData: FormData) => void | Promise<void>;
 }
 
 export default function SongBpmPresetManager({
     songs,
     disabled = false,
+    saveAction = updateSongBpmPreset,
 }: SongBpmPresetManagerProps) {
     return (
         <GlassCard className="border-primary/10">
@@ -23,24 +26,24 @@ export default function SongBpmPresetManager({
                     <AudioLines size={20} />
                 </div>
                 <div>
-                    <h2 className="text-xl font-serif font-bold text-primary">Instrument BPM Presets</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-primary/50">
-                        Save each song&apos;s blink BPM here. When the live session moves to that song, the preset tempo can auto-apply.
+                    <h2 className="text-xl font-serif font-bold text-primary">곡별 BPM</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                        곡의 기본 템포를 저장합니다.
                     </p>
                 </div>
             </div>
 
             <div className="space-y-3">
                 {songs.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-primary/10 px-4 py-8 text-center text-sm text-primary/45">
-                        Add songs first, then save their BPM presets here.
+                    <div className="rounded-2xl border border-dashed border-primary/10 px-4 py-8 text-center text-sm text-muted-foreground">
+                        곡을 추가한 뒤 BPM을 저장하세요.
                     </div>
                 ) : (
                     songs.map((song) => (
                         <form
                             key={song.id}
-                            action={updateSongBpmPreset}
-                            className="rounded-2xl border border-primary/10 bg-white/60 px-4 py-4"
+                            action={saveAction} onSubmit={saveAction === updateSongBpmPreset ? undefined : event => { event.preventDefault(); void saveAction(new FormData(event.currentTarget)); }}
+                            className="rounded-2xl border border-primary/10 bg-card px-4 py-4"
                         >
                             <fieldset
                                 disabled={disabled}
@@ -49,25 +52,25 @@ export default function SongBpmPresetManager({
                                 <input type="hidden" name="songId" value={song.id} />
                                 <div className="flex flex-col gap-1">
                                     <p className="text-sm font-semibold text-primary">{song.title}</p>
-                                    <p className="text-xs text-primary/45">
+                                    <p className="text-xs text-muted-foreground">
                                         {song.artist ?? 'Artist pending'}
                                     </p>
                                 </div>
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                                     <label className="flex-1 space-y-2">
-                                        <span className="text-xs font-bold uppercase tracking-[0.18em] text-primary/35">
-                                            BPM preset
+                                        <span className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                                            BPM
                                         </span>
                                         <Input
                                             name="bpm"
                                             type="number"
-                                            min={1}
-                                            placeholder="Leave empty to disable"
+                                            min={20} max={300} step={1}
+                                            placeholder="미설정은 비워두세요"
                                             defaultValue={song.bpm ?? ''}
                                         />
                                     </label>
-                                    <Button type="submit" className="h-10 w-full rounded-full px-5 sm:w-auto">
-                                        Save BPM
+                                    <Button type="submit" className="h-11 w-full rounded-full px-5 sm:w-auto">
+                                        BPM 저장
                                     </Button>
                                 </div>
                             </fieldset>

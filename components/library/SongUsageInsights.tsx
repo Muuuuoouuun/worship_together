@@ -32,19 +32,19 @@ export default function SongUsageInsights({ setlists, songs }: SongUsageInsights
                     </div>
                     <div>
                         <h2 className="text-xl font-serif font-bold text-primary">선곡 통계</h2>
-                        <p className="mt-1 text-sm leading-relaxed text-primary/50">
+                        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                             최근 콘티에서 곡이 얼마나 자주 사용됐는지 확인해 반복 선곡을 조절합니다.
                         </p>
                     </div>
                 </div>
-                <span className="rounded-full bg-primary/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-primary/45">
+                <span className="rounded-full bg-primary/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                     {setlists.length}개 콘티
                 </span>
             </div>
 
             <div className="space-y-4">
                 {topSongs.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-primary/10 px-4 py-8 text-center text-sm text-primary/45">
+                    <div className="rounded-2xl border border-dashed border-primary/10 px-4 py-8 text-center text-sm text-muted-foreground">
                         콘티에 곡을 추가하면 사용 빈도가 표시됩니다.
                     </div>
                 ) : (
@@ -52,12 +52,12 @@ export default function SongUsageInsights({ setlists, songs }: SongUsageInsights
                         {topSongs.map((insight) => (
                             <div
                                 key={insight.song.id}
-                                className="rounded-2xl border border-primary/10 bg-white/60 px-4 py-4"
+                                className="rounded-2xl border border-primary/10 bg-card px-4 py-4"
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
                                         <p className="truncate text-sm font-semibold text-primary">{insight.song.title}</p>
-                                        <p className="mt-1 flex items-center gap-2 text-xs text-primary/45">
+                                        <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                                             <Clock3 size={12} />
                                             {insight.lastUsedAt
                                                 ? `마지막 사용 ${formatUsageDate(insight.lastUsedAt)}`
@@ -76,8 +76,8 @@ export default function SongUsageInsights({ setlists, songs }: SongUsageInsights
 
                 {restingSongs.length > 0 && (
                     <div className="rounded-2xl border border-primary/10 bg-background/70 px-4 py-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary/35">쉬어가는 곡</p>
-                        <p className="mt-2 text-sm leading-relaxed text-primary/55">
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">쉬어가는 곡</p>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                             {restingSongs.map((insight) => insight.song.title).join(', ')}
                         </p>
                     </div>

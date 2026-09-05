@@ -1,0 +1,521 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, readdirSync, rmdirSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { test, type TestContext } from 'node:test';
+import { applyPlanningCommand, parsePlanningState, planningForViewer } from '../lib/planning';
+import { TeamRepository } from '../lib/server/teamRepository';
+import { emptyPlanningState, type PlanningCommand, type ScheduleInput } from '../types/planning';
+
+const owner = { id: 'planning-owner', name: '소유자' };
+const leader = { id: 'planning-leader', name: '담당 인도자' };
+const author = { id: 'planning-author', name: '요청 작성자' };
+const other = { id: 'planning-other', name: '다른 팀원' };
+const otherLeader = { id: 'planning-other-leader', name: '다른 인도자' };
+const people = [owner, leader, author, other, otherLeader];
+const managerError = /인도자 또는 팀 관리자/;
+const collisionError = /겹치는 일정/;
+const cancelledError = /없거나 취소/;
+
+function seed(repo: TeamRepository, joiningRepo = repo) {
+    const team = repo.create('계획 테스트 팀', owner);
+    const invite = repo.createInvite(team.id, owner.id);
+    for (const person of people.slice(1)) assert.equal(joiningRepo.join(invite.token, person), team.id);
+    repo.assignRole(team.id, owner.id, leader.id, 'leader');
+    repo.assignRole(team.id, owner.id, otherLeader.id, 'leader');
+    // Ownership must grant management even without the leader role.
+    repo.assignRole(team.id, owner.id, owner.id, 'keyboard');
+    return {
+        repo, teamId: team.id,
+        members: repo.list(owner.id).find(item => item.id === team.id)!.members,
+        read: (actor = owner.id) => repo.planning(team.id, actor),
+        send: (actor: string, command: PlanningCommand | unknown) => repo.updatePlanning(team.id, actor, command),
+    };
+}
+
+type Fixture = ReturnType<typeof seed>;
+function fixture(t: TestContext) {
+    const repo = new TeamRepository(':memory:');
+    t.after(() => repo.close());
+    return seed(repo);
+}
+
+const schedule = (overrides: Partial<ScheduleInput> = {}): ScheduleInput => ({
+    title: '주일 예배', kind: 'worship',
+    startsAt: '2026-09-06T10:00:00+09:00', endsAt: '2026-09-06T11:00:00+09:00',
+    location: '본당', notes: '', ...overrides,
+});
+
+function createEvent(f: Fixture, input = schedule(), actor = owner.id) {
+    const before = new Set(f.read().events.map(event => event.id));
+    const state = f.send(actor, { type: 'event.save', input });
+    const event = state.events.find(item => !before.has(item.id));
+    assert.ok(event, 'creation must return a new event');
+    return event;
+}
+
+function addSlot(f: Fixture, eventId: string, memberId: string | null = author.id) {
+    const before = new Set(f.read().events.find(event => event.id === eventId)!.slots.map(slot => slot.id));
+    const state = f.send(owner.id, { type: 'slot.save', eventId, memberId, role: 'vocal' });
+    const slot = state.events.find(event => event.id === eventId)!.slots.find(item => !before.has(item.id));
+    assert.ok(slot, 'creation must return a new slot');
+    return slot;
+}
+
+function createRequest(f: Fixture, actor = author.id, kind: 'question' | 'reminder' | 'change' = 'question') {
+    return f.send(actor, {
+        type: 'request.create', setlistId: '', setlistTitle: '  미등록 주일 콘티  ',
+        kind, body: '  마지막 곡을 확인해 주세요.  ', leaderId: leader.id,
+    }).requests[0];
+}
+
+function allViews(f: Fixture) {
+    return people.map(person => f.read(person.id));
+}
+
+function rejectsAtomically(f: Fixture, actor: string, command: unknown, error: RegExp) {
+    const before = allViews(f);
+    assert.throws(() => f.send(actor, command), error);
+    assert.deepEqual(allViews(f), before, 'rejection must preserve events, requests, alerts and every recipient notification');
+}
+
+test('domain commands preserve their input and validate persisted state and viewer membership', t => {
+    const f = fixture(t);
+    const before = emptyPlanningState();
+    const state = applyPlanningCommand(before, f.members, author.id, {
+        type: 'request.create', setlistId: '', setlistTitle: '콘티', kind: 'question', body: '질문', leaderId: leader.id,
+    });
+    assert.deepEqual(before, emptyPlanningState());
+    assert.equal(state.requests.length, 1);
+    const restored = parsePlanningState(JSON.parse(JSON.stringify(state)));
+    assert.equal(restored.requests[0].id, state.requests[0].id);
+    assert.equal(restored.requests[0].body, '질문');
+    assert.deepEqual(restored.notifications, state.notifications);
+    assert.deepEqual(parsePlanningState(null), emptyPlanningState());
+    assert.throws(() => parsePlanningState({ ...state, events: [{}] }), /저장된 일정/);
+    assert.equal(planningForViewer(state, f.members, other.id).requests.length, 0);
+    assert.throws(() => planningForViewer(state, f.members, 'outsider'), /접근/);
+    const snapshot = structuredClone(state);
+    assert.throws(() => applyPlanningCommand(state, f.members, other.id, {
+        type: 'request.reply', requestId: state.requests[0].id, body: '비공개 답변',
+    }), /답변할 수 없습니다/);
+    assert.deepEqual(state, snapshot);
+    assert.throws(() => applyPlanningCommand(state, f.members, 'outsider', { type: 'event.save', input: schedule() }), /접근/);
+});
+
+test('repository scopes requests to author, target leader and owner, including mutation responses', t => {
+    const f = fixture(t);
+    const request = createRequest(f);
+    for (const person of [author, leader, owner]) assert.deepEqual(f.read(person.id).requests.map(item => item.id), [request.id]);
+    for (const person of [other, otherLeader]) {
+        assert.deepEqual(f.read(person.id).requests, []);
+        rejectsAtomically(f, person.id, { type: 'request.reply', requestId: request.id, body: '답변' }, /답변할 수 없습니다/);
+        rejectsAtomically(f, person.id, { type: 'request.status', requestId: request.id, status: 'resolved' }, /수신 인도자 또는 관리자/);
+    }
+    const ownRequest = createRequest(f, other.id);
+    assert.deepEqual(f.read(other.id).requests.map(item => item.id), [ownRequest.id]);
+    assert.equal(f.read().requests.length, 2);
+    assert.throws(() => f.repo.planning(f.teamId, 'outsider'), /접근/);
+    rejectsAtomically(f, 'outsider', { type: 'request.reply', requestId: request.id, body: '답변' }, /접근/);
+    const differentTeam = f.repo.create('별도 팀', other);
+    assert.deepEqual(f.repo.planning(differentTeam.id, other.id).requests, []);
+    assert.throws(() => f.repo.updatePlanning(differentTeam.id, other.id, { type: 'request.status', requestId: request.id, status: 'resolved' }), /찾지 못했습니다/);
+});
+
+test('request replies and statuses notify only the other participants with the request target', t => {
+    const f = fixture(t);
+    const request = createRequest(f);
+    const initial = f.read(leader.id).notifications[0];
+    assert.deepEqual(initial.recipientIds, [leader.id]);
+    assert.equal(initial.target, 'requests');
+    assert.equal(initial.entityId, request.id);
+    rejectsAtomically(f, author.id, { type: 'request.status', requestId: request.id, status: 'resolved' }, /수신 인도자 또는 관리자/);
+    for (const command of [
+        { type: 'request.reply', requestId: request.id, body: '인도자 답변' },
+        { type: 'request.status', requestId: request.id, status: 'reviewing' },
+    ] satisfies PlanningCommand[]) {
+        const leaderNotifications = f.read(leader.id).notifications;
+        f.send(leader.id, command);
+        const notification = f.read(author.id).notifications[0];
+        assert.deepEqual(notification.recipientIds, [author.id]);
+        assert.equal(notification.target, 'requests');
+        assert.equal(notification.entityId, request.id);
+        assert.deepEqual(f.read(leader.id).notifications, leaderNotifications, 'actor should not notify themselves');
+    }
+    f.send(author.id, { type: 'request.reply', requestId: request.id, body: '작성자 답변' });
+    assert.deepEqual(f.read(leader.id).notifications[0].recipientIds, [leader.id]);
+    f.send(owner.id, { type: 'request.reply', requestId: request.id, body: '소유자 답변' });
+    f.send(owner.id, { type: 'request.status', requestId: request.id, status: 'resolved' });
+    const result = f.read().requests[0];
+    assert.equal(result.status, 'resolved');
+    assert.deepEqual(result.replies.map(reply => [reply.authorId, reply.body]), [
+        [leader.id, '인도자 답변'], [author.id, '작성자 답변'], [owner.id, '소유자 답변'],
+    ]);
+    assert.deepEqual(f.read(author.id).notifications[0].recipientIds.sort(), [author.id, leader.id].sort());
+    assert.deepEqual(f.read(other.id).notifications, []);
+    assert.deepEqual(f.read(otherLeader.id).notifications, []);
+});
+
+test('all request kinds allow a title-only reference but reject invalid recipients and blank content', t => {
+    const f = fixture(t);
+    for (const kind of ['question', 'reminder', 'change'] as const) {
+        const request = createRequest(f, author.id, kind);
+        assert.equal(request.kind, kind);
+        assert.equal(request.setlistId, '');
+        assert.equal(request.setlistTitle, '미등록 주일 콘티');
+        assert.equal(request.body, '마지막 곡을 확인해 주세요.');
+    }
+    const command = { type: 'request.create', setlistId: '', setlistTitle: '콘티', kind: 'question', body: '내용', leaderId: leader.id };
+    for (const leaderId of [other.id, 'outsider']) rejectsAtomically(f, author.id, { ...command, leaderId }, /수신할 인도자/);
+    for (const invalid of [{ setlistTitle: '   ' }, { body: '\n  ' }, { kind: 'unknown' }]) {
+        rejectsAtomically(f, author.id, { ...command, ...invalid }, /입력 형식/);
+    }
+    const result = f.send(author.id, { ...command, leaderId: owner.id, authorId: other.id });
+    assert.equal(result.requests[0].authorId, author.id, 'payload cannot impersonate another author');
+    assert.equal(result.requests[0].leaderId, owner.id);
+});
+
+test('event and roster management allow owner or leader and reject ordinary members atomically', t => {
+    const f = fixture(t);
+    const event = createEvent(f, schedule(), leader.id);
+    f.send(owner.id, { type: 'event.save', eventId: event.id, input: schedule({ title: '소유자 수정' }) });
+    const slot = addSlot(f, event.id);
+    f.send(leader.id, { type: 'alert.create', eventId: event.id, slotId: null, kind: 'notice', body: '긴급 안내' });
+    const alert = f.read().alerts[0];
+    const commands: PlanningCommand[] = [
+        { type: 'event.save', input: schedule() },
+        { type: 'event.save', eventId: event.id, input: schedule({ title: '권한 없는 수정' }) },
+        { type: 'event.cancel', eventId: event.id },
+        { type: 'slot.save', eventId: event.id, role: 'drums', memberId: other.id },
+        { type: 'slot.save', eventId: event.id, slotId: slot.id, role: 'drums', memberId: other.id },
+        { type: 'slot.remove', eventId: event.id, slotId: slot.id },
+        { type: 'alert.create', eventId: event.id, slotId: null, kind: 'notice', body: '안내' },
+        { type: 'alert.create', eventId: event.id, slotId: slot.id, kind: 'substitute', body: '대타' },
+        { type: 'alert.resolve', alertId: alert.id },
+        { type: 'slot.accept', eventId: event.id, slotId: slot.id, memberId: other.id },
+    ];
+    for (const command of commands) rejectsAtomically(f, other.id, command, managerError);
+    rejectsAtomically(f, owner.id, { type: 'slot.save', eventId: event.id, role: 'vocal', memberId: 'outsider' }, /팀의 팀원/);
+    f.send(leader.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, role: 'drums', memberId: other.id });
+    assert.equal(f.read().events[0].slots[0].memberId, other.id);
+    f.send(leader.id, { type: 'alert.resolve', alertId: alert.id });
+    assert.ok(f.read().alerts[0].resolvedAt);
+    f.send(leader.id, { type: 'slot.remove', eventId: event.id, slotId: slot.id });
+    assert.deepEqual(f.read().events[0].slots, []);
+    f.send(leader.id, { type: 'event.cancel', eventId: event.id });
+    assert.equal(f.read().events[0].cancelled, true);
+});
+
+test('schedule validation rejects invalid dates and nonpositive or over-24-hour durations', async t => {
+    const cases: [string, Partial<ScheduleInput>, RegExp][] = [
+        ['invalid calendar date', { startsAt: '2026-02-30T10:00:00+09:00' }, /입력 형식/],
+        ['invalid text', { startsAt: 'tomorrow' }, /입력 형식/],
+        ['missing timezone', { endsAt: '2026-09-06T11:00:00' }, /입력 형식/],
+        ['equal start and end', { endsAt: '2026-09-06T10:00:00+09:00' }, /종료는 시작 이후/],
+        ['end before start', { endsAt: '2026-09-06T09:59:59+09:00' }, /종료는 시작 이후/],
+        ['longer than 24 hours', { endsAt: '2026-09-07T10:00:01+09:00' }, /24시간/],
+        ['different offsets but same instant', { endsAt: '2026-09-06T01:00:00Z' }, /종료는 시작 이후/],
+    ];
+    for (const [name, invalid, error] of cases) await t.test(name, t => {
+        const f = fixture(t);
+        const event = createEvent(f);
+        rejectsAtomically(f, owner.id, { type: 'event.save', input: schedule(invalid) }, error);
+        rejectsAtomically(f, leader.id, { type: 'event.save', eventId: event.id, input: schedule(invalid) }, error);
+    });
+});
+
+test('KST schedules normalize both endpoints across midnight and allow exactly 24 hours', t => {
+    const f = fixture(t);
+    const overnight = createEvent(f, schedule({ startsAt: '2026-09-06T23:30:00+09:00', endsAt: '2026-09-07T00:30:00+09:00' }));
+    assert.equal(overnight.startsAt, '2026-09-06T14:30:00.000Z');
+    assert.equal(overnight.endsAt, '2026-09-06T15:30:00.000Z');
+    const day = createEvent(f, schedule({ endsAt: '2026-09-07T10:00:00+09:00' }));
+    assert.equal(Date.parse(day.endsAt) - Date.parse(day.startsAt), 24 * 60 * 60 * 1000);
+    assert.equal(f.read(other.id).events.find(event => event.id === overnight.id)!.endsAt, overnight.endsAt);
+});
+
+test('duplicate and overlapping assignments roll back; adjacent and cancelled schedules permit reuse', t => {
+    const f = fixture(t);
+    const first = createEvent(f);
+    const slot = addSlot(f, first.id);
+    rejectsAtomically(f, owner.id, { type: 'slot.save', eventId: first.id, role: 'guitar', memberId: author.id }, collisionError);
+    const overlap = createEvent(f, schedule({ title: '겹친 연습', startsAt: '2026-09-06T01:30:00Z', endsAt: '2026-09-06T02:30:00Z' }));
+    const otherSlot = addSlot(f, overlap.id, other.id);
+    rejectsAtomically(f, leader.id, { type: 'slot.save', eventId: overlap.id, slotId: otherSlot.id, role: 'vocal', memberId: author.id }, collisionError);
+    rejectsAtomically(f, leader.id, { type: 'slot.save', eventId: overlap.id, role: 'vocal', memberId: author.id }, collisionError);
+    f.send(owner.id, { type: 'slot.save', eventId: first.id, slotId: slot.id, role: 'keyboard', memberId: author.id });
+    assert.equal(f.read().events.find(event => event.id === first.id)!.slots.length, 1, 'editing the same assignment is not a duplicate');
+    const adjacent = createEvent(f, schedule({ startsAt: '2026-09-06T11:00:00+09:00', endsAt: '2026-09-06T12:00:00+09:00' }));
+    addSlot(f, adjacent.id);
+    f.send(owner.id, { type: 'event.cancel', eventId: first.id });
+    f.send(owner.id, { type: 'event.cancel', eventId: adjacent.id });
+    addSlot(f, overlap.id);
+    assert.equal(f.read().events.find(event => event.id === overlap.id)!.slots.filter(item => item.memberId === author.id).length, 1);
+});
+
+test('slot saves preserve absent and vacant substitution state until the assignee changes', t => {
+    for (const memberId of [author.id, null]) {
+        const f = fixture(t);
+        const event = createEvent(f);
+        const slot = addSlot(f, event.id, memberId);
+        if (memberId) {
+            f.send(memberId, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '결석' });
+            // An absent assignee may already hold another overlapping assignment.
+            const overlap = createEvent(f);
+            addSlot(f, overlap.id, memberId);
+        } else {
+            f.send(owner.id, { type: 'alert.create', eventId: event.id, slotId: slot.id, kind: 'substitute', body: '빈 배치 지원 요청' });
+        }
+        f.send(other.id, { type: 'slot.volunteer', eventId: event.id, slotId: slot.id });
+        const readSlot = () => f.read().events.find(item => item.id === event.id)!.slots.find(item => item.id === slot.id)!;
+        const beforeSlot = readSlot();
+        const beforeAlerts = f.read().alerts;
+        assert.equal(beforeSlot.attendance, memberId ? 'absent' : 'pending');
+        assert.deepEqual(beforeSlot.volunteers, [other.id]);
+        assert.equal(beforeAlerts[0].resolvedAt, null);
+
+        const snapshot = allViews(f);
+        f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId, role: 'vocal' });
+        assert.deepEqual(allViews(f), snapshot, 'unchanged saves must not reset state or send notifications');
+
+        f.send(leader.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId, role: 'keyboard' });
+        assert.deepEqual(readSlot(), { ...beforeSlot, role: 'keyboard' }, 'role-only edits preserve absence or vacancy and candidates');
+        assert.deepEqual(f.read().alerts, beforeAlerts, 'role-only edits keep the existing urgent request open');
+
+        f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId: other.id, role: 'keyboard' });
+        assert.deepEqual(readSlot(), { ...beforeSlot, role: 'keyboard', memberId: other.id, attendance: 'pending', volunteers: [] });
+        assert.ok(f.read().alerts.find(alert => alert.id === beforeAlerts[0].id)!.resolvedAt, 'assigning a replacement closes the old request');
+    }
+});
+
+test('saving or changing the role of a confirmed assignee preserves confirmation, but reassignment resets it', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const slot = addSlot(f, event.id);
+    f.send(author.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' });
+    f.send(author.id, { type: 'alert.create', eventId: event.id, slotId: slot.id, kind: 'substitute', body: '대체 인원 요청' });
+    f.send(other.id, { type: 'slot.volunteer', eventId: event.id, slotId: slot.id });
+    const beforeSlot = f.read().events[0].slots[0];
+    const beforeAlerts = f.read().alerts;
+    assert.equal(beforeSlot.attendance, 'confirmed');
+    assert.deepEqual(beforeSlot.volunteers, [other.id]);
+    assert.equal(beforeAlerts[0].resolvedAt, null);
+
+    const snapshot = allViews(f);
+    f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId: author.id, role: 'vocal' });
+    assert.deepEqual(allViews(f), snapshot);
+    f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId: author.id, role: 'guitar' });
+    assert.deepEqual(f.read().events[0].slots[0], { ...beforeSlot, role: 'guitar' });
+    assert.deepEqual(f.read().alerts, beforeAlerts);
+
+    f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId: other.id, role: 'guitar' });
+    assert.deepEqual(f.read().events[0].slots[0], { ...beforeSlot, role: 'guitar', memberId: other.id, attendance: 'pending', volunteers: [] });
+    assert.ok(f.read().alerts.find(alert => alert.id === beforeAlerts[0].id)!.resolvedAt);
+});
+
+test('moving a staffed event into a collision is atomic for the entire event and its notifications', t => {
+    const f = fixture(t);
+    const first = createEvent(f);
+    addSlot(f, first.id);
+    const laterInput = schedule({ title: '오후 연습', startsAt: '2026-09-06T13:00:00+09:00', endsAt: '2026-09-06T14:00:00+09:00' });
+    const later = createEvent(f, laterInput);
+    addSlot(f, later.id, other.id);
+    addSlot(f, later.id, author.id);
+    rejectsAtomically(f, leader.id, { type: 'event.save', eventId: later.id, input: schedule({ title: '충돌하는 수정', location: '다른 장소' }) }, collisionError);
+    assert.equal(f.read().events.find(event => event.id === later.id)!.title, laterInput.title);
+});
+
+test('only an assignee can respond; repeated absence creates exactly one urgent alert and notification', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const slot = addSlot(f, event.id);
+    const command: PlanningCommand = { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '몸이 아파요' };
+    for (const person of [owner, leader, other]) rejectsAtomically(f, person.id, command, /본인의 참석/);
+    f.send(author.id, command);
+    const alert = f.read().alerts[0];
+    assert.equal(alert.kind, 'absence');
+    assert.equal(alert.authorId, author.id);
+    assert.equal(alert.eventId, event.id);
+    assert.equal(alert.slotId, slot.id);
+    assert.equal(alert.resolvedAt, null);
+    assert.match(alert.body, /몸이 아파요/);
+    assert.equal(f.read().events[0].slots[0].attendance, 'absent');
+    const urgent = f.read(leader.id).notifications.filter(item => item.urgent);
+    assert.equal(urgent.length, 1);
+    assert.equal(urgent[0].target, 'schedule');
+    assert.equal(urgent[0].entityId, event.id);
+    assert.deepEqual([...urgent[0].recipientIds].sort(), people.filter(person => person.id !== author.id).map(person => person.id).sort());
+    const snapshot = allViews(f);
+    f.send(author.id, command);
+    assert.deepEqual(allViews(f), snapshot);
+    rejectsAtomically(f, author.id, { type: 'alert.create', eventId: event.id, slotId: slot.id, kind: 'substitute', body: '중복 요청' }, /이미 열린 긴급 요청/);
+});
+
+test('confirming attendance rechecks availability and closes the absence alert only after success', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const slot = addSlot(f, event.id);
+    f.send(author.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '' });
+    f.send(other.id, { type: 'slot.volunteer', eventId: event.id, slotId: slot.id });
+    const overlap = createEvent(f);
+    addSlot(f, overlap.id);
+    const confirm: PlanningCommand = { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' };
+    rejectsAtomically(f, author.id, confirm, collisionError);
+    f.send(owner.id, { type: 'event.cancel', eventId: overlap.id });
+    f.send(author.id, confirm);
+    const restored = f.read().events.find(item => item.id === event.id)!.slots[0];
+    assert.equal(restored.attendance, 'confirmed');
+    assert.deepEqual(restored.volunteers, []);
+    assert.ok(f.read().alerts[0].resolvedAt);
+});
+
+test('volunteering is idempotent; leader acceptance replaces the assignment, clears volunteers and closes alerts', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const slot = addSlot(f, event.id);
+    f.send(author.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '' });
+    const volunteer: PlanningCommand = { type: 'slot.volunteer', eventId: event.id, slotId: slot.id };
+    rejectsAtomically(f, author.id, volunteer, /본인 배치/);
+    f.send(other.id, volunteer);
+    const snapshot = allViews(f);
+    f.send(other.id, volunteer);
+    assert.deepEqual(allViews(f), snapshot);
+    assert.deepEqual(f.read(leader.id).notifications[0].recipientIds.sort(), [owner.id, leader.id, otherLeader.id].sort());
+    f.send(otherLeader.id, volunteer);
+    const accept: PlanningCommand = { type: 'slot.accept', eventId: event.id, slotId: slot.id, memberId: other.id };
+    rejectsAtomically(f, other.id, accept, managerError);
+    f.send(leader.id, accept);
+    const assigned = f.read().events[0].slots[0];
+    assert.equal(assigned.memberId, other.id);
+    assert.equal(assigned.attendance, 'confirmed');
+    assert.deepEqual(assigned.volunteers, []);
+    assert.equal(f.read().alerts.filter(alert => !alert.resolvedAt).length, 0);
+    assert.ok(f.read().alerts[0].resolvedAt);
+    const notification = f.read(author.id).notifications[0];
+    assert.equal(notification.target, 'schedule');
+    assert.equal(notification.entityId, event.id);
+    assert.deepEqual([...notification.recipientIds].sort(), people.filter(person => person.id !== leader.id).map(person => person.id).sort());
+    rejectsAtomically(f, author.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '' }, /본인의 참석/);
+});
+
+test('volunteers need an eligible slot and availability, and managers cannot accept nonvolunteers', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const filled = addSlot(f, event.id);
+    rejectsAtomically(f, other.id, { type: 'slot.volunteer', eventId: event.id, slotId: filled.id }, /대체 요청이 없는/);
+    const vacancy = addSlot(f, event.id, null);
+    const overlap = createEvent(f);
+    addSlot(f, overlap.id, other.id);
+    rejectsAtomically(f, other.id, { type: 'slot.volunteer', eventId: event.id, slotId: vacancy.id }, collisionError);
+    rejectsAtomically(f, owner.id, { type: 'slot.accept', eventId: event.id, slotId: vacancy.id, memberId: otherLeader.id }, /지원한 팀원/);
+    f.send(otherLeader.id, { type: 'slot.volunteer', eventId: event.id, slotId: vacancy.id });
+    assert.deepEqual(f.read().events.find(item => item.id === event.id)!.slots.find(item => item.id === vacancy.id)!.volunteers, [otherLeader.id]);
+});
+
+test('acceptance rechecks a collision introduced after volunteering without losing the open alert or candidate', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const slot = addSlot(f, event.id);
+    f.send(author.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '' });
+    f.send(other.id, { type: 'slot.volunteer', eventId: event.id, slotId: slot.id });
+    const laterAssignment = createEvent(f);
+    addSlot(f, laterAssignment.id, other.id);
+    const accept: PlanningCommand = { type: 'slot.accept', eventId: event.id, slotId: slot.id, memberId: other.id };
+    rejectsAtomically(f, owner.id, accept, collisionError);
+    const retained = f.read().events.find(item => item.id === event.id)!.slots[0];
+    assert.equal(retained.memberId, author.id);
+    assert.deepEqual(retained.volunteers, [other.id]);
+    assert.equal(f.read().alerts[0].resolvedAt, null);
+    f.send(owner.id, { type: 'event.cancel', eventId: laterAssignment.id });
+    f.send(owner.id, accept);
+    assert.equal(f.read().events.find(item => item.id === event.id)!.slots[0].memberId, other.id);
+});
+
+test('notification reads are recipient-only, self-only and idempotent, including forged readBy payloads', t => {
+    const f = fixture(t);
+    createRequest(f);
+    const privateNotification = f.read(leader.id).notifications[0];
+    for (const person of [owner, author, other, otherLeader]) {
+        rejectsAtomically(f, person.id, { type: 'notification.read', notificationId: privateNotification.id }, /본인의 알림/);
+    }
+    rejectsAtomically(f, leader.id, { type: 'notification.read', notificationId: 'missing' }, /본인의 알림/);
+    const event = createEvent(f);
+    const shared = f.read(author.id).notifications.find(item => item.entityId === event.id)!;
+    f.send(author.id, { type: 'notification.read', notificationId: shared.id, readBy: [other.id], userId: other.id });
+    assert.deepEqual(f.read(other.id).notifications.find(item => item.id === shared.id)!.readBy, [author.id]);
+    const snapshot = allViews(f);
+    f.send(author.id, { type: 'notification.read', notificationId: shared.id });
+    assert.deepEqual(allViews(f), snapshot);
+    f.send(other.id, { type: 'notification.read', notificationId: shared.id });
+    assert.deepEqual(f.read(author.id).notifications.find(item => item.id === shared.id)!.readBy, [author.id, other.id]);
+});
+
+test('cancelled schedules close urgent alerts and reject subsequent schedule mutations', async t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const slot = addSlot(f, event.id);
+    f.send(author.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '' });
+    f.send(other.id, { type: 'slot.volunteer', eventId: event.id, slotId: slot.id });
+    const alert = f.read().alerts[0];
+    f.send(owner.id, { type: 'event.cancel', eventId: event.id });
+    assert.equal(f.read().events[0].cancelled, true);
+    assert.ok(f.read().alerts[0].resolvedAt);
+    assert.equal(f.read(other.id).notifications[0].urgent, true);
+    const commands: [string, string, PlanningCommand][] = [
+        ['event edit', owner.id, { type: 'event.save', eventId: event.id, input: schedule() }],
+        ['repeat cancel', owner.id, { type: 'event.cancel', eventId: event.id }],
+        ['slot creation', owner.id, { type: 'slot.save', eventId: event.id, role: 'drums', memberId: null }],
+        ['slot edit', owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, role: 'drums', memberId: other.id }],
+        ['slot removal', owner.id, { type: 'slot.remove', eventId: event.id, slotId: slot.id }],
+        ['attendance', author.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' }],
+        ['notice', owner.id, { type: 'alert.create', eventId: event.id, slotId: null, kind: 'notice', body: '안내' }],
+        ['substitute request', owner.id, { type: 'alert.create', eventId: event.id, slotId: slot.id, kind: 'substitute', body: '대타' }],
+        ['volunteering', otherLeader.id, { type: 'slot.volunteer', eventId: event.id, slotId: slot.id }],
+        ['acceptance', leader.id, { type: 'slot.accept', eventId: event.id, slotId: slot.id, memberId: other.id }],
+        ['alert resolution', leader.id, { type: 'alert.resolve', alertId: alert.id }],
+    ];
+    for (const [name, actor, command] of commands) await t.test(name, () => rejectsAtomically(f, actor, command, cancelledError));
+});
+
+test('two SQLite connections preserve private requests and read receipts across interleaved writes and reopening', t => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'worship-planning-test-'));
+    const filename = path.join(folder, 'planning.sqlite');
+    const connections = new Set<TeamRepository>();
+    const connect = () => {
+        const repo = new TeamRepository(filename);
+        connections.add(repo);
+        return repo;
+    };
+    t.after(() => {
+        for (const connection of connections) connection.close();
+        // Delete only known SQLite files; never recursively remove a computed directory.
+        assert.equal(path.dirname(folder), path.resolve(tmpdir()));
+        for (const name of readdirSync(folder)) {
+            assert.ok(['planning.sqlite', 'planning.sqlite-wal', 'planning.sqlite-shm'].includes(name));
+            unlinkSync(path.join(folder, name));
+        }
+        rmdirSync(folder);
+    });
+    const first = connect(), second = connect();
+    const f = seed(first, second);
+    const firstRequest = createRequest(f);
+    assert.equal(second.planning(f.teamId, leader.id).requests[0].id, firstRequest.id);
+    const secondResult = second.updatePlanning(f.teamId, other.id, {
+        type: 'request.create', setlistId: 'registered-setlist', setlistTitle: '저녁 콘티', kind: 'change', body: '수정 요청', leaderId: leader.id,
+    });
+    assert.equal(secondResult.requests.length, 1, 'returned state is scoped to the second author');
+    assert.notEqual(secondResult.requests[0].id, firstRequest.id);
+    assert.equal(f.read().requests.length, 2, 'scoped return must not replace another author’s persisted request');
+    second.updatePlanning(f.teamId, leader.id, { type: 'request.reply', requestId: firstRequest.id, body: '다른 연결에서 답변' });
+    assert.equal(f.read(author.id).requests[0].replies[0].body, '다른 연결에서 답변');
+    const event = createEvent(f);
+    const notification = f.read(author.id).notifications.find(item => item.entityId === event.id)!;
+    first.updatePlanning(f.teamId, author.id, { type: 'notification.read', notificationId: notification.id });
+    second.updatePlanning(f.teamId, other.id, { type: 'notification.read', notificationId: notification.id });
+    assert.deepEqual(f.read(author.id).notifications.find(item => item.id === notification.id)!.readBy, [author.id, other.id]);
+    const snapshot = allViews(f);
+    first.close(); connections.delete(first);
+    second.close(); connections.delete(second);
+    const reopened = connect();
+    assert.deepEqual(people.map(person => reopened.planning(f.teamId, person.id)), snapshot);
+});

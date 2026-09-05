@@ -1,0 +1,20 @@
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 10px 16px; border: 1px solid #747775; border-radius: 12px; background: #fff; color: #1f1f1f; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.button:focus-visible, .account a:focus-visible, .account summary:focus-visible { outline: 3px solid #2563eb; outline-offset: 4px; }
+.button:disabled { cursor: not-allowed; }
+.providers { display: grid; gap: 20px; }
+.provider { width: 100%; min-height: 56px; }
+.provider:disabled { border-style: dashed; }
+.google { font-family: Arial, sans-serif; font-weight: 500; }
+.naver { padding: 0; overflow: hidden; background: #03a94d; border: 0; }
+.naver img { width: 100%; max-width: 368px; height: auto; }
+.hint { margin: 7px 0 0; color: #495650; font-size: 13px; line-height: 1.5; }
+.status { color: #263e35; font-size: 14px; line-height: 1.6; margin: 12px 0 0; }
+.error { color: #9f241c; font-size: 14px; line-height: 1.6; margin: 12px 0 0; }
+.account { position: relative; color: var(--foreground, #1f2a2a); font-size: 14px; }
+.account summary { display: flex; align-items: center; gap: 8px; min-height: 48px; cursor: pointer; border: 1px solid var(--border, #89978e); border-radius: 12px; background: var(--surface, #fff); padding: 8px 12px; list-style: none; }
+.account summary::-webkit-details-marker { display: none; }
+.avatar { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; color: #fff; background: #153e3b; font-weight: 700; }
+.name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel { position: absolute; z-index: 60; right: 0; top: calc(100% + 8px); width: min(260px, calc(100vw - 32px)); display: grid; gap: 12px; padding: 18px; border: 1px solid #a8b5ad; border-radius: 16px; color: #1f2a2a; background: #fff; box-shadow: 0 10px 35px #0002; overflow-wrap: anywhere; }
+.panel p { margin: 0; }
+.panel a { display: flex; align-items: center; min-height: 48px; color: #153e3b; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }

@@ -9,6 +9,7 @@ import {
     type SessionFeedbackPreset,
     type SessionFeedbackRole,
     type SongRow,
+    type SessionCueDelivery,
 } from '@/types/session';
 
 type Session = Database['public']['Tables']['sessions']['Row'];
@@ -27,7 +28,7 @@ function mergeFeedbackEntry(
     entry: SessionFeedbackEntry
 ): SessionFeedbackEntry[] {
     if (feedbackLog.some((item) => item.id === entry.id)) {
-        return feedbackLog;
+        return feedbackLog.map((item) => item.id === entry.id ? { ...item, ...entry } : item);
     }
 
     return [...feedbackLog, entry].slice(-MAX_SESSION_FEEDBACK_LOG);
@@ -40,7 +41,7 @@ function mergeFeedbackLogs(
     const entriesById = new Map<string, SessionFeedbackEntry>();
 
     [...currentLog, ...incomingLog].forEach((entry) => {
-        entriesById.set(entry.id, entry);
+        entriesById.set(entry.id, { ...entriesById.get(entry.id), ...entry });
     });
 
     return Array.from(entriesById.values())
@@ -66,6 +67,9 @@ interface SessionState {
     feedbackLog: SessionFeedbackEntry[];
     quickFeedbackPresets: SessionFeedbackPreset[];
     selectedFeedbackRole: SessionFeedbackRole;
+    cueDeliveries: Record<string, SessionCueDelivery>;
+    setCueDelivery: (id: string, delivery: Partial<SessionCueDelivery>) => void;
+    acknowledgeCue: (id: string, clientId: string) => void;
     initializeSession: (session: Session, songs: Song[], initialState?: SessionCurrentState) => void;
     setSessionMeta: (session: Session) => void;
     mergeFeedbackEntry: (entry: SessionFeedbackEntry) => void;
@@ -95,12 +99,26 @@ export const useSessionStore = create<SessionState>((set) => ({
     feedbackLog: [],
     quickFeedbackPresets: [],
     selectedFeedbackRole: DEFAULT_SESSION_FEEDBACK_ROLE,
+    cueDeliveries: {},
+    setCueDelivery: (id, delivery) => set((state) => ({
+        cueDeliveries: Object.fromEntries(Object.entries({
+            ...state.cueDeliveries,
+            [id]: { ...(state.cueDeliveries[id] ?? { status: 'sending', transport: null, receivedBy: [], saved: false }), ...delivery },
+        }).slice(-MAX_SESSION_FEEDBACK_LOG)),
+    })),
+    acknowledgeCue: (id, clientId) => set((state) => {
+        const delivery = state.cueDeliveries[id];
+        if (!delivery || delivery.receivedBy.includes(clientId)) return state;
+        return { cueDeliveries: { ...state.cueDeliveries, [id]: { ...delivery, receivedBy: [...delivery.receivedBy, clientId] } } };
+    }),
 
     initializeSession: (session, songs, initialState) => {
         const state = initialState ?? normalizeSessionState(session.current_state, songs);
         const currentSong = resolveSong(state.songId, songs);
 
         set((current) => ({
+            isMaster: current.currentSession?.id === session.id ? current.isMaster : false,
+            cueDeliveries: current.currentSession?.id === session.id ? current.cueDeliveries : {},
             isActive: session.is_active,
             songs,
             currentSession: session,
@@ -111,7 +129,9 @@ export const useSessionStore = create<SessionState>((set) => ({
             bpmEnabled: state.bpmEnabled,
             currentBpm: state.bpmValue,
             autoBpmSync: state.autoBpmSync,
-            feedbackLog: state.feedbackLog,
+            feedbackLog: current.currentSession?.id === session.id
+                ? mergeFeedbackLogs(current.feedbackLog, state.feedbackLog)
+                : state.feedbackLog,
             quickFeedbackPresets: current.currentSession?.id === session.id && current.quickFeedbackPresets.length > 0
                 ? current.quickFeedbackPresets
                 : state.quickFeedbackPresets,
@@ -125,7 +145,7 @@ export const useSessionStore = create<SessionState>((set) => ({
             feedbackLog: mergeFeedbackEntry(state.feedbackLog, entry),
         })),
 
-    syncFeedbackLog: (feedbackLog) => set({ feedbackLog }),
+    syncFeedbackLog: (feedbackLog) => set((state) => ({ feedbackLog: mergeFeedbackLogs(state.feedbackLog, feedbackLog) })),
 
     syncQuickFeedbackPresets: (quickFeedbackPresets) => set({ quickFeedbackPresets }),
 
@@ -177,6 +197,9 @@ export const useSessionStore = create<SessionState>((set) => ({
     resetSession: () =>
         set({
             isActive: false,
+            isMaster: false,
+            syncEnabled: true,
+            cueDeliveries: {},
             songs: [],
             currentSession: null,
             currentSong: null,

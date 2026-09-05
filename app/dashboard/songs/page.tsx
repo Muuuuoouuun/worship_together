@@ -1,17 +1,12 @@
-import type { ComponentType } from 'react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import SongBpmPresetManager from '@/components/library/SongBpmPresetManager';
-import SongComposer from '@/components/library/SongComposer';
-import SongLibraryList from '@/components/library/SongLibraryList';
-import SetlistComposer from '@/components/library/SetlistComposer';
-import SetlistTimeline from '@/components/library/SetlistTimeline';
-import SongUsageInsights from '@/components/library/SongUsageInsights';
 import MeshBackground from '@/components/ui/MeshBackground';
 import GlassCard from '@/components/ui/GlassCard';
 import { DEMO_TEAM_ID } from '@/lib/constants';
 import { getSetlistsByTeam, getSongsByTeam } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
-import { CalendarRange, Music4, RadioTower } from 'lucide-react';
+import LibraryTeamWorkspace from '@/components/library/LibraryTeamWorkspace';
+import { getCurrentUser } from '@/lib/auth';
+import { getTeamRepository } from '@/lib/server/teams';
 
 interface LibraryPageProps {
     searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -27,7 +22,10 @@ const successMessages: Record<string, string> = {
 const errorMessages: Record<string, string> = {
     'missing-song-id': 'Song target is missing.',
     'missing-song-title': '곡명이 필요합니다.',
-    'invalid-bpm': 'BPM은 양수여야 합니다.',
+    'invalid-bpm': 'BPM은 20~300 사이 정수로 입력해주세요.',
+    'backend-unavailable': '서버 저장 연결이 없습니다. 브라우저 프로토타입 모드에서 저장해주세요.',
+    'invalid-setlist-songs': '콘티에 사용할 팀의 곡을 한 곡 이상 선택해주세요.',
+    'duplicate-setlist-songs': '콘티에는 같은 곡을 한 번만 추가할 수 있습니다. 후렴 반복은 곡의 송폼에서 설정해주세요.',
     'create-song': '곡을 저장하지 못했습니다. Supabase 권한을 확인해주세요.',
     'update-song-bpm': 'BPM 프리셋을 저장하지 못했습니다. Supabase 권한을 확인해주세요.',
     'missing-setlist-title': '콘티 제목이 필요합니다.',
@@ -45,6 +43,8 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
         getSetlistsByTeam(DEMO_TEAM_ID),
     ]);
     const hasSupabase = Boolean(supabase);
+    const user = await getCurrentUser();
+    const onlineTeams = user ? getTeamRepository().list(user.id).map(team => ({ id: team.id, name: team.name })) : [];
     const createdKey = getParam(params.created);
     const errorKey = getParam(params.error);
 
@@ -61,21 +61,12 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
                             <h1 className="text-4xl font-serif font-black tracking-tight text-primary md:text-5xl">
                                 악보, 콘티, 예배 준비
                             </h1>
-                            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-primary/55 md:text-base">
+                            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground md:text-base">
                                 라이브 예배 세션의 기반이 되는 곡, BPM, 악보, 콘티를 준비합니다.
                             </p>
                         </div>
                     </div>
 
-                    <div className="grid w-full grid-cols-1 gap-3 sm:w-auto sm:grid-cols-3">
-                        <MetricCard icon={Music4} label="곡" value={songs.length} />
-                        <MetricCard icon={CalendarRange} label="콘티" value={setlists.length} />
-                        <MetricCard
-                            icon={RadioTower}
-                            label="라이브 가능"
-                            value={setlists.filter((setlist) => setlist.songs.length > 0).length}
-                        />
-                    </div>
                 </section>
 
                 {createdKey && successMessages[createdKey] && (
@@ -90,54 +81,9 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
                     </GlassCard>
                 )}
 
-                {!hasSupabase && (
-                    <GlassCard className="border-amber-500/20 bg-amber-500/10">
-                        <p className="text-sm font-semibold text-amber-700">데모 모드로 보는 중입니다.</p>
-                        <p className="mt-2 text-sm leading-relaxed text-amber-700/80">
-                            곡과 콘티 화면은 확인할 수 있고, 생성 버튼은 Supabase 연결 후 활성화됩니다.
-                        </p>
-                    </GlassCard>
-                )}
-
-                <section className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-                    <div className="space-y-6">
-                        <SongComposer disabled={!hasSupabase} />
-                        <SetlistComposer songs={songs} disabled={!hasSupabase} />
-                    </div>
-
-                    <div className="space-y-6">
-                        <SongBpmPresetManager songs={songs} disabled={!hasSupabase} />
-                        <SongUsageInsights songs={songs} setlists={setlists} />
-                        <SongLibraryList songs={songs} />
-                        <SetlistTimeline setlists={setlists} />
-                    </div>
-                </section>
+                <LibraryTeamWorkspace initialSongs={songs} initialSetlists={setlists} teamId={DEMO_TEAM_ID} hasBackend={hasSupabase} onlineTeams={onlineTeams} onlineTeamId={getParam(params.team) ?? undefined} />
             </div>
         </DashboardLayout>
-    );
-}
-
-function MetricCard({
-    icon: Icon,
-    label,
-    value,
-}: {
-    icon: ComponentType<{ size?: number }>;
-    label: string;
-    value: number;
-}) {
-    return (
-        <GlassCard className="border-primary/10 px-5 py-4">
-            <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/5 text-primary/60">
-                    <Icon size={18} />
-                </div>
-                <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary/35">{label}</p>
-                    <p className="mt-1 text-xl font-semibold text-primary">{value}</p>
-                </div>
-            </div>
-        </GlassCard>
     );
 }
 

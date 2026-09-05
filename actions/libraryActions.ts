@@ -1,11 +1,13 @@
 'use server';
 
 import { DEMO_TEAM_ID } from '@/lib/constants';
-import { getSupabaseClient } from '@/lib/supabase';
+import { hasDuplicateSongIds, normalizeSetlistSongOrder } from '@/lib/libraryPrototypeStorage';
+import { getSupabaseClient, supabase as configuredSupabase } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 export async function createSong(formData: FormData) {
+    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const title = getString(formData, 'title');
     const artist = getNullableString(formData, 'artist');
@@ -13,13 +15,13 @@ export async function createSong(formData: FormData) {
     const musicXmlUrl = getNullableString(formData, 'musicXmlUrl');
     const dataXml = getNullableString(formData, 'dataXml');
     const bpmValue = getNullableString(formData, 'bpm');
-    const parsedBpm = bpmValue ? Number.parseInt(bpmValue, 10) : null;
+    const parsedBpm = bpmValue ? Number(bpmValue) : null;
 
     if (!title) {
         redirect('/dashboard/songs?error=missing-song-title');
     }
 
-    if (bpmValue && (parsedBpm === null || !Number.isFinite(parsedBpm) || parsedBpm <= 0)) {
+    if (bpmValue && (parsedBpm === null || !Number.isInteger(parsedBpm) || parsedBpm < 20 || parsedBpm > 300)) {
         redirect('/dashboard/songs?error=invalid-bpm');
     }
 
@@ -46,6 +48,7 @@ export async function createSong(formData: FormData) {
 }
 
 export async function createSetlist(formData: FormData) {
+    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const title = getString(formData, 'title');
     const theme = getNullableString(formData, 'theme');
@@ -69,6 +72,13 @@ export async function createSetlist(formData: FormData) {
         redirect('/dashboard/songs?error=invalid-worship-date');
     }
 
+    if (!songIds.length) redirect('/dashboard/songs?error=invalid-setlist-songs');
+    if (hasDuplicateSongIds(songIds)) redirect('/dashboard/songs?error=duplicate-setlist-songs');
+    const { data: teamSongs, error: songsError } = await supabase.from('songs').select('id').eq('team_id', DEMO_TEAM_ID).in('id', [...new Set(songIds)]);
+    if (songsError || !teamSongs || songIds.some(id => !teamSongs.some(song => song.id === id))) {
+        redirect('/dashboard/songs?error=invalid-setlist-songs');
+    }
+
     const { error } = await supabase
         .from('setlists')
         .insert({
@@ -90,6 +100,7 @@ export async function createSetlist(formData: FormData) {
 }
 
 export async function duplicateSetlistFromTemplate(formData: FormData) {
+    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const setlistId = getString(formData, 'setlistId');
 
@@ -112,6 +123,8 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
     const sourceDate = new Date(setlist.worship_date);
     const nextWorshipDate = Number.isNaN(sourceDate.getTime()) ? new Date() : sourceDate;
     nextWorshipDate.setDate(nextWorshipDate.getDate() + 7);
+    const songOrder = normalizeSetlistSongOrder(setlist.song_order);
+    if (!songOrder.length) redirect('/dashboard/songs?error=invalid-setlist-songs');
 
     const { error } = await supabase
         .from('setlists')
@@ -120,7 +133,7 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
             title: `${setlist.title} Copy`,
             theme: setlist.theme,
             worship_date: nextWorshipDate.toISOString(),
-            song_order: setlist.song_order,
+            song_order: songOrder,
         });
 
     if (error) {
@@ -134,16 +147,17 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
 }
 
 export async function updateSongBpmPreset(formData: FormData) {
+    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const songId = getString(formData, 'songId');
     const bpmValue = getNullableString(formData, 'bpm');
-    const parsedBpm = bpmValue ? Number.parseInt(bpmValue, 10) : null;
+    const parsedBpm = bpmValue ? Number(bpmValue) : null;
 
     if (!songId) {
         redirect('/dashboard/songs?error=missing-song-id');
     }
 
-    if (bpmValue && (parsedBpm === null || !Number.isFinite(parsedBpm) || parsedBpm <= 0)) {
+    if (bpmValue && (parsedBpm === null || !Number.isInteger(parsedBpm) || parsedBpm < 20 || parsedBpm > 300)) {
         redirect('/dashboard/songs?error=invalid-bpm');
     }
 

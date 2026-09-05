@@ -24,6 +24,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -39,19 +40,20 @@
   --foreground: #1F2A2A;
   --primary: #153E3B;
   --primary-foreground: #FFFDF8;
-  --secondary: #C66A45;
+  --secondary: #A34426;
   --secondary-foreground: #FFFDF8;
   --surface: #FFFDF8;
   --accent: #4B6F8C;
   --accent-foreground: #FFFDF8;
-  --border: rgba(21, 62, 59, 0.12);
+  --border: #C6CEC7;
   --card: #FFFDF8;
   --card-foreground: #1F2A2A;
   --muted: #E9E4D8;
-  --muted-foreground: rgba(31, 42, 42, 0.62);
-  --input: rgba(21, 62, 59, 0.14);
+  --muted-foreground: #4F605C;
+  --input: #788C84;
   --ring: #153E3B;
   --destructive: #C2410C;
+  --destructive-foreground: #FFFFFF;
   color-scheme: light;
 }
 
@@ -60,19 +62,20 @@
   --foreground: #F7F5EF;
   --primary: #E2B68D;
   --primary-foreground: #101817;
-  --secondary: #78A08E;
+  --secondary: #A0C9B7;
   --secondary-foreground: #101817;
   --surface: #16211F;
   --accent: #9CB7CB;
   --accent-foreground: #101817;
-  --border: rgba(247, 245, 239, 0.12);
+  --border: #465B54;
   --card: #16211F;
   --card-foreground: #F7F5EF;
   --muted: #22302D;
-  --muted-foreground: rgba(247, 245, 239, 0.66);
-  --input: rgba(247, 245, 239, 0.16);
+  --muted-foreground: #B5C6BE;
+  --input: #78958A;
   --ring: #E2B68D;
-  --destructive: #F97316;
+  --destructive: #FFAD91;
+  --destructive-foreground: #33160D;
   color-scheme: dark;
 }
 
@@ -92,6 +95,16 @@
     -webkit-tap-highlight-color: transparent;
     text-rendering: optimizeLegibility;
     touch-action: manipulation;
+  }
+
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
 }
 
@@ -118,7 +131,7 @@
   }
 
   .tap-target {
-    min-height: 2.75rem;
+    min-height: 3rem;
     touch-action: manipulation;
   }
 
