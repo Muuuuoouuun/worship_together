@@ -102,14 +102,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, currentPath
             <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
                 {/* 모바일 상단 헤더 */}
                 <header className="sticky top-0 z-30 border-b border-border/80 bg-card/85 backdrop-blur-md pt-[env(safe-area-inset-top)] shadow-2xs lg:hidden">
-                    <div className="safe-area-x flex items-center justify-between gap-3 h-14">
-                        <Link href="/dashboard" className="inline-flex items-center gap-2 font-serif font-bold text-base text-primary">
-                            <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold font-serif">
+                    <div className="safe-area-x flex h-14 items-center justify-between gap-2">
+                        <Link href="/dashboard" aria-label="Worship Together 홈" className="inline-flex min-h-12 min-w-0 items-center gap-2 font-serif font-bold text-sm min-[360px]:text-base text-primary">
+                            <span aria-hidden="true" className="hidden size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold font-serif min-[360px]:flex">
                                 W
                             </span>
-                            <span>Worship Together</span>
+                            <span className="truncate">Worship Together</span>
                         </Link>
-                        <div className="flex items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2">
                             <ThemeToggle />
                             <Suspense fallback={<div className="size-8 rounded-full bg-muted animate-pulse" />}>
                                 <AccountMenu />

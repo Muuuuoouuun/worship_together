@@ -21,7 +21,7 @@ export type UrgentAlert = {
     body: string; authorId: string; createdAt: string; resolvedAt: string | null;
 };
 export type PlanningNotification = {
-    id: string; title: string; body: string; urgent: boolean; target: 'requests' | 'schedule';
+    id: string; title: string; body: string; urgent: boolean; target: 'requests' | 'schedule' | 'rotation';
     entityId: string; recipientIds: string[]; readBy: string[]; createdAt: string;
 };
 export type RotationTeam = { id: string; name: string; memberIds: string[] };

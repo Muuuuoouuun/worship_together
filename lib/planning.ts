@@ -58,7 +58,7 @@ const stateSchema = z.object({
     requests: z.array(z.object({ id, setlistId: z.string(), setlistTitle: z.string(), kind: z.enum(['question', 'reminder', 'change']), body: z.string(), authorId: id, leaderId: id, status: z.enum(['open', 'reviewing', 'resolved']), createdAt: stamp, updatedAt: stamp, replies: z.array(z.object({ id, authorId: id, body: z.string(), createdAt: stamp })) })),
     events: z.array(scheduleInput.extend({ id, cancelled: z.boolean(), slots: z.array(z.object({ id, role, memberId: id.nullable(), attendance: z.enum(['pending', 'confirmed', 'absent']), volunteers: z.array(id) })) })),
     alerts: z.array(z.object({ id, eventId: id, slotId: id.nullable(), kind: z.enum(['absence', 'substitute', 'notice']), body: z.string(), authorId: id, createdAt: stamp, resolvedAt: stamp.nullable() })),
-    notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp })),
+    notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp })),
     rotations: z.array(rotationGroupSchema).optional().default([]),
 });
 export function parsePlanningState(value: unknown): PlanningState {
@@ -85,7 +85,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
     const now = new Date().toISOString();
     const managers = members.filter(member => member.permission === 'owner' || member.role === 'leader').map(member => member.userId);
     const manage = () => { if (!canManagePlanning(members, userId)) throw new Error('인도자 또는 팀 관리자만 변경할 수 있습니다.'); };
-    const notify = (recipientIds: string[], title: string, text: string, target: 'requests' | 'schedule', entityId: string, urgent = false) => {
+    const notify = (recipientIds: string[], title: string, text: string, target: 'requests' | 'schedule' | 'rotation', entityId: string, urgent = false) => {
         const recipients = [...new Set(recipientIds)].filter(recipient => recipient !== userId && members.some(member => member.userId === recipient));
         if (recipients.length) state.notifications.unshift({ id: createClientId(), title, body: text, target, entityId, urgent, recipientIds: recipients, readBy: [], createdAt: now });
     };
@@ -282,18 +282,34 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             manage();
             if (state.rotations.length >= 20 && !command.rotationId) throw new Error('로테이션은 최대 20개까지 등록할 수 있습니다.');
             const existing = command.rotationId ? state.rotations.find(r => r.id === command.rotationId) : undefined;
+            if (command.rotationId && !existing) throw new Error('로테이션을 찾지 못했습니다.');
+            const teams = command.group.cycleType === 'team' ? command.group.teams ?? [] : [];
+            const individuals = command.group.cycleType === 'individual' ? command.group.members ?? [] : [];
+            const validateMembers = (ids: string[]) => {
+                if (new Set(ids).size !== ids.length) throw new Error('같은 순번에 팀원을 중복 등록할 수 없습니다.');
+                if (ids.some(mid => !members.some(member => member.userId === mid))) throw new Error('이 팀의 팀원만 등록할 수 있습니다.');
+            };
+            if (command.group.cycleType === 'team') {
+                if (teams.length < 2 || teams.length > 5 || teams.some(team => !team.memberIds.length)) throw new Error('2~5개 조에 각각 최소 1명 이상의 팀원을 등록해주세요.');
+                if (new Set(teams.map(team => team.id)).size !== teams.length) throw new Error('조 식별자는 중복될 수 없습니다.');
+                teams.forEach(team => validateMembers(team.memberIds));
+            } else {
+                if (individuals.length < 2) throw new Error('개인 순번제는 최소 2명의 팀원을 등록해주세요.');
+                validateMembers(individuals);
+            }
+            const total = command.group.cycleType === 'team' ? teams.length : individuals.length;
             const rot: RotationGroup = {
                 id: existing?.id ?? createClientId(),
                 name: command.group.name,
                 targetRole: command.group.targetRole,
                 cycleType: command.group.cycleType,
-                teams: command.group.teams?.map(t => ({ id: t.id || createClientId(), name: t.name, memberIds: t.memberIds.filter(mid => members.some(m => m.userId === mid)) })) ?? [],
-                members: command.group.members?.filter(mid => members.some(m => m.userId === mid)) ?? [],
-                currentStep: command.group.currentStep ?? existing?.currentStep ?? 0,
+                teams,
+                members: individuals,
+                currentStep: (command.group.currentStep ?? existing?.currentStep ?? 0) % total,
                 notes: command.group.notes ?? '',
             };
             if (existing) Object.assign(existing, rot); else state.rotations.push(rot);
-            notify(everyone, existing ? '로테이션 설정이 변경되었어요' : '새 로테이션이 등록되었어요', rot.name, 'schedule', rot.id);
+            notify(everyone, existing ? '로테이션 설정이 변경되었어요' : '새 로테이션이 등록되었어요', rot.name, 'rotation', rot.id);
             break;
         }
         case 'rotation.remove': {
@@ -317,53 +333,30 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             const rot = state.rotations.find(r => r.id === command.rotationId);
             if (!rot) throw new Error('로테이션을 찾지 못했습니다.');
             const event = eventById(command.eventId);
-            if (rot.cycleType === 'team') {
-                const teams = rot.teams ?? [];
-                if (!teams.length) throw new Error('로테이션에 등록된 조가 없습니다.');
-                const activeTeam = teams[rot.currentStep % teams.length];
-                for (const memberId of activeTeam.memberIds) {
-                    const member = members.find(m => m.userId === memberId);
-                    if (!member) continue;
-                    try { available(event, memberId); } catch { continue; }
-                    const vacantSlot = event.slots.find(s => s.memberId === null && (s.role === member.role || s.role === 'member'));
-                    if (vacantSlot) {
-                        vacantSlot.memberId = memberId;
-                        if (vacantSlot.role === 'member' && member.role !== 'member') vacantSlot.role = member.role;
-                        vacantSlot.attendance = 'pending';
-                    } else if (event.slots.length < 50) {
-                        event.slots.push({
-                            id: createClientId(),
-                            role: member.role !== 'member' ? member.role : 'vocal',
-                            memberId,
-                            attendance: 'pending',
-                            volunteers: [],
-                        });
-                    }
-                }
-                notify(everyone, '로테이션 조 배정이 적용되었어요', `${event.title} · ${rot.name} (${activeTeam.name})`, 'schedule', event.id);
-            } else {
-                const rotMembers = rot.members ?? [];
-                if (!rotMembers.length) throw new Error('로테이션에 등록된 팀원이 없습니다.');
-                const memberId = rotMembers[rot.currentStep % rotMembers.length];
+            const teams = rot.teams ?? [];
+            const individuals = rot.members ?? [];
+            const activeTeam = rot.cycleType === 'team' ? teams[rot.currentStep % teams.length] : undefined;
+            const assignees = rot.cycleType === 'team' ? activeTeam?.memberIds ?? [] : individuals.length ? [individuals[rot.currentStep % individuals.length]] : [];
+            if (!assignees.length) throw new Error('현재 순번에 등록된 팀원이 없습니다.');
+            // Commit the entire group or reject it; never report a partially applied roster as successful.
+            for (const memberId of assignees) {
                 const member = members.find(m => m.userId === memberId);
-                if (!member) throw new Error('선택된 순번의 팀원을 찾을 수 없습니다.');
+                if (!member) throw new Error('현재 순번에 이전 팀원이 있습니다. 로테이션을 다시 등록해주세요.');
                 available(event, memberId);
-                const roleToAssign = rot.targetRole !== 'all' ? rot.targetRole : (member.role !== 'member' ? member.role : 'vocal');
-                const vacantSlot = event.slots.find(s => s.memberId === null && s.role === roleToAssign);
+                const roleToAssign = rot.targetRole !== 'all' ? rot.targetRole : member.role;
+                const vacantSlot = event.slots.find(s => s.memberId === null && (s.role === roleToAssign || s.role === 'member'));
                 if (vacantSlot) {
                     vacantSlot.memberId = memberId;
+                    vacantSlot.role = roleToAssign;
                     vacantSlot.attendance = 'pending';
-                } else if (event.slots.length < 50) {
-                    event.slots.push({
-                        id: createClientId(),
-                        role: roleToAssign,
-                        memberId,
-                        attendance: 'pending',
-                        volunteers: [],
-                    });
+                    vacantSlot.volunteers = [];
+                    closeSlotAlerts(event.id, vacantSlot.id);
+                } else {
+                    if (event.slots.length >= 50) throw new Error('한 일정에 최대 50명을 배치할 수 있습니다.');
+                    event.slots.push({ id: createClientId(), role: roleToAssign, memberId, attendance: 'pending', volunteers: [] });
                 }
-                notify(everyone, '로테이션 담당자가 배정되었어요', `${event.title} · ${rot.name} (${member.name})`, 'schedule', event.id);
             }
+            notify(everyone, '로테이션 배정이 적용되었어요', `${event.title} · ${rot.name} · ${assignees.length}명`, 'schedule', event.id);
             break;
         }
     }

@@ -114,15 +114,16 @@ function TemplateForm({ eventId, ...actions }: Actions & { eventId: string }) {
 }
 
 function CopyRosterForm({ eventId, otherEvents, ...actions }: Actions & { eventId: string; otherEvents: TeamSchedule[] }) {
-    const validOthers = otherEvents.filter(e => e.id !== eventId && e.slots.length > 0);
+    const validOthers = otherEvents.filter(e => e.id !== eventId && !e.cancelled && e.slots.length > 0);
     const [sourceId, setSourceId] = useState(validOthers[0]?.id ?? '');
+    const selectedSourceId = validOthers.some(event => event.id === sourceId) ? sourceId : validOthers[0]?.id ?? '';
     if (validOthers.length === 0) return <p className="text-sm text-muted-foreground">배정을 복사해올 수 있는 이전 일정이 없습니다.</p>;
     return <CommandForm {...actions} submitLabel="이전 배정 복사해오기" build={() => {
-        if (!sourceId) throw new Error('복사할 원본 일정을 선택해 주세요.');
-        return { type: 'slots.copyFromEvent', targetEventId: eventId, sourceEventId: sourceId };
+        if (!selectedSourceId) throw new Error('복사할 원본 일정을 선택해 주세요.');
+        return { type: 'slots.copyFromEvent', targetEventId: eventId, sourceEventId: selectedSourceId };
     }}>
         <Field label="복사해올 원본 일정">
-            <select className={control} value={sourceId} onChange={e => setSourceId(e.target.value)}>
+            <select className={control} value={selectedSourceId} onChange={e => setSourceId(e.target.value)}>
                 {validOthers.map(e => (
                     <option key={e.id} value={e.id}>{e.title} · {planningDate(e.startsAt)} ({e.slots.length}명 구성)</option>
                 ))}

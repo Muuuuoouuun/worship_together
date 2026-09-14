@@ -542,7 +542,7 @@ test('recurring events create weekly schedules and reject non-managers', (t: Tes
 test('slot templates and roster copy populate slots with clash safety', (t: TestContext) => {
     const f = fixture(t);
     const event1 = createEvent(f, schedule({ startsAt: '2026-09-06T10:00:00+09:00', endsAt: '2026-09-06T11:00:00+09:00' }));
-    
+
     // Apply standard template (7 roles)
     const afterTemplate = f.send(owner.id, {
         type: 'slots.applyTemplate',
@@ -565,7 +565,7 @@ test('slot templates and roster copy populate slots with clash safety', (t: Test
 
     // Create next week's event
     const event2 = createEvent(f, schedule({ startsAt: '2026-09-13T10:00:00+09:00', endsAt: '2026-09-13T11:00:00+09:00' }));
-    
+
     // Copy roster from event1 to event2
     const afterCopy = f.send(owner.id, {
         type: 'slots.copyFromEvent',
@@ -649,3 +649,115 @@ test('rotations manage teams and individuals, cycle steps, and apply to event sl
     assert.equal(afterRemove.rotations?.[0].id, soundRot.id);
 });
 
+const rotationGroup = () => ({
+    name: '보컬 조별 교대', targetRole: 'vocal' as const, cycleType: 'team' as const,
+    teams: [
+        { id: 'a', name: '1조', memberIds: [author.id, other.id] },
+        { id: 'b', name: '2조', memberIds: [leader.id] },
+    ],
+});
+
+test('rotation validation rejects empty, duplicate and foreign rosters without changing stored data', t => {
+    const f = fixture(t);
+    for (const group of [
+        { ...rotationGroup(), teams: [] },
+        { ...rotationGroup(), teams: [{ id: 'a', name: '1조', memberIds: [] }, rotationGroup().teams[1]] },
+        { ...rotationGroup(), teams: [{ id: 'a', name: '1조', memberIds: ['outsider'] }, rotationGroup().teams[1]] },
+        { ...rotationGroup(), teams: [{ id: 'a', name: '1조', memberIds: [author.id, author.id] }, rotationGroup().teams[1]] },
+        { ...rotationGroup(), teams: [rotationGroup().teams[0], { ...rotationGroup().teams[1], id: 'a' }] },
+        { ...rotationGroup(), cycleType: 'individual', members: [author.id] },
+        { ...rotationGroup(), cycleType: 'individual', members: [author.id, author.id] },
+        { ...rotationGroup(), cycleType: 'individual', members: [author.id, 'outsider'] },
+    ]) rejectsAtomically(f, owner.id, { type: 'rotation.save', group }, /팀원|조|중복/);
+    rejectsAtomically(f, owner.id, { type: 'rotation.save', rotationId: 'missing', group: rotationGroup() }, /찾지 못했습니다/);
+});
+
+test('rotation commands require management and rotation notifications open the rotation tab', t => {
+    const f = fixture(t);
+    const group = rotationGroup();
+    const state = f.send(leader.id, { type: 'rotation.save', group, });
+    const rotationId = state.rotations![0].id;
+    const event = createEvent(f);
+    for (const command of [
+        { type: 'rotation.save', group },
+        { type: 'rotation.save', rotationId, group },
+        { type: 'rotation.step', rotationId, direction: 'next' },
+        { type: 'rotation.remove', rotationId },
+        { type: 'rotation.apply', rotationId, eventId: event.id },
+    ]) rejectsAtomically(f, other.id, command, managerError);
+    const notification = f.read(other.id).notifications.find(item => item.entityId === rotationId)!;
+    assert.equal(notification.target, 'rotation');
+    assert.equal(parsePlanningState(f.read(other.id)).notifications.find(item => item.id === notification.id)!.target, 'rotation');
+});
+
+test('team rotation rolls back all assignments and notifications when one member has a conflict', t => {
+    const f = fixture(t);
+    const rotationId = f.send(owner.id, { type: 'rotation.save', group: rotationGroup() }).rotations![0].id;
+    const occupied = createEvent(f, schedule({ title: '겹치는 연습' }));
+    addSlot(f, occupied.id, other.id);
+    const target = createEvent(f);
+    rejectsAtomically(f, owner.id, { type: 'rotation.apply', rotationId, eventId: target.id }, collisionError);
+});
+
+test('rotation uses the selected part, clears filled vacancy alerts and volunteers, and rejects repeat assignment', t => {
+    const f = fixture(t);
+    const rotationId = f.send(owner.id, { type: 'rotation.save', group: rotationGroup() }).rotations![0].id;
+    const event = createEvent(f);
+    const vacancy = addSlot(f, event.id, null);
+    f.send(owner.id, { type: 'alert.create', eventId: event.id, slotId: vacancy.id, kind: 'substitute', body: '보컬이 필요해요' });
+    f.send(other.id, { type: 'slot.volunteer', eventId: event.id, slotId: vacancy.id });
+    const applied = f.send(owner.id, { type: 'rotation.apply', rotationId, eventId: event.id });
+    const slots = applied.events.find(item => item.id === event.id)!.slots;
+    assert.deepEqual(slots.map(slot => [slot.role, slot.memberId]), [['vocal', author.id], ['vocal', other.id]]);
+    assert.deepEqual(slots[0].volunteers, []);
+    assert.ok(applied.alerts.find(alert => alert.slotId === vacancy.id)!.resolvedAt);
+    assert.equal(applied.rotations![0].currentStep, 0, 'applying should not silently advance the rotation');
+    rejectsAtomically(f, owner.id, { type: 'rotation.apply', rotationId, eventId: event.id }, collisionError);
+});
+
+test('team and individual rotations reject capacity overflow atomically but can fill an existing vacancy at capacity', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const first = addSlot(f, event.id, null);
+    for (let index = 1; index < 50; index++) addSlot(f, event.id, null);
+    for (const group of [
+        { ...rotationGroup(), targetRole: 'sound' },
+        { name: '음향 순번', targetRole: 'sound', cycleType: 'individual', members: [author.id, other.id] },
+    ]) {
+        const state = f.send(owner.id, { type: 'rotation.save', group });
+        const rotationId = state.rotations!.at(-1)!.id;
+        rejectsAtomically(f, owner.id, { type: 'rotation.apply', rotationId, eventId: event.id }, /최대 50명/);
+    }
+    const rotationId = f.read().rotations!.at(-1)!.id;
+    f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: first.id, role: 'sound', memberId: null });
+    const applied = f.send(owner.id, { type: 'rotation.apply', rotationId, eventId: event.id });
+    assert.equal(applied.events[0].slots.length, 50);
+    assert.equal(applied.events[0].slots[0].memberId, author.id);
+});
+
+test('rotation step normalization survives edits and the 20-group limit cannot be bypassed with a missing id', t => {
+    const f = fixture(t);
+    const group = { ...rotationGroup(), currentStep: 999 };
+    const rotationId = f.send(owner.id, { type: 'rotation.save', group }).rotations![0].id;
+    assert.equal(f.read().rotations![0].currentStep, 1);
+    assert.equal(f.send(owner.id, { type: 'rotation.step', rotationId, direction: 'next' }).rotations![0].currentStep, 0);
+    assert.equal(f.send(owner.id, { type: 'rotation.step', rotationId, direction: 'prev' }).rotations![0].currentStep, 1);
+    for (let index = 1; index < 20; index++) f.send(owner.id, { type: 'rotation.save', group });
+    rejectsAtomically(f, owner.id, { type: 'rotation.save', group }, /최대 20개/);
+    rejectsAtomically(f, owner.id, { type: 'rotation.save', rotationId: 'missing', group }, /찾지 못했습니다/);
+    assert.equal(f.send(owner.id, { type: 'rotation.save', rotationId, group: { ...group, name: '수정한 조' } }).rotations!.length, 20);
+});
+
+test('rotations reject former members and cancelled schedules without partial changes', t => {
+    const f = fixture(t);
+    const rotationId = f.send(owner.id, { type: 'rotation.save', group: rotationGroup() }).rotations![0].id;
+    const event = createEvent(f);
+    const previous = f.read();
+    const snapshot = structuredClone(previous);
+    assert.throws(() => applyPlanningCommand(previous, f.members.filter(member => member.userId !== other.id), owner.id, {
+        type: 'rotation.apply', rotationId, eventId: event.id,
+    }), /이전 팀원/);
+    assert.deepEqual(previous, snapshot);
+    f.send(owner.id, { type: 'event.cancel', eventId: event.id });
+    rejectsAtomically(f, owner.id, { type: 'rotation.apply', rotationId, eventId: event.id }, cancelledError);
+});

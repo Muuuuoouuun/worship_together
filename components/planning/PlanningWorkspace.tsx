@@ -130,11 +130,11 @@ function Board({ teamId, members, userId, online, initialTab, initialSetlist }: 
                     aria-controls={`panel-${item.id}`}
                     role="tab"
                     aria-selected={tab === item.id}
-                    className={`${button} ${tab === item.id ? 'bg-primary! text-primary-foreground!' : ''}`}
+                    className={`${button} min-w-0 flex-col px-2! text-xs! sm:flex-row sm:px-4! sm:text-sm! ${tab === item.id ? 'bg-primary! text-primary-foreground!' : ''}`}
                     onClick={() => setTab(item.id)}
                 >
-                    <item.icon size={17} />
-                    <span className="truncate">{item.title}</span>
+                    <item.icon size={17} className="shrink-0" />
+                    <span className="break-keep text-center">{item.title}</span>
                 </button>
             ))}
         </div>

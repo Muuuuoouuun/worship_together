@@ -19,7 +19,7 @@ export default function RotationPanel({ state, members, userId, busy, onCommand 
     const [pending, setPending] = useState(false);
     const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
 
-    // 사역 밸런스(Workload) 통계: 최근 60일 내 일정에서 멤버별 배정 횟수 계산
+    // 저장된 취소되지 않은 전체 일정의 배정 현황.
     const workload = useMemo(() => {
         const stats = new Map<string, { total: number; confirmed: number; roles: Set<WorshipRole> }>();
         for (const member of members) {
@@ -96,7 +96,7 @@ export default function RotationPanel({ state, members, userId, busy, onCommand 
                     팀원별 사역 현황 (서빙 횟수)
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                    특정 팀원에게 사역이 편중되지 않도록 최근 배정 횟수와 참여 파트를 점검하세요.
+                    저장된 전체 일정의 배정 횟수입니다. 취소된 일정은 제외하며, 실제 출석 횟수와는 다릅니다.
                 </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {workload.map(item => (
@@ -203,7 +203,8 @@ function RotationCard({
     const totalSteps = isTeam ? teams.length : indivMembers.length;
     const currentStep = totalSteps > 0 ? rotation.currentStep % totalSteps : 0;
 
-    const [selectedEventId, setSelectedEventId] = useState(upcomingEvents[0]?.id ?? '');
+    const [selectedEventId, setSelectedEventId] = useState('');
+    const eventId = upcomingEvents.some(event => event.id === selectedEventId) ? selectedEventId : upcomingEvents[0]?.id ?? '';
     const [confirmDelete, setConfirmDelete] = useState(false);
 
     // 현재 활성화된 순번/조 정보
@@ -211,9 +212,9 @@ function RotationCard({
     const currentMemberId = !isTeam && indivMembers.length > 0 ? indivMembers[currentStep] : null;
 
     return (
-        <article className={`${card} space-y-4`}>
+        <article className={`${card} space-y-4 break-words`}>
             <header className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-secondary/10 px-2.5 py-0.5 text-xs font-bold text-secondary">
                             {isTeam ? '조별 교대' : '개인 순번제'}
@@ -250,7 +251,8 @@ function RotationCard({
                     ) : (
                         <button
                             type="button"
-                            className="p-2 text-muted-foreground hover:text-destructive rounded-lg"
+                            className={`${button} text-muted-foreground hover:text-destructive`}
+                            aria-label={`${rotation.name} 로테이션 삭제`}
                             title="로테이션 삭제"
                             disabled={disabled}
                             onClick={() => setConfirmDelete(true)}
@@ -263,7 +265,7 @@ function RotationCard({
 
             {/* 현재 순번 안내 배너 */}
             <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                     <span className="text-xs font-bold text-primary tracking-wide uppercase">현재 순번 (다음 배정 대상)</span>
                     {isTeam ? (
                         <div className="mt-1">
@@ -320,10 +322,11 @@ function RotationCard({
                     {upcomingEvents.length === 0 ? (
                         <p className="text-xs text-muted-foreground">배정 가능한 다가오는 일정이 없습니다.</p>
                     ) : (
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                             <select
-                                className={`${control} text-sm flex-1`}
-                                value={selectedEventId}
+                                aria-label={`${rotation.name} 배정할 일정`}
+                                className={`${control} sm:flex-1`}
+                                value={eventId}
                                 onChange={e => setSelectedEventId(e.target.value)}
                             >
                                 {upcomingEvents.map(e => (
@@ -335,13 +338,14 @@ function RotationCard({
                             <button
                                 type="button"
                                 className={`${primary} text-xs px-3 shrink-0`}
-                                disabled={disabled || !selectedEventId}
-                                onClick={() => void onApply(selectedEventId)}
+                                disabled={disabled || !eventId}
+                                onClick={() => void onApply(eventId)}
                             >
                                 배정 적용
                             </button>
                         </div>
                     )}
+                    <p className="text-xs leading-5 text-muted-foreground">모두 배정 가능할 때 저장됩니다. 배정 후 다음 순번 버튼으로 순서를 넘겨주세요.</p>
                 </div>
             ) : null}
 
@@ -414,6 +418,7 @@ function RotationCreateForm({
         notes?: string;
     }) => Promise<boolean>;
 }) {
+    const formId = useId();
     const [name, setName] = useState('');
     const [cycleType, setCycleType] = useState<'team' | 'individual'>('team');
     const [targetRole, setTargetRole] = useState<WorshipRole | 'all'>('all');
@@ -461,6 +466,7 @@ function RotationCreateForm({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (disabled) return;
         setError('');
         if (!name.trim()) {
             setError('로테이션 이름을 입력해주세요.');
@@ -499,11 +505,13 @@ function RotationCreateForm({
     return (
         <form onSubmit={handleSubmit} className="space-y-4 text-sm">
             {error ? <p role="alert" className="text-destructive font-medium">{error}</p> : null}
-
+            <fieldset disabled={disabled} className="min-w-0 space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                    <label className="font-semibold block mb-1">로테이션 이름 (필수)</label>
+                    <label htmlFor={`${formId}-name`} className="font-semibold block mb-1">로테이션 이름 (필수)</label>
                     <input
+                        id={`${formId}-name`}
+                        maxLength={80}
                         className={control}
                         value={name}
                         onChange={e => setName(e.target.value)}
@@ -512,8 +520,9 @@ function RotationCreateForm({
                     />
                 </div>
                 <div>
-                    <label className="font-semibold block mb-1">순환 주기 방식</label>
+                    <label htmlFor={`${formId}-cycle`} className="font-semibold block mb-1">순환 주기 방식</label>
                     <select
+                        id={`${formId}-cycle`}
                         className={control}
                         value={cycleType}
                         onChange={e => setCycleType(e.target.value as 'team' | 'individual')}
@@ -525,13 +534,14 @@ function RotationCreateForm({
             </div>
 
             <div>
-                <label className="font-semibold block mb-1">대상 파트</label>
+                <label htmlFor={`${formId}-role`} className="font-semibold block mb-1">대상 파트</label>
                 <select
+                    id={`${formId}-role`}
                     className={control}
                     value={targetRole}
                     onChange={e => setTargetRole(e.target.value as WorshipRole | 'all')}
                 >
-                    <option value="all">전체 팀 (풀세션 조편성)</option>
+                    <option value="all">각 팀원의 기존 역할</option>
                     {Object.entries(worshipRoles).map(([val, lbl]) => (
                         <option key={val} value={val}>{lbl}</option>
                     ))}
@@ -541,10 +551,11 @@ function RotationCreateForm({
             {/* 조별 교대 설정 */}
             {cycleType === 'team' ? (
                 <div className="space-y-3 rounded-xl border border-border p-3 bg-muted/20">
-                    <div className="flex items-center justify-between">
-                        <span className="font-semibold">조 개수 설정</span>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <label htmlFor={`${formId}-count`} className="shrink-0 font-semibold">조 개수 설정</label>
                         <select
-                            className={`${control} w-28`}
+                            id={`${formId}-count`}
+                            className={`${control} w-28!`}
                             value={teamCount}
                             onChange={e => handleTeamCountChange(Number(e.target.value))}
                         >
@@ -556,8 +567,11 @@ function RotationCreateForm({
 
                     <div className="grid gap-3 sm:grid-cols-2">
                         {teams.map((t, idx) => (
-                            <div key={idx} className="rounded-xl border border-border bg-card p-3 space-y-2">
+                            <fieldset key={idx} className="min-w-0 rounded-xl border border-border bg-card p-3 space-y-2">
+                                <legend className="px-1 font-semibold">{idx + 1}조 팀원 선택</legend>
                                 <input
+                                    aria-label={`${idx + 1}조 이름`}
+                                    maxLength={50}
                                     className={`${control} font-bold`}
                                     value={t.name}
                                     onChange={e => {
@@ -567,26 +581,26 @@ function RotationCreateForm({
                                     placeholder={`${idx + 1}조 이름`}
                                 />
                                 <p className="text-xs text-muted-foreground">속할 팀원 선택 ({t.memberIds.length}명)</p>
-                                <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                                <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
                                     {members.map(m => {
                                         const checked = t.memberIds.includes(m.userId);
                                         return (
                                             <label
                                                 key={m.userId}
-                                                className="flex items-center gap-2 p-1.5 rounded hover:bg-muted cursor-pointer text-xs"
+                                                className="flex min-h-12 items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer text-sm break-words"
                                             >
                                                 <input
                                                     type="checkbox"
                                                     checked={checked}
                                                     onChange={() => toggleTeamMember(idx, m.userId)}
-                                                    className="rounded"
+                                                    className="size-5 shrink-0 rounded accent-primary"
                                                 />
                                                 <span>{m.name} ({worshipRoles[m.role]})</span>
                                             </label>
                                         );
                                     })}
                                 </div>
-                            </div>
+                            </fieldset>
                         ))}
                     </div>
                 </div>
@@ -594,21 +608,21 @@ function RotationCreateForm({
                 /* 개인 순번제 설정 */
                 <div className="space-y-2 rounded-xl border border-border p-3 bg-muted/20">
                     <p className="font-semibold">순환할 팀원 선택 (체크 순서대로 순번 구성)</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {members.map(m => {
                             const checked = selectedMembers.includes(m.userId);
                             const order = selectedMembers.indexOf(m.userId);
                             return (
                                 <label
                                     key={m.userId}
-                                    className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer text-xs ${
+                                    className={`flex min-h-12 items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
                                         checked ? 'border-primary bg-primary/10 font-bold' : 'border-border bg-card'
                                     }`}
-                                    onClick={() => toggleIndivMember(m.userId)}
                                 >
-                                    <span>{m.name} ({worshipRoles[m.role]})</span>
+                                    <input type="checkbox" checked={checked} onChange={() => toggleIndivMember(m.userId)} className="size-5 shrink-0 accent-primary" />
+                                    <span className="min-w-0 flex-1 break-words">{m.name} ({worshipRoles[m.role]})</span>
                                     {checked ? (
-                                        <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px]">
+                                        <span aria-hidden="true" className="h-6 w-6 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
                                             {order + 1}
                                         </span>
                                     ) : null}
@@ -620,8 +634,10 @@ function RotationCreateForm({
             )}
 
             <div>
-                <label className="font-semibold block mb-1">메모 (선택)</label>
+                <label htmlFor={`${formId}-notes`} className="font-semibold block mb-1">메모 (선택)</label>
                 <input
+                    id={`${formId}-notes`}
+                    maxLength={500}
                     className={control}
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
@@ -632,6 +648,7 @@ function RotationCreateForm({
             <button type="submit" className={primary} disabled={disabled}>
                 로테이션 그룹 저장
             </button>
+            </fieldset>
         </form>
     );
 }
