@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Bell, CalendarDays, MessageSquare, RefreshCw } from 'lucide-react';
+import { Bell, CalendarDays, MessageSquare, RefreshCw, ArrowLeftRight } from 'lucide-react';
 import { loadPlanningContext, updateTeamPlanning } from '@/actions/planningActions';
 import { DEMO_TEAM_ID } from '@/lib/constants';
 import { applyPlanningCommand, parsePlanningState, planningForViewer } from '@/lib/planning';
@@ -12,6 +12,7 @@ import { emptyPlanningState, planningDate, type PlanningCommand, type PlanningSt
 import type { OnlineTeam, TeamMember } from '@/types/team';
 import RequestsPanel from './RequestsPanel';
 import SchedulePanel from './SchedulePanel';
+import RotationPanel from './RotationPanel';
 
 const field = 'mt-2 min-h-12 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-base text-foreground';
 const button = 'inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
@@ -51,7 +52,7 @@ function Board({ teamId, members, userId, online, initialTab, initialSetlist }: 
     const searchParams = useSearchParams();
     const [inboxOpen, setInboxOpen] = useState(searchParams.get('inbox') === '1');
     const [state, setState] = useState<PlanningState>(emptyPlanningState);
-    const [tab, setTab] = useState(initialTab === 'requests' ? 'requests' : 'schedule');
+    const [tab, setTab] = useState(initialTab === 'requests' ? 'requests' : initialTab === 'rotation' ? 'rotation' : 'schedule');
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -117,9 +118,36 @@ function Board({ teamId, members, userId, online, initialTab, initialSetlist }: 
         <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm leading-6 text-muted-foreground">{online ? '팀에 함께 저장 · 새 알림 자동 확인' : '기기 저장 · 체험 중'}<br />앱을 닫은 상태의 푸시 알림은 지원하지 않습니다.</p><button className={button} onClick={() => void refresh()} disabled={busy}><RefreshCw size={16} /> 새로고침</button></div>
         {toast && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-secondary bg-card p-4"><p className="min-w-0 flex-1 break-words font-bold text-foreground">{toast}</p><button className={button} onClick={() => { setTab('schedule'); setToast(''); }}>긴급 요청 보기</button><button aria-label="새 알림 닫기" className={button} onClick={() => setToast('')}>닫기</button></div>}
         <details open={inboxOpen} onToggle={event => setInboxOpen(event.currentTarget.open)} className="rounded-2xl border border-border bg-card p-4"><summary className="flex min-h-12 cursor-pointer items-center gap-2 font-bold"><Bell size={19} /> 내 알림 <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">미확인 {unread.length}</span>{unread.some(item => item.urgent) && <span className="text-sm text-secondary">긴급 확인 필요</span>}</summary><p className="mb-3 text-xs leading-5 text-muted-foreground">‘확인했어요’를 눌렀을 때만 확인 상태로 기록합니다.</p><div className="space-y-3">{[...state.notifications].sort((a,b) => Number(a.readBy.includes(userId)) - Number(b.readBy.includes(userId))).map(item => <article key={item.id} className="rounded-xl border border-border p-4"><p className="font-bold">{item.urgent ? '긴급 · ' : ''}{item.title}</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{item.body}</p><p className="mt-2 text-xs text-muted-foreground">{planningDate(item.createdAt)} · {item.readBy.includes(userId) ? '확인함' : '미확인'}</p><div className="mt-3 flex flex-wrap gap-2"><button className={button} onClick={() => setTab(item.target)}>내용 보기</button>{!item.readBy.includes(userId) && <button className={button} disabled={busy} onClick={() => void onCommand({ type: 'notification.read', notificationId: item.id })}>확인했어요</button>}</div></article>)}{!state.notifications.length && <p className="py-3 text-sm text-muted-foreground">아직 받은 알림이 없습니다.</p>}</div></details>
-        <div role="tablist" aria-label="예배 준비 메뉴" className="grid grid-cols-2 gap-2">{[{ id: 'schedule', title: '일정 · 인원 배치', icon: CalendarDays }, { id: 'requests', title: '인도자에게 요청', icon: MessageSquare }].map(item => <button key={item.id} id={`tab-${item.id}`} aria-controls={`panel-${item.id}`} role="tab" aria-selected={tab === item.id} className={`${button} ${tab === item.id ? 'bg-primary! text-primary-foreground!' : ''}`} onClick={() => setTab(item.id)}><item.icon size={17} />{item.title}</button>)}</div>
+        <div role="tablist" aria-label="예배 준비 메뉴" className="grid grid-cols-3 gap-2">
+            {[
+                { id: 'schedule', title: '일정 · 인원 배치', icon: CalendarDays },
+                { id: 'rotation', title: '담당 & 로테이션', icon: ArrowLeftRight },
+                { id: 'requests', title: '인도자에게 요청', icon: MessageSquare }
+            ].map(item => (
+                <button
+                    key={item.id}
+                    id={`tab-${item.id}`}
+                    aria-controls={`panel-${item.id}`}
+                    role="tab"
+                    aria-selected={tab === item.id}
+                    className={`${button} ${tab === item.id ? 'bg-primary! text-primary-foreground!' : ''}`}
+                    onClick={() => setTab(item.id)}
+                >
+                    <item.icon size={17} />
+                    <span className="truncate">{item.title}</span>
+                </button>
+            ))}
+        </div>
         {error && <p role="alert" className="rounded-xl border border-destructive bg-card p-4 text-sm font-semibold text-destructive">{error}</p>}
         <p role="status" className="text-sm font-semibold">{busy ? '저장 중…' : !loaded ? '준비 자료를 불러오는 중…' : message}</p>
-        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>{tab === 'schedule' ? <SchedulePanel {...panelProps} /> : <RequestsPanel {...panelProps} initialSetlist={initialSetlist} />}</div>
+        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+            {tab === 'schedule' ? (
+                <SchedulePanel {...panelProps} />
+            ) : tab === 'rotation' ? (
+                <RotationPanel {...panelProps} />
+            ) : (
+                <RequestsPanel {...panelProps} initialSetlist={initialSetlist} />
+            )}
+        </div>
     </div>;
 }

@@ -519,3 +519,133 @@ test('two SQLite connections preserve private requests and read receipts across 
     const reopened = connect();
     assert.deepEqual(people.map(person => reopened.planning(f.teamId, person.id)), snapshot);
 });
+
+test('recurring events create weekly schedules and reject non-managers', (t: TestContext) => {
+    const f = fixture(t);
+    assert.throws(() => f.send(author.id, {
+        type: 'event.createRecurring',
+        input: schedule({ title: '주일 예배' }),
+        weeksCount: 4,
+    }), managerError);
+
+    const state = f.send(owner.id, {
+        type: 'event.createRecurring',
+        input: schedule({ title: '정기 주일예배', startsAt: '2026-09-06T11:00:00+09:00', endsAt: '2026-09-06T12:00:00+09:00' }),
+        weeksCount: 3,
+    });
+    assert.equal(state.events.length, 3);
+    assert.equal(state.events[0].startsAt, '2026-09-06T02:00:00.000Z');
+    assert.equal(state.events[1].startsAt, '2026-09-13T02:00:00.000Z');
+    assert.equal(state.events[2].startsAt, '2026-09-20T02:00:00.000Z');
+});
+
+test('slot templates and roster copy populate slots with clash safety', (t: TestContext) => {
+    const f = fixture(t);
+    const event1 = createEvent(f, schedule({ startsAt: '2026-09-06T10:00:00+09:00', endsAt: '2026-09-06T11:00:00+09:00' }));
+    
+    // Apply standard template (7 roles)
+    const afterTemplate = f.send(owner.id, {
+        type: 'slots.applyTemplate',
+        eventId: event1.id,
+        templateKey: 'standard',
+    });
+    const updatedEvent1 = afterTemplate.events.find(e => e.id === event1.id)!;
+    assert.equal(updatedEvent1.slots.length, 7);
+    assert.equal(updatedEvent1.slots[0].role, 'leader');
+
+    // Assign author to vocal slot
+    const vocalSlot = updatedEvent1.slots.find(s => s.role === 'vocal')!;
+    f.send(owner.id, {
+        type: 'slot.save',
+        eventId: event1.id,
+        slotId: vocalSlot.id,
+        role: 'vocal',
+        memberId: author.id,
+    });
+
+    // Create next week's event
+    const event2 = createEvent(f, schedule({ startsAt: '2026-09-13T10:00:00+09:00', endsAt: '2026-09-13T11:00:00+09:00' }));
+    
+    // Copy roster from event1 to event2
+    const afterCopy = f.send(owner.id, {
+        type: 'slots.copyFromEvent',
+        targetEventId: event2.id,
+        sourceEventId: event1.id,
+    });
+    const updatedEvent2 = afterCopy.events.find(e => e.id === event2.id)!;
+    assert.equal(updatedEvent2.slots.length, 7);
+    const copiedVocal = updatedEvent2.slots.find(s => s.role === 'vocal')!;
+    assert.equal(copiedVocal.memberId, author.id);
+});
+
+test('rotations manage teams and individuals, cycle steps, and apply to event slots', (t: TestContext) => {
+    const f = fixture(t);
+    // 1. Team-based rotation
+    const saveState = f.send(owner.id, {
+        type: 'rotation.save',
+        group: {
+            name: '주일 찬양팀 조별 교대',
+            targetRole: 'all',
+            cycleType: 'team',
+            teams: [
+                { id: 'team-a', name: '1조 (기드온)', memberIds: [author.id, other.id] },
+                { id: 'team-b', name: '2조 (바라)', memberIds: [leader.id] },
+            ],
+            notes: '격주로 교대',
+        },
+    });
+    assert.equal(saveState.rotations?.length, 1);
+    const rot = saveState.rotations![0];
+    assert.equal(rot.name, '주일 찬양팀 조별 교대');
+    assert.equal(rot.currentStep, 0);
+
+    // Step to next
+    const stepped = f.send(owner.id, {
+        type: 'rotation.step',
+        rotationId: rot.id,
+        direction: 'next',
+    });
+    assert.equal(stepped.rotations![0].currentStep, 1);
+
+    // Step prev
+    const steppedBack = f.send(owner.id, {
+        type: 'rotation.step',
+        rotationId: rot.id,
+        direction: 'prev',
+    });
+    assert.equal(steppedBack.rotations![0].currentStep, 0);
+
+    // Apply rotation (team 1) to event
+    const event = createEvent(f);
+    const applied = f.send(owner.id, {
+        type: 'rotation.apply',
+        rotationId: rot.id,
+        eventId: event.id,
+    });
+    const updatedEvent = applied.events.find(e => e.id === event.id)!;
+    // author and other should have slots created/assigned
+    assert.ok(updatedEvent.slots.some(s => s.memberId === author.id));
+    assert.ok(updatedEvent.slots.some(s => s.memberId === other.id));
+
+    // 2. Individual rotation
+    const saveIndiv = f.send(owner.id, {
+        type: 'rotation.save',
+        group: {
+            name: '음향 엔지니어 순번',
+            targetRole: 'sound',
+            cycleType: 'individual',
+            members: [other.id, author.id],
+        },
+    });
+    const soundRot = saveIndiv.rotations!.find(r => r.name === '음향 엔지니어 순번')!;
+    assert.equal(soundRot.currentStep, 0);
+
+    // Remove rotation
+    const afterRemove = f.send(owner.id, {
+        type: 'rotation.remove',
+        rotationId: rot.id,
+    });
+    assert.equal(afterRemove.rotations?.length, 1);
+    assert.equal(afterRemove.rotations?.[0].id, soundRot.id);
+});
+
