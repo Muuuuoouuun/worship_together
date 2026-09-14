@@ -43,6 +43,7 @@ import {
     ArrowLeft,
     AudioLines,
     BadgeCheck,
+    Check,
     ChevronLeft,
     ChevronRight,
     Clock3,
@@ -201,7 +202,7 @@ function getRealtimeStatusMeta(status: RealtimeConnectionStatus, isDemoMode: boo
             };
         case 'reconnecting':
             return {
-                dot: 'bg-amber-400',
+                dot: 'sync-pulse-warning bg-amber-400',
                 label: '재연결',
                 tone: 'bg-amber-400/15 text-amber-700 dark:text-amber-200',
             };
@@ -284,6 +285,7 @@ export default function SessionWorkspace({
     const [autoAdvanceSeconds, setAutoAdvanceSeconds] = useState(12);
     const [wakeLockState, setWakeLockState] = useState<'idle' | 'active' | 'unsupported' | 'released'>('idle');
     const [recentSentPresetId, setRecentSentPresetId] = useState<string | null>(null);
+    const [feedbackSentSuccess, setFeedbackSentSuccess] = useState(false);
     const recentSentPresetTimeoutRef = useRef<number | null>(null);
     const [isStatePending, startStateTransition] = useTransition();
     const [isFeedbackPending, startFeedbackTransition] = useTransition();
@@ -591,6 +593,8 @@ export default function SessionWorkspace({
         startFeedbackTransition(async () => {
             try {
                 await sendFeedbackMessage(message, selectedFeedbackRole);
+                setFeedbackSentSuccess(true);
+                setTimeout(() => setFeedbackSentSuccess(false), 2400);
             } catch (error) {
                 console.error('Failed to submit session feedback:', error);
                 setFeedbackMessage(message);
@@ -741,14 +745,21 @@ export default function SessionWorkspace({
                             대시보드로 돌아가기
                         </Link>
                         <div className="flex flex-wrap items-center gap-3">
-                            <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] ${isActive ? 'bg-red-500/10 text-red-500' : 'bg-primary/5 text-muted-foreground'}`}>
+                            <span className={`relative inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] ${isActive ? 'bg-red-500/10 text-red-500 shadow-[0_0_16px_rgba(239,68,68,0.15)]' : 'bg-primary/5 text-muted-foreground'}`}>
+                                {isActive && (
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-pulse-ring absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                                        <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                                    </span>
+                                )}
                                 {isActive ? '라이브 세션' : '세션 종료'}
                             </span>
-                            <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] ${sessionStatusTone}`}>
+                            <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] transition-all ${sessionStatusTone}`}>
                                 {sessionStatusLabel}
                             </span>
                             {headerIsPending && (
-                                <span className="rounded-full bg-primary/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                                    <RefreshCw size={11} className="animate-spin" />
                                     동기화 중
                                 </span>
                             )}
@@ -1103,8 +1114,8 @@ export default function SessionWorkspace({
                                                     type="button"
                                                     onClick={() => commitState({ section: sectionName })}
                                                     disabled={!canControlLocally}
-                                                    className={`tap-target rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${currentSection === sectionName
-                                                        ? 'border-secondary/30 bg-secondary/10 text-secondary'
+                                                    className={`tap-target tap-bounce rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${currentSection === sectionName
+                                                        ? 'border-secondary bg-secondary/15 text-secondary shadow-[0_0_18px_rgba(163,68,38,0.22)] animate-pulse-glow'
                                                         : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                                                 >
                                                     {sectionName}
@@ -1354,25 +1365,25 @@ export default function SessionWorkspace({
                                                     return (
                                                         <div
                                                             key={preset.id}
-                                                            className={`rounded-2xl border p-2 transition ${isSent ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/10 bg-card/60'}`}
+                                                            className={`rounded-2xl border p-2 transition-all duration-200 ${isSent ? 'stage-action-sent border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 shadow-[0_0_24px_rgba(16,185,129,0.25)]' : 'border-primary/10 bg-card/60 hover:border-primary/20'}`}
                                                         >
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleQuickPresetSend(preset.message, preset.role, preset.id)}
                                                                 disabled={!isActive || isFeedbackPending}
-                                                                className="tap-target w-full rounded-xl px-2 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-45"
+                                                                className="tap-target tap-bounce w-full rounded-xl px-2 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-45"
                                                             >
                                                                 <div className="flex items-start gap-3">
-                                                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${presetMeta.iconTone}`}>
-                                                                        <PresetIcon size={15} />
+                                                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform ${isSent ? 'bg-emerald-500 text-white animate-success-bounce' : presetMeta.iconTone}`}>
+                                                                        {isSent ? <Check size={16} className="animate-check-pop" /> : <PresetIcon size={15} />}
                                                                     </div>
                                                                     <div className="min-w-0 flex-1">
                                                                         <div className="flex items-center justify-between gap-3">
                                                                             <p className="truncate text-sm font-semibold">
                                                                                 {preset.label}
                                                                             </p>
-                                                                            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                                                                                {isSent ? 'Sent' : 'Tap'}
+                                                                            <span className={`text-[10px] font-bold uppercase tracking-[0.16em] ${isSent ? 'text-emerald-600 dark:text-emerald-400 font-extrabold animate-check-pop' : 'text-muted-foreground'}`}>
+                                                                                {isSent ? '전송 완료' : 'Tap'}
                                                                             </span>
                                                                         </div>
                                                                         <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -1389,7 +1400,7 @@ export default function SessionWorkspace({
                                                                 type="button"
                                                                 onClick={() => handleQuickPresetEdit(preset)}
                                                                 disabled={!canManageQuickPresets || isPresetPending}
-                                                                className="tap-target mt-1 inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-muted-foreground transition hover:bg-primary/5 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                                                                className="tap-target tap-bounce mt-1 inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-muted-foreground transition hover:bg-primary/5 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                                                             >
                                                                 <Pencil size={13} />
                                                                 설정
@@ -1428,10 +1439,24 @@ export default function SessionWorkspace({
                                             <button
                                                 type="submit"
                                                 disabled={!isActive || isFeedbackPending || feedbackMessage.trim().length === 0}
-                                                className="tap-target inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-surface transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
+                                                className={`tap-target tap-bounce inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all duration-200 ${feedbackSentSuccess ? 'bg-emerald-600 text-white shadow-[0_0_20px_rgba(5,150,105,0.35)]' : 'bg-primary text-surface hover:scale-[1.01]'} disabled:cursor-not-allowed disabled:opacity-45`}
                                             >
-                                                <Send size={15} />
-                                                큐 보내기
+                                                {isFeedbackPending ? (
+                                                    <>
+                                                        <Send size={15} className="animate-send-fly" />
+                                                        <span>전송 중…</span>
+                                                    </>
+                                                ) : feedbackSentSuccess ? (
+                                                    <>
+                                                        <Check size={16} className="animate-check-pop text-emerald-100" />
+                                                        <span className="font-bold">전송 완료!</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Send size={15} />
+                                                        <span>큐 보내기</span>
+                                                    </>
+                                                )}
                                             </button>
                                         </div>
                                     </div>

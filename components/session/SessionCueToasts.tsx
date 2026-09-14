@@ -100,32 +100,39 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
                 return (
                     <div
                         key={entry.id}
-                        className={`overflow-hidden rounded-lg border px-4 py-4 shadow-2xl backdrop-blur-xl transition ${meta.containerClassName}`}
+                        className={`animate-toast-in relative overflow-hidden rounded-xl border px-4 py-4 shadow-2xl backdrop-blur-xl transition ${meta.containerClassName}`}
                     >
-                        <div className="flex items-start gap-3">
-                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${meta.iconClassName}`}>
-                                <Icon size={17} />
+                        {/* Toast Lifetime Progress Bar */}
+                        <div
+                            className="animate-toast-progress absolute inset-x-0 top-0 h-1 bg-current/25 origin-left"
+                            style={{ '--toast-duration': `${TOAST_TTL_MS}ms` } as React.CSSProperties}
+                        />
+
+                        <div className="flex items-start gap-3 pt-0.5">
+                            <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${meta.iconClassName}`}>
+                                <span className="absolute inset-0 rounded-lg bg-current/20 animate-pulse-ring" />
+                                <Icon size={17} className="relative z-10" />
                             </div>
                             <div className="min-w-0 flex-1">
                                 <div className="flex items-start justify-between gap-3">
                                     <div>
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.2em]">
+                                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] opacity-80">
                                             Live cue | {meta.label}
                                         </p>
-                                        <p className="mt-2 text-sm font-semibold leading-relaxed">
+                                        <p className="mt-1.5 text-sm font-semibold leading-relaxed">
                                             {entry.message}
                                         </p>
                                     </div>
                                     <button
                                         type="button"
                                         onClick={() => dismissToast(entry.id)}
-                                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card/70 text-muted-foreground transition hover:bg-card hover:text-primary"
+                                        className="tap-bounce flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-card/70 text-muted-foreground transition hover:bg-card hover:text-primary active:scale-90"
                                         aria-label="라이브 큐 닫기"
                                     >
                                         <X size={14} />
                                     </button>
                                 </div>
-                                <p className="mt-3 truncate text-xs">
+                                <p className="mt-2.5 truncate text-xs opacity-75">
                                     {[entry.songTitle ?? 'General cue', entry.section, `Page ${entry.page}`]
                                         .filter(Boolean)
                                         .join(' | ')}

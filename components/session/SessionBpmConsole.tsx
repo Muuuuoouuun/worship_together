@@ -104,17 +104,42 @@ export default function SessionBpmConsole({
                                 </div>
                                 <div className="absolute bottom-3 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full bg-secondary" />
                                 {metronomeActive ? (
-                                    <div className="bpm-beat-ring absolute bottom-1 left-1/2 h-12 w-12 -translate-x-1/2 rounded-full border border-secondary/40" />
+                                    <>
+                                        <div className="bpm-beat-ring absolute bottom-1 left-1/2 h-12 w-12 -translate-x-1/2 rounded-full border border-secondary/40" />
+                                        {displayBeat === 1 && displayBlink && (
+                                            <div className="animate-pulse-ring absolute bottom-1 left-1/2 h-12 w-12 -translate-x-1/2 rounded-full border-2 border-secondary/70" />
+                                        )}
+                                    </>
                                 ) : null}
                                 <div className={`absolute right-3 top-3 h-2.5 w-2.5 rounded-full ${displayBlink ? 'bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.45)]' : 'bg-primary/20'} transition duration-150`} />
                             </div>
                             <div className="flex items-center gap-2">
-                                {beatDots.map((beat) => (
-                                    <span
-                                        key={beat}
-                                        className={`h-2.5 w-2.5 rounded-full transition-all ${displayBeat === beat && displayBlink ? 'scale-125 bg-secondary' : 'bg-primary/15'}`}
-                                    />
-                                ))}
+                                {beatDots.map((beat) => {
+                                    const isCurrentBeat = displayBeat === beat && displayBlink;
+                                    const isDownbeat = beat === 1;
+
+                                    return (
+                                        <span
+                                            key={beat}
+                                            className={`relative flex items-center justify-center transition-all ${isDownbeat ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5'}`}
+                                        >
+                                            {isCurrentBeat && isDownbeat && (
+                                                <span className="animate-pulse-ring absolute inset-0 rounded-full bg-secondary/60" />
+                                            )}
+                                            <span
+                                                className={`h-full w-full rounded-full transition-all duration-100 ${
+                                                    isCurrentBeat
+                                                        ? isDownbeat
+                                                            ? 'scale-125 bg-secondary shadow-[0_0_14px_rgba(163,68,38,0.7)]'
+                                                            : 'scale-115 bg-secondary'
+                                                        : isDownbeat
+                                                            ? 'bg-primary/30 border border-primary/25'
+                                                            : 'bg-primary/15'
+                                                }`}
+                                            />
+                                        </span>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
@@ -143,7 +168,7 @@ export default function SessionBpmConsole({
                                 type="button"
                                 onClick={onToggleBpmEnabled}
                                 disabled={!isActive || !canControlLocally || (!currentBpm && !bpmEnabled)}
-                                className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${bpmEnabled ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
+                                className={`tap-target tap-bounce inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${bpmEnabled ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 {bpmEnabled ? <EyeOff size={16} /> : <Eye size={16} />}
                                 {bpmEnabled ? '메트로놈 끄기' : '메트로놈 켜기'}
@@ -152,7 +177,7 @@ export default function SessionBpmConsole({
                                 type="button"
                                 onClick={onToggleAutoBpmSync}
                                 disabled={!isActive || !canControlLocally}
-                                className={`tap-target inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${autoBpmSync ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
+                                className={`tap-target tap-bounce inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${autoBpmSync ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
                             >
                                 <Zap size={16} />
                                 {autoBpmSync ? '자동 적용 켜짐' : '자동 적용 꺼짐'}
@@ -166,7 +191,7 @@ export default function SessionBpmConsole({
                                     type="button"
                                     onClick={() => onAdjustBpm(delta)}
                                     disabled={!isActive || !canControlLocally}
-                                    className="tap-target rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
+                                    className="tap-target tap-bounce rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
                                 >
                                     {delta > 0 ? `+${delta}` : delta}
                                 </button>
@@ -177,7 +202,7 @@ export default function SessionBpmConsole({
                             type="button"
                             onClick={onApplySongPreset}
                             disabled={!isActive || !canControlLocally || !songPresetBpm}
-                            className="tap-target mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-surface transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
+                            className="tap-target tap-bounce mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-surface transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
                         >
                             <AudioLines size={16} />
                             현재 곡 BPM 적용

@@ -3,16 +3,8 @@ import GlassCard from '@/components/ui/GlassCard';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import AccountMenu from '@/components/auth/AccountMenu';
 import PlanningInbox from '@/components/planning/PlanningInbox';
-import {
-    BadgeCheck,
-    CalendarDays,
-    HandHeart,
-    HeartHandshake,
-    LayoutGrid,
-    ListMusic,
-    UsersRound,
-    type LucideIcon,
-} from 'lucide-react';
+import MobileNav from './MobileNav';
+import { primaryNavItems, secondaryNavItems } from './navItems';
 import Link from 'next/link';
 
 interface DashboardLayoutProps {
@@ -20,36 +12,30 @@ interface DashboardLayoutProps {
     currentPath?: string;
 }
 
-type NavItem = {
-    icon: LucideIcon;
-    label: string;
-    href: string;
-};
-
-const navItems: NavItem[] = [
-    { icon: LayoutGrid, label: '오늘', href: '/dashboard' },
-    { icon: ListMusic, label: '콘티·악보', href: '/dashboard/songs' },
-    { icon: UsersRound, label: '팀·초대', href: '/dashboard/team' },
-    { icon: CalendarDays, label: '일정·요청', href: '/dashboard/planning' },
-    { icon: HeartHandshake, label: '팀 커뮤니티', href: '/community' },
-    { icon: HandHeart, label: '케어', href: '/care' },
-    { icon: BadgeCheck, label: '섬김', href: '/serve' },
-    { icon: UsersRound, label: '그룹', href: '/groups' },
-];
-
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, currentPath = '/dashboard' }) => {
     return (
-        <div className="flex min-h-screen">
+        <div className="flex min-h-screen bg-background text-foreground">
             <Suspense fallback={null}><PlanningInbox /></Suspense>
+
+            {/* 데스크톱 사이드바 */}
             <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-card lg:flex">
-                <div className="p-8">
-                    <Link href="/dashboard" className="inline-flex min-h-12 items-center rounded-lg">
-                        <h1 className="text-xl font-serif font-bold text-primary">Worship Together</h1>
+                <div className="p-6">
+                    <Link href="/dashboard" className="inline-flex min-h-12 items-center gap-2.5 rounded-xl transition-opacity hover:opacity-80">
+                        <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground font-serif font-bold text-lg shadow-xs">
+                            W
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-lg font-serif font-bold tracking-tight text-primary">Worship Together</span>
+                            <span className="text-[11px] font-medium text-muted-foreground">함께 준비하는 예배</span>
+                        </div>
                     </Link>
                 </div>
 
-                <nav aria-label="주 메뉴" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-1">
-                    {navItems.map((item) => {
+                <nav aria-label="주 메뉴" className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-4 py-2">
+                    <div className="px-3 pb-2 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
+                        예배 운영
+                    </div>
+                    {primaryNavItems.map((item) => {
                         const active = currentPath === item.href;
 
                         return (
@@ -57,77 +43,88 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, currentPath
                                 key={item.label}
                                 href={item.href}
                                 aria-current={active ? 'page' : undefined}
-                                className={`flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 transition-colors ${active
-                                    ? 'bg-primary font-bold text-primary-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                                    }`}
+                                className={`flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all ${
+                                    active
+                                        ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                                        : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                                }`}
                             >
-                                <item.icon size={20} />
+                                <item.icon size={19} className="shrink-0" />
+                                <span>{item.label}</span>
+                            </Link>
+                        );
+                    })}
+
+                    <div className="mt-4 px-3 pb-2 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
+                        나눔과 돌봄
+                    </div>
+                    {secondaryNavItems.map((item) => {
+                        const active = currentPath === item.href;
+
+                        return (
+                            <Link
+                                key={item.label}
+                                href={item.href}
+                                aria-current={active ? 'page' : undefined}
+                                className={`flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all ${
+                                    active
+                                        ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                                        : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                                }`}
+                            >
+                                <item.icon size={19} className="shrink-0" />
                                 <span>{item.label}</span>
                             </Link>
                         );
                     })}
                 </nav>
 
-                <div className="space-y-3 p-4">
+                <div className="space-y-3 p-4 border-t border-border/60">
                     <ThemeToggle />
                     <div className="[&_details>div]:bottom-[calc(100%+8px)] [&_details>div]:left-0 [&_details>div]:right-auto [&_details>div]:top-auto">
-                        <Suspense fallback={<p role="status" className="min-h-12 py-3 text-sm text-muted-foreground">계정 확인 중…</p>}>
+                        <Suspense fallback={<p role="status" className="min-h-10 py-2 text-sm text-muted-foreground">계정 확인 중…</p>}>
                             <AccountMenu />
                         </Suspense>
                     </div>
-                    <GlassCard className="flex items-center gap-3 border-transparent p-3">
-                        <div className="h-8 w-8 rounded-md bg-secondary/15" />
+                    <GlassCard className="flex items-center gap-3 border-border/60 p-3 bg-muted/40">
+                        <div className="h-8 w-8 rounded-lg bg-secondary/15 flex items-center justify-center font-bold text-secondary text-xs">
+                            WT
+                        </div>
                         <div className="flex-1 overflow-hidden">
-                            <p className="truncate text-sm font-bold text-primary">함께 준비하는 예배</p>
-                            <p className="truncate text-xs text-muted-foreground">웹 프로토타입</p>
+                            <p className="truncate text-xs font-bold text-foreground">Worship Together</p>
+                            <p className="truncate text-[11px] text-muted-foreground">모바일·웹 예배 플랫폼</p>
                         </div>
                     </GlassCard>
                 </div>
             </aside>
 
+            {/* 메인 영역 */}
             <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
-                <header className="sticky top-0 z-30 border-b border-border bg-card pt-[env(safe-area-inset-top)] shadow-sm lg:hidden">
-                    <div className="safe-area-x flex flex-wrap items-center justify-between gap-2 py-2">
-                        <Link href="/dashboard" className="inline-flex min-h-12 items-center rounded-lg text-base font-serif font-bold text-primary sm:text-lg">
-                            Worship Together
+                {/* 모바일 상단 헤더 */}
+                <header className="sticky top-0 z-30 border-b border-border/80 bg-card/85 backdrop-blur-md pt-[env(safe-area-inset-top)] shadow-2xs lg:hidden">
+                    <div className="safe-area-x flex items-center justify-between gap-3 h-14">
+                        <Link href="/dashboard" className="inline-flex items-center gap-2 font-serif font-bold text-base text-primary">
+                            <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold font-serif">
+                                W
+                            </span>
+                            <span>Worship Together</span>
                         </Link>
-                        <div className="ml-auto flex min-w-0 items-center gap-2">
+                        <div className="flex items-center gap-2">
                             <ThemeToggle />
-                            <Suspense fallback={<p role="status" className="min-h-12 py-3 text-sm text-muted-foreground">계정 확인 중…</p>}>
+                            <Suspense fallback={<div className="size-8 rounded-full bg-muted animate-pulse" />}>
                                 <AccountMenu />
                             </Suspense>
                         </div>
                     </div>
-                    <nav aria-label="주 메뉴" className="safe-area-x grid grid-cols-4 gap-1 pb-3 sm:gap-2">
-                        {navItems.slice(0, 4).map((item) => {
-                            const active = currentPath === item.href;
-
-                            return (
-                                <Link
-                                    key={item.label}
-                                    href={item.href}
-                                    aria-current={active ? 'page' : undefined}
-                                    className={`tap-target inline-flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition sm:flex-row sm:px-2 sm:text-sm ${active
-                                        ? 'bg-primary text-primary-foreground shadow-sm'
-                                        : 'border border-border bg-card text-foreground hover:bg-muted'
-                                        }`}
-                                >
-                                    <item.icon size={16} />
-                                    <span>{item.label}</span>
-                                </Link>
-                            );
-                        })}
-                    </nav>
-                    <details className="safe-area-x pb-1 text-sm text-muted-foreground">
-                        <summary className="min-h-12 cursor-pointer rounded-lg py-3">나눔·돌봄 더 보기</summary>
-                        <div className="flex flex-wrap gap-3 py-2">{navItems.slice(4).map((item) => <Link className="tap-target inline-flex items-center rounded-lg border border-border bg-card px-3 text-foreground hover:bg-muted" key={item.href} href={item.href}>{item.label}</Link>)}</div>
-                    </details>
                 </header>
 
-                <main className="app-bottom-space flex-1 p-4 sm:p-6 md:p-10 lg:p-12 lg:pb-32">
+                {/* 메인 콘텐츠 영역 */}
+                <main className="flex-1 p-4 pb-28 sm:p-6 sm:pb-32 md:p-8 lg:p-10 lg:pb-24 max-w-7xl w-full mx-auto">
                     {children}
                 </main>
+
+                {/* 모바일 하단 내비게이션 바 */}
+                <MobileNav currentPath={currentPath} />
             </div>
         </div>
     );

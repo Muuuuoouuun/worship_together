@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useRef, useState } from 'react';
+import { Check, Send } from 'lucide-react';
 import {
     planningDate, requestKinds, requestStatuses,
     type PlanningCommand, type PlanningPanelProps, type SetlistRequest,
@@ -9,7 +10,7 @@ import {
 type Props = PlanningPanelProps & { initialSetlist?: { id: string; title: string } };
 type RunCommand = (command: PlanningCommand, message: string) => Promise<boolean>;
 const control = 'min-h-12 w-full min-w-0 rounded-xl border border-input bg-card px-3 py-3 text-base text-foreground disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
-const button = 'inline-flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-border px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
+const button = 'tap-bounce inline-flex min-h-12 min-w-12 items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-3 text-sm font-semibold transition-all duration-150 disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
 const kinds = Object.entries(requestKinds) as [SetlistRequest['kind'], string][];
 const statuses = Object.entries(requestStatuses) as [SetlistRequest['status'], string][];
 const setlistKey = (request: Pick<SetlistRequest, 'setlistId' | 'setlistTitle'>) => JSON.stringify([request.setlistId, request.setlistTitle]);
@@ -67,7 +68,10 @@ function RequestComposer({ members, initialSetlist, disabled, run }: Pick<Props,
                     <span className="block">요청 내용 <span className="text-muted-foreground">(필수)</span></span>
                     <textarea name="body" className={`${control} min-h-32 resize-y`} rows={4} required placeholder="궁금한 점이나 확인·수정이 필요한 내용을 적어 주세요." onInput={event => event.currentTarget.setCustomValidity(event.currentTarget.value.trim() ? '' : '요청 내용을 입력해 주세요.')} />
                 </label>
-                <button type="submit" className={`${button} w-full bg-primary text-primary-foreground sm:w-auto`}>{disabled ? '처리 중…' : '요청 보내기'}</button>
+                <button type="submit" className={`${button} w-full bg-primary text-primary-foreground sm:w-auto`}>
+                    <Send size={15} className={disabled ? 'animate-send-fly' : ''} />
+                    {disabled ? '전송 중…' : '요청 보내기'}
+                </button>
             </fieldset>
             {leaders.length === 0 ? <p className="mt-4 text-sm text-muted-foreground">요청을 받을 팀 관리자 또는 인도자가 없습니다. 팀 구성원을 확인해 주세요.</p> : null}
         </form>
@@ -96,7 +100,10 @@ function RequestContent({ request, names, userId, owner, disabled, run }: {
                     <legend className="mb-2 text-sm font-semibold">진행 상태 변경</legend>
                     <div className="flex flex-wrap gap-2">
                         {statuses.map(([status, label]) => (
-                            <button key={status} type="button" className={`${button} ${request.status === status ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'}`} aria-pressed={request.status === status} disabled={disabled || request.status === status} onClick={() => void run({ type: 'request.status', requestId: request.id, status }, `요청 상태를 '${label}'으로 변경했습니다.`)}>{label}</button>
+                            <button key={status} type="button" className={`${button} ${request.status === status ? 'bg-primary text-primary-foreground shadow-[0_0_15px_rgba(21,62,59,0.2)]' : 'bg-card text-foreground hover:bg-muted'}`} aria-pressed={request.status === status} disabled={disabled || request.status === status} onClick={() => void run({ type: 'request.status', requestId: request.id, status }, `요청 상태를 '${label}'으로 변경했습니다.`)}>
+                                {request.status === status && <Check size={14} className="animate-check-pop" />}
+                                {label}
+                            </button>
                         ))}
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">받는 인도자와 팀 관리자만 변경할 수 있습니다. 완료해도 콘티는 자동으로 수정되지 않습니다.</p>
@@ -130,7 +137,10 @@ function RequestContent({ request, names, userId, owner, disabled, run }: {
                                 <span className="block">답글 작성</span>
                                 <textarea name="reply" required rows={3} className={`${control} resize-y`} placeholder="확인한 내용이나 답변을 남겨 주세요." onInput={event => event.currentTarget.setCustomValidity(event.currentTarget.value.trim() ? '' : '답글을 입력해 주세요.')} />
                             </label>
-                            <button type="submit" className={`${button} bg-primary text-primary-foreground`}>{disabled ? '처리 중…' : '답글 보내기'}</button>
+                            <button type="submit" className={`${button} bg-primary text-primary-foreground`}>
+                                <Send size={15} className={disabled ? 'animate-send-fly' : ''} />
+                                {disabled ? '처리 중…' : '답글 보내기'}
+                            </button>
                         </fieldset>
                     </form>
                 ) : <p className="text-sm text-muted-foreground">작성자, 받는 인도자, 팀 관리자가 답글을 남길 수 있습니다.</p>}
@@ -204,7 +214,7 @@ export default function RequestsPanel({ state, members, userId, busy, onCommand,
                 <summary className="min-h-12 cursor-pointer px-2 py-3 font-bold">새 요청 남기기</summary>
                 <RequestComposer key={JSON.stringify(initialSetlist ?? null)} members={members} initialSetlist={initialSetlist} disabled={disabled} run={run} />
             </details>
-            <div role="status" aria-live="polite" aria-atomic="true" className="text-sm text-muted-foreground">{pending ? '처리 중입니다…' : notice}</div>
+            <div role="status" aria-live="polite" aria-atomic="true" className={`text-sm transition-all ${notice ? 'animate-success-bounce text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-muted-foreground'}`}>{pending ? '처리 중입니다…' : notice}</div>
             {error ? <p role="alert" className="rounded-xl border border-destructive bg-card p-4 text-destructive">{error}</p> : null}
             <section aria-labelledby={`${id}-list`} className="min-w-0 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">

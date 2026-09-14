@@ -89,20 +89,22 @@ const QuickActions: React.FC<QuickActionsProps> = ({ teamId, setlistId, sessionI
             </h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {actions.map((action) => {
+                    const isLiveSession = action.type === 'session' && Boolean(sessionId || setlistId);
+
                     if (hasHref(action)) {
                         return (
                             <Link key={action.label} href={action.href} className="block h-full">
                                 <GlassCard
                                     variant="light"
-                                    className="flex h-full flex-col gap-3 p-6 transition-all hover:scale-[1.02] hover:bg-white/80"
+                                    className="hover-lift tap-bounce group flex h-full flex-col gap-3 p-6 transition-all duration-200 hover:shadow-xl hover:bg-white/90"
                                 >
-                                    <div className={`flex h-12 w-12 items-center justify-center rounded-full ${action.bg} ${action.color}`}>
+                                    <div className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110 ${action.bg} ${action.color}`}>
                                         <action.icon size={24} />
                                     </div>
                                     <div className="space-y-1">
                                         <div className="flex items-center justify-between gap-2">
                                             <span className="text-sm font-semibold text-primary">{action.label}</span>
-                                            <ArrowRight size={16} className="text-primary/40" />
+                                            <ArrowRight size={16} className="text-primary/40 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-primary" />
                                         </div>
                                         <p className="text-xs leading-relaxed text-primary/50">{action.description}</p>
                                     </div>
@@ -116,15 +118,16 @@ const QuickActions: React.FC<QuickActionsProps> = ({ teamId, setlistId, sessionI
                             <Link key={action.label} href={`/session/${sessionId}`} className="block h-full">
                                 <GlassCard
                                     variant="light"
-                                    className="flex h-full flex-col gap-3 p-6 transition-all hover:scale-[1.02] hover:bg-white/80"
+                                    className="hover-lift tap-bounce group flex h-full flex-col gap-3 p-6 transition-all duration-200 hover:shadow-xl hover:bg-white/90 border-emerald-500/20"
                                 >
-                                    <div className={`flex h-12 w-12 items-center justify-center rounded-full ${action.bg} ${action.color}`}>
-                                        <action.icon size={24} />
+                                    <div className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110 ${action.bg} ${action.color}`}>
+                                        <span className="animate-pulse-ring absolute inset-0 rounded-full bg-emerald-400/30" />
+                                        <action.icon size={24} className="relative z-10" />
                                     </div>
                                     <div className="space-y-1">
                                         <div className="flex items-center justify-between gap-2">
                                             <span className="text-sm font-semibold text-primary">{action.label}</span>
-                                            <ArrowRight size={16} className="text-primary/40" />
+                                            <ArrowRight size={16} className="text-primary/40 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-primary" />
                                         </div>
                                         <p className="text-xs leading-relaxed text-primary/50">{action.description}</p>
                                     </div>
@@ -139,15 +142,16 @@ const QuickActions: React.FC<QuickActionsProps> = ({ teamId, setlistId, sessionI
                                 <button type="submit" className="h-full w-full text-left">
                                     <GlassCard
                                         variant="light"
-                                        className="flex h-full flex-col gap-3 p-6 transition-all hover:scale-[1.02] hover:bg-white/80"
+                                        className="hover-lift tap-bounce group flex h-full flex-col gap-3 p-6 transition-all duration-200 hover:shadow-xl hover:bg-white/90"
                                     >
-                                        <div className={`flex h-12 w-12 items-center justify-center rounded-full ${action.bg} ${action.color}`}>
-                                            <action.icon size={24} />
+                                        <div className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110 ${action.bg} ${action.color}`}>
+                                            {isLiveSession && <span className="animate-pulse-ring absolute inset-0 rounded-full bg-emerald-400/25" />}
+                                            <action.icon size={24} className="relative z-10" />
                                         </div>
                                         <div className="space-y-1">
                                             <div className="flex items-center justify-between gap-2">
                                                 <span className="text-sm font-semibold text-primary">{action.label}</span>
-                                                <span className="rounded-full bg-primary/5 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-primary/50">
+                                                <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-all ${isLiveSession ? 'bg-emerald-500/10 text-emerald-700 animate-pulse' : 'bg-primary/5 text-primary/50'}`}>
                                                     {action.status}
                                                 </span>
                                             </div>

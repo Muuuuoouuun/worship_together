@@ -1,7 +1,8 @@
 import React from 'react';
 import Link from 'next/link';
 import GlassCard from '@/components/ui/GlassCard';
-import { Music, Clock, PlayCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/Badge';
+import { Music, Clock, PlayCircle, ArrowRight } from 'lucide-react';
 import { startSession } from '@/actions/sessionActions';
 
 interface NextWorshipCardProps {
@@ -15,63 +16,87 @@ interface NextWorshipCardProps {
 
 const NextWorshipCard: React.FC<NextWorshipCardProps> = ({
     worshipDate,
-    theme = 'General Worship',
+    theme = '예배 찬양',
     songCount,
     teamId,
     setlistId,
     sessionId,
 }) => {
     const today = new Date();
-    const diffTime = Math.abs(worshipDate.getTime() - today.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const isToday = worshipDate.toDateString() === today.toDateString();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(worshipDate);
+    target.setHours(0, 0, 0, 0);
+
+    const diffTime = target.getTime() - today.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    const isToday = diffDays === 0;
+
     const startSessionAction = startSession.bind(null, teamId, setlistId);
-    const actionClassName = `group relative flex w-full items-center justify-center gap-3 rounded-full px-6 py-4 font-bold shadow-xl transition-all duration-300 hover:scale-[1.01] hover:shadow-2xl sm:w-auto sm:px-8 sm:hover:scale-105 ${sessionId ? 'bg-red-500 text-white' : 'bg-primary text-surface'}`;
 
     return (
-        <GlassCard className="relative w-full max-w-4xl overflow-hidden border-primary/10 p-6 sm:p-8">
+        <GlassCard className="relative w-full max-w-4xl overflow-hidden border-border/80 p-6 sm:p-8">
             <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
                 <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-secondary">
-                        <Clock size={16} />
-                        <span>{isToday ? 'TODAY' : `D-${diffDays}`}</span>
-                        {sessionId && (
-                            <span className="ml-2 flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs normal-case text-red-500 animate-pulse">
-                                <span className="h-2 w-2 rounded-full bg-red-500" />
-                                LIVE
-                            </span>
-                        )}
+                    <div className="flex items-center gap-2">
+                        <Badge
+                            variant={sessionId ? 'destructive' : isToday ? 'secondary' : 'default'}
+                            size="sm"
+                            dot
+                            pulse={Boolean(sessionId || isToday)}
+                        >
+                            {sessionId ? 'LIVE 진행 중' : isToday ? 'TODAY' : `D-${diffDays}`}
+                        </Badge>
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Clock size={14} />
+                            {worshipDate.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
+                        </span>
                     </div>
-                    <h2 className="text-2xl font-serif font-black text-primary sm:text-3xl md:text-4xl">
-                        {isToday ? 'Sunday Service' : 'Next Worship'}
+
+                    <h2 className="text-2xl font-serif font-black text-foreground sm:text-3xl">
+                        {theme}
                     </h2>
-                    <p className="text-base text-primary/60 sm:text-lg">
-                        Theme: <span className="font-semibold text-primary">{theme}</span>
-                    </p>
-                    <div className="mt-1 flex items-center gap-2 text-sm text-primary/40">
-                        <Music size={16} />
-                        <span>{songCount} Songs Prepared</span>
+
+                    <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                            <Music size={15} className="text-secondary" />
+                            {songCount}곡 준비됨
+                        </span>
+                        <span>•</span>
+                        <span>예상 소요 약 {songCount * 4}분</span>
                     </div>
                 </div>
 
                 {sessionId ? (
-                    <Link href={`/session/${sessionId}`} className={actionClassName}>
-                        <PlayCircle size={24} className="animate-pulse" />
-                        <span>Join Session</span>
-                        <span className="absolute inset-0 rounded-full ring-2 ring-white/20 opacity-0 animate-ping group-hover:opacity-100" />
+                    <Link
+                        href={`/session/${sessionId}`}
+                        className="tap-bounce hover-lift group relative flex w-full items-center justify-center gap-2.5 rounded-2xl bg-destructive px-6 py-4 text-sm font-bold text-destructive-foreground shadow-lg shadow-destructive/25 transition-all duration-200 hover:bg-destructive/90 animate-pulse-glow sm:w-auto"
+                    >
+                        <span className="relative flex items-center justify-center">
+                            <span className="animate-pulse-ring absolute inset-0 rounded-full bg-white/40" />
+                            <PlayCircle size={20} className="relative z-10 transition-transform duration-200 group-hover:scale-110" />
+                        </span>
+                        <span>라이브 예배 입장</span>
+                        <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
                     </Link>
                 ) : (
                     <form action={startSessionAction} className="w-full sm:w-auto">
-                        <button type="submit" className={actionClassName}>
-                            <PlayCircle size={24} className="group-hover:animate-pulse" />
-                            <span>Start Session</span>
-                            <span className="absolute inset-0 rounded-full ring-2 ring-white/20 opacity-0 animate-ping group-hover:opacity-100" />
+                        <button
+                            type="submit"
+                            className="tap-bounce hover-lift group relative flex w-full items-center justify-center gap-2.5 rounded-2xl bg-primary px-6 py-4 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-200 hover:bg-primary/90 sm:w-auto"
+                        >
+                            <PlayCircle size={20} className="transition-transform duration-200 group-hover:scale-110" />
+                            <span>예배 세션 시작</span>
+                            <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
                         </button>
                     </form>
                 )}
             </div>
 
-            <div className={`pointer-events-none absolute -bottom-20 -right-10 h-64 w-64 rounded-full blur-3xl ${sessionId ? 'bg-red-500/10' : 'bg-secondary/10'}`} />
+            <div
+                className={`pointer-events-none absolute -bottom-20 -right-10 h-64 w-64 rounded-full blur-3xl ${
+                    sessionId ? 'bg-destructive/10' : 'bg-primary/5'
+                }`}
+            />
         </GlassCard>
     );
 };

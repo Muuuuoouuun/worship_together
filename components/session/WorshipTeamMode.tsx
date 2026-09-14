@@ -589,15 +589,21 @@ export default function WorshipTeamMode({
                                                     onClick={() => sendStageAction(action)}
                                                     disabled={disabled}
                                                     data-testid={`team-action-${action.id}`}
-                                                    className={`tap-target min-h-12 rounded-lg border px-2.5 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-[4.75rem] sm:px-4 sm:py-3 motion-safe:active:scale-[0.98] ${isFailed ? 'border-red-300/40 bg-red-400/[0.18] text-red-50' : isSent ? 'stage-action-sent border-emerald-300/40 bg-emerald-300/[0.2] text-emerald-50 shadow-[0_0_30px_rgba(110,231,183,0.14)]' : action.tone}`}
+                                                    className={`tap-target tap-bounce min-h-12 rounded-lg border px-2.5 py-2 text-left transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-[4.75rem] sm:px-4 sm:py-3 motion-safe:active:scale-[0.98] ${isFailed ? 'animate-shake border-red-300/40 bg-red-400/[0.18] text-red-50' : isSent ? 'stage-action-sent border-emerald-300/50 bg-emerald-300/[0.25] text-emerald-50 shadow-[0_0_35px_rgba(110,231,183,0.25)]' : action.tone}`}
                                                 >
                                                     <span className="flex items-center justify-between gap-2">
                                                         <span className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-                                                            <Icon size={16} className="shrink-0 opacity-80 sm:h-[18px] sm:w-[18px]" />
+                                                            {isSent ? (
+                                                                <Check size={18} className="animate-check-pop shrink-0 text-emerald-300 sm:h-[18px] sm:w-[18px]" />
+                                                            ) : isPendingAction ? (
+                                                                <Send size={16} className="animate-send-fly shrink-0 text-[#ffe0b8] sm:h-[18px] sm:w-[18px]" />
+                                                            ) : (
+                                                                <Icon size={16} className="shrink-0 opacity-80 sm:h-[18px] sm:w-[18px]" />
+                                                            )}
                                                             <span className="min-w-0 text-xs font-black leading-snug sm:text-lg sm:leading-tight">{action.label}</span>
                                                         </span>
-                                                        <span className="shrink-0 rounded-full bg-white/10 px-1 py-1 text-[9px] font-bold text-white/65 sm:px-2 sm:text-[10px]">
-                                                            {isFailed ? '실패' : isPendingAction ? '전송 중' : isCoolingDown ? '대기' : isSent ? '전송' : action.target}
+                                                        <span className={`shrink-0 rounded-full px-1.5 py-1 text-[9px] font-bold sm:px-2 sm:text-[10px] transition-all ${isSent ? 'bg-emerald-400/30 text-emerald-100 font-extrabold animate-check-pop' : isFailed ? 'bg-red-400/30 text-red-100' : isPendingAction ? 'bg-amber-400/25 text-amber-100' : 'bg-white/10 text-white/65'}`}>
+                                                            {isFailed ? '실패' : isPendingAction ? '전송 중…' : isCoolingDown ? '대기' : isSent ? '전송 완료' : action.target}
                                                         </span>
                                                     </span>
                                                     <span className="mt-1.5 hidden truncate text-xs font-semibold opacity-58 sm:block">
@@ -614,7 +620,7 @@ export default function WorshipTeamMode({
                     </aside>
 
                     <section className="order-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem] lg:order-none lg:col-start-1 lg:row-start-2">
-                        <aside className={`hidden rounded-lg border border-white/10 bg-white/[0.052] p-4 lg:block ${recentActionId ? 'stage-latest-cue-active' : ''}`} aria-live="polite" data-testid="team-latest-cue">
+                        <aside className={`hidden rounded-lg border border-white/10 bg-white/[0.052] p-4 lg:block transition-all ${recentActionId ? 'stage-latest-cue-active animate-success-bounce' : ''}`} aria-live="polite" data-testid="team-latest-cue">
                             <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/75">최근 큐</p>
                             <p className="mt-3 text-2xl font-black leading-tight text-white sm:text-3xl">
                                 {latestCue?.message ?? '큐 대기'}
@@ -736,7 +742,7 @@ function getRealtimeStatusMeta(status: RealtimeConnectionStatus, localTransportA
             };
         case 'reconnecting':
             return {
-                dot: 'bg-amber-300',
+                dot: 'sync-pulse-warning bg-amber-300',
                 label: '재연결',
                 tone: 'bg-amber-300/[0.12] text-amber-100',
             };
