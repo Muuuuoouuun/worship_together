@@ -761,3 +761,75 @@ test('rotations reject former members and cancelled schedules without partial ch
     f.send(owner.id, { type: 'event.cancel', eventId: event.id });
     rejectsAtomically(f, owner.id, { type: 'rotation.apply', rotationId, eventId: event.id }, cancelledError);
 });
+
+test('rotation.batchApply applies rotation across multiple events and advances steps', t => {
+    const f = fixture(t);
+    const rotationId = f.send(owner.id, { type: 'rotation.save', group: rotationGroup() }).rotations![0].id;
+    const event1 = createEvent(f, schedule({ startsAt: '2026-09-06T10:00:00+09:00', endsAt: '2026-09-06T11:00:00+09:00' }));
+    const event2 = createEvent(f, schedule({ startsAt: '2026-09-13T10:00:00+09:00', endsAt: '2026-09-13T11:00:00+09:00' }));
+
+    const afterBatch = f.send(owner.id, {
+        type: 'rotation.batchApply',
+        rotationId,
+        eventIds: [event1.id, event2.id],
+    });
+
+    const e1 = afterBatch.events.find(e => e.id === event1.id)!;
+    const e2 = afterBatch.events.find(e => e.id === event2.id)!;
+
+    // event1 had step 0 (1조: author, other)
+    assert.ok(e1.slots.some(s => s.memberId === author.id));
+    assert.ok(e1.slots.some(s => s.memberId === other.id));
+
+    // event2 had step 1 (2조: leader)
+    assert.ok(e2.slots.some(s => s.memberId === leader.id));
+});
+
+test('event.createWithTemplate creates multiple events populated with template roles', t => {
+    const f = fixture(t);
+    const result = f.send(owner.id, {
+        type: 'event.createWithTemplate',
+        input: schedule({ title: '주일 2부 예배' }),
+        templateKey: 'standard',
+        weeksCount: 4,
+    });
+    assert.equal(result.events.length, 4);
+    for (const ev of result.events) {
+        assert.equal(ev.title, '주일 2부 예배');
+        assert.equal(ev.slots.length, 7); // standard has 7 roles
+        assert.equal(ev.slots[0].role, 'leader');
+        assert.equal(ev.slots[0].attendance, 'pending');
+    }
+    // rejects non-manager
+    rejectsAtomically(f, author.id, {
+        type: 'event.createWithTemplate',
+        input: schedule(),
+        templateKey: 'standard',
+    }, managerError);
+});
+
+test('attendance.batchConfirm confirms multiple slots atomically and rejects other users', t => {
+    const f = fixture(t);
+    const event1 = createEvent(f, schedule({ startsAt: '2026-09-06T10:00:00+09:00', endsAt: '2026-09-06T11:00:00+09:00' }));
+    const event2 = createEvent(f, schedule({ startsAt: '2026-09-13T10:00:00+09:00', endsAt: '2026-09-13T11:00:00+09:00' }));
+    const slot1 = addSlot(f, event1.id, author.id);
+    const slot2 = addSlot(f, event2.id, author.id);
+
+    // author confirms both
+    const confirmed = f.send(author.id, {
+        type: 'attendance.batchConfirm',
+        items: [{ eventId: event1.id, slotId: slot1.id }, { eventId: event2.id, slotId: slot2.id }],
+    });
+    const s1 = confirmed.events.find(e => e.id === event1.id)!.slots.find(s => s.id === slot1.id)!;
+    const s2 = confirmed.events.find(e => e.id === event2.id)!.slots.find(s => s.id === slot2.id)!;
+    assert.equal(s1.attendance, 'confirmed');
+    assert.equal(s2.attendance, 'confirmed');
+
+    // other user cannot confirm author's slot
+    rejectsAtomically(f, other.id, {
+        type: 'attendance.batchConfirm',
+        items: [{ eventId: event1.id, slotId: slot1.id }],
+    }, /본인의 참석 여부/);
+});
+
+

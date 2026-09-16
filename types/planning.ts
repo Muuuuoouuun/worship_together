@@ -57,11 +57,13 @@ export type PlanningCommand =
     | { type: 'event.save'; eventId?: string; input: ScheduleInput }
     | { type: 'event.cancel'; eventId: string }
     | { type: 'event.createRecurring'; input: ScheduleInput; weeksCount: number }
+    | { type: 'event.createWithTemplate'; input: ScheduleInput; templateKey: ScheduleTemplateKey; weeksCount?: number }
     | { type: 'slot.save'; eventId: string; slotId?: string; role: WorshipRole; memberId: string | null }
     | { type: 'slot.remove'; eventId: string; slotId: string }
     | { type: 'slots.applyTemplate'; eventId: string; templateKey: ScheduleTemplateKey }
     | { type: 'slots.copyFromEvent'; targetEventId: string; sourceEventId: string }
     | { type: 'attendance.set'; eventId: string; slotId: string; attendance: 'confirmed' | 'absent'; reason: string }
+    | { type: 'attendance.batchConfirm'; items: Array<{ eventId: string; slotId: string }> }
     | { type: 'alert.create'; eventId: string; slotId: string | null; kind: 'substitute' | 'notice'; body: string }
     | { type: 'alert.resolve'; alertId: string }
     | { type: 'slot.volunteer'; eventId: string; slotId: string }
@@ -70,6 +72,7 @@ export type PlanningCommand =
     | { type: 'rotation.remove'; rotationId: string }
     | { type: 'rotation.step'; rotationId: string; direction: 'next' | 'prev' }
     | { type: 'rotation.apply'; rotationId: string; eventId: string }
+    | { type: 'rotation.batchApply'; rotationId: string; eventIds: string[] }
     | { type: 'notification.read'; notificationId: string };
 export type PlanningPanelProps = {
     state: PlanningState; members: TeamMember[]; userId: string; busy: boolean;

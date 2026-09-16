@@ -168,6 +168,7 @@ export default function RotationPanel({ state, members, userId, busy, onCommand 
                             upcomingEvents={upcomingEvents}
                             onStep={(direction) => run({ type: 'rotation.step', rotationId: rot.id, direction }, '로테이션 순번을 변경했습니다.')}
                             onApply={(eventId) => run({ type: 'rotation.apply', rotationId: rot.id, eventId }, '로테이션 배정을 일정에 적용했습니다.')}
+                            onBatchApply={(eventIds) => run({ type: 'rotation.batchApply', rotationId: rot.id, eventIds }, `${eventIds.length}개 일정에 로테이션을 순차 일괄 배정했습니다.`)}
                             onRemove={() => run({ type: 'rotation.remove', rotationId: rot.id }, '로테이션 그룹을 삭제했습니다.')}
                         />
                     ))}
@@ -186,6 +187,7 @@ function RotationCard({
     upcomingEvents,
     onStep,
     onApply,
+    onBatchApply,
     onRemove,
 }: {
     rotation: RotationGroup;
@@ -195,6 +197,7 @@ function RotationCard({
     upcomingEvents: Parameters<typeof RotationPanel>[0]['state']['events'];
     onStep: (dir: 'next' | 'prev') => Promise<boolean>;
     onApply: (eventId: string) => Promise<boolean>;
+    onBatchApply: (eventIds: string[]) => Promise<boolean>;
     onRemove: () => Promise<boolean>;
 }) {
     const isTeam = rotation.cycleType === 'team';
@@ -349,6 +352,33 @@ function RotationCard({
                 </div>
             ) : null}
 
+            {/* 앞으로의 예정 일정들에 순차 일괄 배정 */}
+            {manager && totalSteps > 0 && upcomingEvents.length > 1 ? (
+                <div className="rounded-xl border border-secondary/30 bg-secondary/5 p-3 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-secondary flex items-center gap-1.5">
+                            <Sparkles size={14} /> 앞으로의 예정 일정들에 순차 일괄 배정
+                        </span>
+                        <button
+                            type="button"
+                            className={`${primary} text-xs py-1 px-3 min-h-9`}
+                            disabled={disabled}
+                            onClick={() => {
+                                const targetEvents = upcomingEvents.slice(0, 4);
+                                if (window.confirm(`앞으로 예정된 ${targetEvents.length}개 일정에 현재 순번부터 차례대로 로테이션을 자동 배정하시겠습니까?`)) {
+                                    void onBatchApply(targetEvents.map(e => e.id));
+                                }
+                            }}
+                        >
+                            ⚡ 예정 {Math.min(upcomingEvents.length, 4)}개 일정 순차 배정
+                        </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        다가오는 최대 4개 일정에 현재 순번부터 차례대로(예: 1조 → 2조 → 1조 → 2조) 자동 배정하고 순번을 업데이트합니다.
+                    </p>
+                </div>
+            ) : null}
+
             {/* 전체 순환 목록 펼치기 */}
             <details>
                 <summary className={disclosure}>
@@ -444,6 +474,56 @@ function RotationCreateForm({
             }
             return next.slice(0, count);
         });
+    };
+
+    const handleAutoBalance = () => {
+        // Group members by role
+        const roleGroups = new Map<WorshipRole, TeamMember[]>();
+        for (const m of members) {
+            const list = roleGroups.get(m.role) ?? [];
+            list.push(m);
+            roleGroups.set(m.role, list);
+        }
+
+        const newTeamMemberIds: string[][] = Array.from({ length: teamCount }, () => []);
+
+        // Round-robin distribute each role across the teams
+        let offset = 0;
+        for (const list of roleGroups.values()) {
+            list.forEach((m, idx) => {
+                const targetTeam = (idx + offset) % teamCount;
+                newTeamMemberIds[targetTeam].push(m.userId);
+            });
+            offset = (offset + list.length) % teamCount;
+        }
+
+        setTeams(prev => prev.map((t, idx) => ({
+            ...t,
+            memberIds: newTeamMemberIds[idx] ?? [],
+        })));
+    };
+
+    const handleSwapTeams = (idxA: number, idxB: number) => {
+        setTeams(prev => {
+            if (!prev[idxA] || !prev[idxB]) return prev;
+            const next = [...prev];
+            const tempMembers = next[idxA].memberIds;
+            next[idxA] = { ...next[idxA], memberIds: next[idxB].memberIds };
+            next[idxB] = { ...next[idxB], memberIds: tempMembers };
+            return next;
+        });
+    };
+
+    const handleMoveMember = (fromTeamIdx: number, toTeamIdx: number, memberId: string) => {
+        setTeams(prev => prev.map((t, idx) => {
+            if (idx === fromTeamIdx) {
+                return { ...t, memberIds: t.memberIds.filter(id => id !== memberId) };
+            }
+            if (idx === toTeamIdx) {
+                return { ...t, memberIds: t.memberIds.includes(memberId) ? t.memberIds : [...t.memberIds, memberId] };
+            }
+            return t;
+        }));
     };
 
     const toggleTeamMember = (teamIdx: number, memberId: string) => {
@@ -552,17 +632,41 @@ function RotationCreateForm({
             {cycleType === 'team' ? (
                 <div className="space-y-3 rounded-xl border border-border p-3 bg-muted/20">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <label htmlFor={`${formId}-count`} className="shrink-0 font-semibold">조 개수 설정</label>
-                        <select
-                            id={`${formId}-count`}
-                            className={`${control} w-28!`}
-                            value={teamCount}
-                            onChange={e => handleTeamCountChange(Number(e.target.value))}
-                        >
-                            {[2, 3, 4, 5].map(n => (
-                                <option key={n} value={n}>{n}개 조</option>
-                            ))}
-                        </select>
+                        <div className="flex items-center gap-2">
+                            <label htmlFor={`${formId}-count`} className="shrink-0 font-semibold">조 개수 설정</label>
+                            <select
+                                id={`${formId}-count`}
+                                className={`${control} w-28!`}
+                                value={teamCount}
+                                onChange={e => handleTeamCountChange(Number(e.target.value))}
+                            >
+                                {[2, 3, 4, 5].map(n => (
+                                    <option key={n} value={n}>{n}개 조</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {teamCount === 2 ? (
+                                <button
+                                    type="button"
+                                    className={`${button} text-xs py-1.5 px-2.5 min-h-9 flex items-center gap-1 text-muted-foreground hover:text-foreground`}
+                                    onClick={() => handleSwapTeams(0, 1)}
+                                    title="1조와 2조의 배정 인원을 서로 맞바꿉니다"
+                                >
+                                    <ArrowLeftRight size={13} />
+                                    1조 ↔ 2조 맞바꾸기
+                                </button>
+                            ) : null}
+                            <button
+                                type="button"
+                                className={`${button} text-xs py-1.5 px-3 min-h-9 flex items-center gap-1.5 text-primary border-primary/30 hover:bg-primary/5`}
+                                onClick={handleAutoBalance}
+                                title="모든 팀원의 사역 역할을 바탕으로 각 조에 균등하게 자동 배분합니다"
+                            >
+                                <Sparkles size={14} className="text-secondary" />
+                                파트별 균등 자동 조편성
+                            </button>
+                        </div>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -585,18 +689,30 @@ function RotationCreateForm({
                                     {members.map(m => {
                                         const checked = t.memberIds.includes(m.userId);
                                         return (
-                                            <label
+                                            <div
                                                 key={m.userId}
-                                                className="flex min-h-12 items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer text-sm break-words"
+                                                className="flex min-h-10 items-center justify-between gap-2 p-1.5 rounded hover:bg-muted/60 text-sm break-words"
                                             >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={checked}
-                                                    onChange={() => toggleTeamMember(idx, m.userId)}
-                                                    className="size-5 shrink-0 rounded accent-primary"
-                                                />
-                                                <span>{m.name} ({worshipRoles[m.role]})</span>
-                                            </label>
+                                                <label className="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={() => toggleTeamMember(idx, m.userId)}
+                                                        className="size-4 shrink-0 rounded accent-primary"
+                                                    />
+                                                    <span className="truncate">{m.name} ({worshipRoles[m.role]})</span>
+                                                </label>
+                                                {checked && teamCount === 2 ? (
+                                                    <button
+                                                        type="button"
+                                                        className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground hover:text-primary hover:bg-primary/10 border border-border shrink-0"
+                                                        title={`${idx === 0 ? '2조' : '1조'}로 이동`}
+                                                        onClick={() => handleMoveMember(idx, idx === 0 ? 1 : 0, m.userId)}
+                                                    >
+                                                        → {idx === 0 ? '2조' : '1조'}
+                                                    </button>
+                                                ) : null}
+                                            </div>
                                         );
                                     })}
                                 </div>

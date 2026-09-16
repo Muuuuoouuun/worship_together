@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createClientId } from './clientId';
 import { worshipRoles, type TeamMember } from '../types/team';
-import { canManagePlanning, emptyPlanningState, requestKinds, scheduleTemplates, type PlanningCommand, type PlanningState, type RotationGroup, type TeamSchedule } from '../types/planning';
+import { canManagePlanning, emptyPlanningState, requestKinds, scheduleTemplates, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
 
 const id = z.string().min(1).max(200);
 const body = z.string().trim().min(1, '내용을 입력해주세요.').max(1500);
@@ -25,11 +25,13 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('event.save'), eventId: id.optional(), input: scheduleInput }),
     z.object({ type: z.literal('event.cancel'), eventId: id }),
     z.object({ type: z.literal('event.createRecurring'), input: scheduleInput, weeksCount: z.number().int().min(1).max(12) }),
+    z.object({ type: z.literal('event.createWithTemplate'), input: scheduleInput, templateKey: z.enum(['standard', 'full', 'acoustic', 'vocalTeam']), weeksCount: z.number().int().min(1).max(12).optional() }),
     z.object({ type: z.literal('slot.save'), eventId: id, slotId: id.optional(), role, memberId: id.nullable() }),
     z.object({ type: z.literal('slot.remove'), eventId: id, slotId: id }),
     z.object({ type: z.literal('slots.applyTemplate'), eventId: id, templateKey: z.enum(['standard', 'full', 'acoustic', 'vocalTeam']) }),
     z.object({ type: z.literal('slots.copyFromEvent'), targetEventId: id, sourceEventId: id }),
     z.object({ type: z.literal('attendance.set'), eventId: id, slotId: id, attendance: z.enum(['confirmed', 'absent']), reason: z.string().trim().max(500) }),
+    z.object({ type: z.literal('attendance.batchConfirm'), items: z.array(z.object({ eventId: id, slotId: id })).min(1).max(50) }),
     z.object({ type: z.literal('alert.create'), eventId: id, slotId: id.nullable(), kind: z.enum(['substitute', 'notice']), body }),
     z.object({ type: z.literal('alert.resolve'), alertId: id }),
     z.object({ type: z.literal('slot.volunteer'), eventId: id, slotId: id }),
@@ -50,6 +52,7 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('rotation.remove'), rotationId: id }),
     z.object({ type: z.literal('rotation.step'), rotationId: id, direction: z.enum(['next', 'prev']) }),
     z.object({ type: z.literal('rotation.apply'), rotationId: id, eventId: id }),
+    z.object({ type: z.literal('rotation.batchApply'), rotationId: id, eventIds: z.array(id).min(1).max(20) }),
     z.object({ type: z.literal('notification.read'), notificationId: id }),
 ]);
 const stamp = z.string();
@@ -175,6 +178,24 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             else { closeSlotAlerts(event.id, slot.id); urgent(event, slot.id, 'absence', `${actor.name} · ${worshipRoles[slot.role]} 결석${command.reason ? `: ${command.reason}` : ''}`); }
             slot.attendance = command.attendance; break;
         }
+        case 'attendance.batchConfirm': {
+            let confirmedCount = 0;
+            for (const item of command.items) {
+                const event = eventById(item.eventId);
+                const slot = slotById(event, item.slotId);
+                if (slot.memberId !== userId) throw new Error('본인의 참석 여부만 응답할 수 있습니다.');
+                if (slot.attendance === 'confirmed') continue;
+                available(event, userId, slot.id);
+                closeSlotAlerts(event.id, slot.id);
+                slot.volunteers = [];
+                slot.attendance = 'confirmed';
+                confirmedCount++;
+            }
+            if (confirmedCount > 0) {
+                notify(managers, '참석 일괄 확정', `${actor.name} · 다가오는 섬김 ${confirmedCount}건 참석 확정`, 'schedule', command.items[0].eventId);
+            }
+            break;
+        }
         case 'alert.create': {
             const event = eventById(command.eventId);
             if (command.kind === 'notice') { manage(); urgent(event, null, 'notice', command.body); }
@@ -236,6 +257,37 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             }
             state.events.unshift(...newEvents);
             notify(everyone, '정기 일정이 등록되었어요', `${command.input.title} (${command.weeksCount}주)`, 'schedule', newEvents[0].id);
+            break;
+        }
+        case 'event.createWithTemplate': {
+            manage();
+            const start = Date.parse(command.input.startsAt), end = Date.parse(command.input.endsAt);
+            if (end <= start || end - start > 86400000) throw new Error('종료는 시작 이후, 일정 길이는 24시간 이내로 설정해주세요.');
+            const weeks = command.weeksCount ?? 1;
+            if (state.events.length + weeks > 200) throw new Error('일정 보관 한도에 도달했습니다.');
+            const template = scheduleTemplates[command.templateKey];
+            if (!template) throw new Error('템플릿을 찾지 못했습니다.');
+            const newEvents: TeamSchedule[] = [];
+            for (let i = 0; i < weeks; i++) {
+                const shiftMs = i * 7 * 86400000;
+                const slots: ScheduleSlot[] = template.roles.map(r => ({
+                    id: createClientId(),
+                    role: r,
+                    memberId: null,
+                    attendance: 'pending',
+                    volunteers: [],
+                }));
+                newEvents.push({
+                    ...command.input,
+                    startsAt: new Date(start + shiftMs).toISOString(),
+                    endsAt: new Date(end + shiftMs).toISOString(),
+                    id: createClientId(),
+                    cancelled: false,
+                    slots,
+                });
+            }
+            state.events.unshift(...newEvents);
+            notify(everyone, '예배 일정이 템플릿과 함께 등록되었어요', `${command.input.title} (${weeks > 1 ? `${weeks}주 · ` : ''}${template.name})`, 'schedule', newEvents[0].id);
             break;
         }
         case 'slots.applyTemplate': {
@@ -357,6 +409,43 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                 }
             }
             notify(everyone, '로테이션 배정이 적용되었어요', `${event.title} · ${rot.name} · ${assignees.length}명`, 'schedule', event.id);
+            break;
+        }
+        case 'rotation.batchApply': {
+            manage();
+            const rot = state.rotations.find(r => r.id === command.rotationId);
+            if (!rot) throw new Error('로테이션을 찾지 못했습니다.');
+            const teams = rot.teams ?? [];
+            const individuals = rot.members ?? [];
+            const totalSteps = rot.cycleType === 'team' ? teams.length : individuals.length;
+            if (totalSteps === 0) throw new Error('로테이션에 등록된 조 또는 팀원이 없습니다.');
+            let appliedEventsCount = 0;
+            for (const eventId of command.eventIds) {
+                const event = eventById(eventId);
+                const step = rot.currentStep % totalSteps;
+                const activeTeam = rot.cycleType === 'team' ? teams[step] : undefined;
+                const assignees = rot.cycleType === 'team' ? activeTeam?.memberIds ?? [] : individuals.length ? [individuals[step]] : [];
+                if (!assignees.length) continue;
+                for (const memberId of assignees) {
+                    const member = members.find(m => m.userId === memberId);
+                    if (!member) continue;
+                    try { available(event, memberId); } catch { continue; }
+                    const roleToAssign = rot.targetRole !== 'all' ? rot.targetRole : member.role;
+                    const vacantSlot = event.slots.find(s => s.memberId === null && (s.role === roleToAssign || s.role === 'member'));
+                    if (vacantSlot) {
+                        vacantSlot.memberId = memberId;
+                        vacantSlot.role = roleToAssign;
+                        vacantSlot.attendance = 'pending';
+                        vacantSlot.volunteers = [];
+                        closeSlotAlerts(event.id, vacantSlot.id);
+                    } else if (event.slots.length < 50) {
+                        event.slots.push({ id: createClientId(), role: roleToAssign, memberId, attendance: 'pending', volunteers: [] });
+                    }
+                }
+                rot.currentStep = (rot.currentStep + 1) % totalSteps;
+                appliedEventsCount++;
+            }
+            notify(everyone, '로테이션 일괄 배정이 완료되었어요', `${rot.name} · ${appliedEventsCount}개 일정`, 'schedule', command.eventIds[0]);
             break;
         }
     }
