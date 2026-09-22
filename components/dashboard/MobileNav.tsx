@@ -13,7 +13,12 @@ interface MobileNavProps {
 export default function MobileNav({ currentPath }: MobileNavProps) {
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
-    const isSecondaryActive = secondaryNavItems.some((item) => currentPath === item.href);
+    const isItemActive = (href: string) =>
+        href === '/dashboard'
+            ? currentPath === '/dashboard'
+            : currentPath === href || currentPath.startsWith(href + '/') || currentPath.startsWith(href + '?');
+
+    const isSecondaryActive = secondaryNavItems.some((item) => isItemActive(item.href));
 
     return (
         <>
@@ -24,7 +29,7 @@ export default function MobileNav({ currentPath }: MobileNavProps) {
             >
                 <div className="grid grid-cols-5 h-16 safe-area-x">
                     {primaryNavItems.map((item) => {
-                        const active = currentPath === item.href;
+                        const active = isItemActive(item.href);
 
                         return (
                             <Link
@@ -75,7 +80,7 @@ export default function MobileNav({ currentPath }: MobileNavProps) {
             >
                 <div className="space-y-2 py-2">
                     {secondaryNavItems.map((item) => {
-                        const active = currentPath === item.href;
+                        const active = isItemActive(item.href);
 
                         return (
                             <Link

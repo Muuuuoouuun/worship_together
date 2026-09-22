@@ -140,7 +140,7 @@
   }
 
   .bpm-metronome-arm {
-    animation: bpm-metronome-swing var(--beat-duration, 0.75s) cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    animation: bpm-metronome-swing calc(var(--beat-duration, 0.75s) * 2) cubic-bezier(0.45, 0, 0.55, 1) infinite;
     transform-origin: 50% 100%;
   }
 

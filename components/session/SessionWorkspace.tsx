@@ -1074,7 +1074,12 @@ export default function SessionWorkspace({
                                     <div className="rounded-3xl border border-primary/10 bg-card/60 p-5">
                                         <div className="flex items-center justify-between gap-3">
                                             <div>
-                                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">악보 넘기기</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">악보 넘기기</p>
+                                                    <span className="inline-flex items-center rounded-full border border-primary/15 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                                        ⌨️ 페달 / 방향키 지원
+                                                    </span>
+                                                </div>
                                                 <p className="mt-2 text-sm text-muted-foreground">
                                                     인도자의 페이지 변경은 모든 팔로워에게 공유됩니다.
                                                 </p>

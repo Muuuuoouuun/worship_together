@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType, CSSProperties } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
 import { AudioLines, Eye, EyeOff, Gauge, Music2, Zap } from 'lucide-react';
 
@@ -51,9 +51,21 @@ export default function SessionBpmConsole({
     const displayBeat = bpmEnabled && isActive && currentBpm ? activeBeat : 0;
     const displayBlink = bpmEnabled && isActive && currentBpm ? blinkActive : false;
     const beatDots = useMemo(() => Array.from({ length: 4 }, (_, index) => index + 1), []);
-    const beatDurationStyle = useMemo(() => ({
-        '--beat-duration': `${currentBpm ? (60 / currentBpm).toFixed(3) : '0.75'}s`,
-    }) as CSSProperties, [currentBpm]);
+    const metronomeRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        if (!metronomeRef.current || !currentBpm) return;
+        const intervalMs = 60000 / currentBpm;
+        const delayMs = -(Date.now() % (intervalMs * 2));
+        metronomeRef.current.style.animationDelay = `${delayMs}ms`;
+    }, [currentBpm]);
+
+    const beatDurationStyle = useMemo(() => {
+        if (!currentBpm) return { '--beat-duration': '0.75s' } as CSSProperties;
+        const intervalMs = 60000 / currentBpm;
+        return {
+            '--beat-duration': `${(intervalMs / 1000).toFixed(3)}s`,
+        } as CSSProperties;
+    }, [currentBpm]);
     const metronomeActive = bpmEnabled && isActive && Boolean(currentBpm);
 
     return (
@@ -91,7 +103,7 @@ export default function SessionBpmConsole({
                                 {currentSongTitle ? `${currentSongTitle}` : '곡이 선택되지 않았습니다'}
                             </p>
                         </div>
-                        <div className="flex flex-col items-center gap-3" style={beatDurationStyle}>
+                        <div ref={metronomeRef} className="flex flex-col items-center gap-3" style={beatDurationStyle}>
                             <div
                                 className={`relative h-24 w-28 overflow-hidden rounded-[1.25rem] border ${metronomeActive ? 'border-secondary/30 bg-secondary/10 shadow-[0_0_36px_rgba(198,106,69,0.22)]' : 'border-primary/10 bg-card/70'} transition duration-150`}
                                 aria-label="BPM 시각 메트로놈"

@@ -25,16 +25,27 @@ import {
     type SessionRow,
     type SongRow,
 } from '@/types/session';
+import { usePageTurner } from '@/hooks/usePageTurner';
+import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
+import { useFullscreen } from '@/hooks/useFullscreen';
 import {
     ArrowLeft,
     Check,
+    ChevronLeft,
+    ChevronRight,
     ChevronsUp,
     CornerDownRight,
+    Lock,
+    Maximize2,
+    Minimize2,
     Pause,
     Radio,
     Send,
     ShieldAlert,
+    Sun,
+    SunDim,
     Timer,
+    Unlock,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -184,6 +195,7 @@ export default function WorshipTeamMode({
 }: WorshipTeamModeProps) {
     const initializeSession = useSessionStore((state) => state.initializeSession);
     const applyRemoteState = useSessionStore((state) => state.applyRemoteState);
+    const updateState = useSessionStore((state) => state.updateState);
     const currentSession = useSessionStore((state) => state.currentSession);
     const currentSong = useSessionStore((state) => state.currentSong);
     const currentSongId = useSessionStore((state) => state.currentSongId);
@@ -200,6 +212,7 @@ export default function WorshipTeamMode({
     const [recipientChoice, setRecipientChoice] = useState('preset');
     const [lastSentEntryId, setLastSentEntryId] = useState<string | null>(null);
     const [clientId] = useState(createClientId);
+    const [stageLocked, setStageLocked] = useState(false);
     const [recentActionId, setRecentActionId] = useState<string | null>(null);
     const [pendingActionId, setPendingActionId] = useState<string | null>(null);
     const [failedActionId, setFailedActionId] = useState<string | null>(null);
@@ -217,7 +230,8 @@ export default function WorshipTeamMode({
         teamId,
         clientId,
     });
-    useWakeLock(isActive);
+    const { isActive: isWakeLockActive, isSupported: isWakeLockSupported, toggle: toggleWakeLock } = useScreenWakeLock(isActive);
+    const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen();
 
     const realtimeMeta = getRealtimeStatusMeta(realtimeStatus, localTransportAvailable);
     const realtimeAgeLabel = formatRealtimeAge(lastRealtimeAt, nowTick);
@@ -232,6 +246,55 @@ export default function WorshipTeamMode({
         '--beat-duration': `${currentBpm ? (60 / currentBpm).toFixed(3) : '0.75'}s`,
     } as CSSProperties;
     const metronomeActive = bpmEnabled && isActive && Boolean(currentBpm);
+
+    const handlePrevSong = () => {
+        if (currentSongIndex > 0) {
+            const prev = songs[currentSongIndex - 1];
+            updateState({ songId: prev.id, page: 1, section: null });
+        }
+    };
+    const handleNextSong = () => {
+        if (currentSongIndex < songs.length - 1) {
+            const next = songs[currentSongIndex + 1];
+            updateState({ songId: next.id, page: 1, section: null });
+        }
+    };
+    const handlePrevSection = () => {
+        if (sectionIndex > 0) {
+            updateState({ section: sections[sectionIndex - 1] });
+        }
+    };
+    const handleNextSection = () => {
+        if (sectionIndex >= 0 && sectionIndex < sections.length - 1) {
+            updateState({ section: sections[sectionIndex + 1] });
+        } else if (sectionIndex < 0 && sections.length > 0) {
+            updateState({ section: sections[0] });
+        }
+    };
+
+    usePageTurner({
+        onNext: () => {
+            if (sectionIndex >= 0 && sectionIndex < sections.length - 1) {
+                handleNextSection();
+            } else if (currentSongIndex < songs.length - 1) {
+                handleNextSong();
+            }
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                navigator.vibrate?.(35);
+            }
+        },
+        onPrev: () => {
+            if (sectionIndex > 0) {
+                handlePrevSection();
+            } else if (currentSongIndex > 0) {
+                handlePrevSong();
+            }
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                navigator.vibrate?.(35);
+            }
+        },
+        enabled: isActive,
+    });
 
     const configuredPresets = quickFeedbackPresets.length > 0
         ? quickFeedbackPresets
@@ -370,7 +433,10 @@ export default function WorshipTeamMode({
                 if (result.status === 'failed') {
                     setFailedActionId(action.id);
                 } else {
-                    showActionFeedback({ ...action, target: recipient.kind === 'everyone' ? '전체' : recipient.kind === 'role' ? ROLE_LABELS[recipient.role] : `기기 ${recipient.clientId.slice(0, 6)}` });
+                    const targetLabel = result.transport === 'local' && realtimeStatus !== 'connected'
+                        ? '로컬 전용 (원격 미연결)'
+                        : recipient.kind === 'everyone' ? '전체' : recipient.kind === 'role' ? ROLE_LABELS[recipient.role] : `기기 ${recipient.clientId.slice(0, 6)}`;
+                    showActionFeedback({ ...action, target: targetLabel });
                 }
             } catch (error) {
                 console.error('Failed to send worship team action:', error);
@@ -385,30 +451,27 @@ export default function WorshipTeamMode({
         <main className="safe-area-x min-h-dvh overflow-x-hidden bg-[#050b0a] text-[#fff7e8]">
             <SessionCueToasts entries={feedbackLog} isActive={isActive} currentClientId={clientId} />
             {stageFlash ? (
-                <div key={stageFlash.token} className="stage-cue-layer pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-5">
-                    <div className="stage-cue-backdrop absolute inset-0" />
+                <div key={stageFlash.token} className="pointer-events-none fixed top-4 inset-x-4 z-50 flex justify-center animate-in slide-in-from-top duration-200">
                     <div
-                        className="stage-cue-shell relative w-full max-w-xl overflow-hidden rounded-lg border px-5 py-6 text-center backdrop-blur-xl sm:px-8 sm:py-8"
-                        style={{ '--cue-accent': stageFlash.accent } as CSSProperties}
+                        className="flex items-center gap-3 rounded-2xl border px-5 py-3 shadow-2xl backdrop-blur-xl bg-black/90 text-white"
+                        style={{ borderColor: `rgb(${stageFlash.accent})` }}
                     >
-                        <div className="stage-cue-mark mx-auto flex h-11 w-11 items-center justify-center rounded-full border sm:h-12 sm:w-12">
-                            <Check size={23} strokeWidth={3} />
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                            <Check size={18} strokeWidth={3} />
                         </div>
-                        <p className="stage-cue-kicker mt-3 text-[10px] font-black uppercase tracking-[0.2em] sm:text-xs">{getCueDeliveryLabel(lastSentEntryId ? cueDeliveries[lastSentEntryId] : undefined)}</p>
-                        <p className="stage-cue-title mt-2 text-4xl font-black leading-none sm:text-6xl">{stageFlash.label}</p>
-                        <p className="stage-cue-message mt-3 text-sm font-bold text-white/72 sm:mt-4 sm:text-base">{stageFlash.message}</p>
-                        <div className="stage-cue-meta mt-4 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] sm:text-xs">
-                            <span>{stageFlash.target}</span>
-                            <span aria-hidden="true">·</span>
-                            <span>{ROLE_LABELS[stageFlash.role]}</span>
+                        <div className="min-w-0">
+                            <p className="text-base font-black leading-tight tracking-tight">
+                                {stageFlash.label}{' '}
+                                <span className="text-xs font-normal text-white/70">· {stageFlash.target}</span>
+                            </p>
+                            <p className="text-xs text-white/80 truncate">{stageFlash.message}</p>
                         </div>
-                        <span className="stage-cue-timer absolute inset-x-0 bottom-0 h-1" />
                     </div>
                 </div>
             ) : null}
 
             <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col gap-3 px-3 py-3 sm:gap-4 sm:px-6 sm:py-4 lg:px-8">
-                <header className="flex items-center justify-between gap-3">
+                <header className="flex items-center justify-between gap-2 sm:gap-3">
                     <Link
                         href={workspaceHref ?? `/session/${session.id}`}
                         aria-label="기본 세션 화면으로 돌아가기"
@@ -417,16 +480,89 @@ export default function WorshipTeamMode({
                         <ArrowLeft size={14} />
                         <span className="hidden sm:inline">기본 화면</span>
                     </Link>
-                    <div className="min-w-0 flex-1 text-center">
-                        <p className="truncate text-xs font-bold text-white/75">{currentSong?.title ?? '곡 대기'}</p>
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-center">
+                        <button
+                            type="button"
+                            onClick={handlePrevSong}
+                            disabled={currentSongIndex <= 0}
+                            className="p-1 rounded-lg text-white/70 hover:text-white disabled:opacity-20 transition"
+                            title="이전 곡"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        <p className="truncate text-xs font-bold text-white/90 max-w-[160px] sm:max-w-xs">{currentSong?.title ?? '곡 대기'}</p>
+                        <button
+                            type="button"
+                            onClick={handleNextSong}
+                            disabled={currentSongIndex >= songs.length - 1}
+                            className="p-1 rounded-lg text-white/70 hover:text-white disabled:opacity-20 transition"
+                            title="다음 곡"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
                     </div>
-                    <span
-                        className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold ${realtimeMeta.tone}`}
-                        data-testid="team-mode-sync"
-                    >
-                        <span className={`h-2 w-2 rounded-full ${realtimeMeta.dot}`} />
-                        {realtimeMeta.label}
-                    </span>
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                        {isWakeLockSupported && (
+                            <button
+                                type="button"
+                                onClick={toggleWakeLock}
+                                className={`tap-target inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-bold transition ${
+                                    isWakeLockActive
+                                        ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
+                                        : 'border-white/15 bg-white/5 text-white/60 hover:bg-white/10'
+                                }`}
+                                title="화면 꺼짐 방지 토글"
+                            >
+                                {isWakeLockActive ? <Sun size={13} /> : <SunDim size={13} />}
+                                <span className="hidden md:inline">화면 {isWakeLockActive ? '켜짐' : '꺼짐'}</span>
+                            </button>
+                        )}
+                        {isFullscreenSupported && (
+                            <button
+                                type="button"
+                                onClick={() => void toggleFullscreen()}
+                                className="tap-target inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white/80 transition hover:bg-white/10"
+                                title="무대 전체화면 전환"
+                            >
+                                {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                                <span className="hidden md:inline">{isFullscreen ? '해제' : '전체화면'}</span>
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setStageLocked((prev) => {
+                                    const next = !prev;
+                                    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                                        navigator.vibrate?.(next ? [25, 25, 25] : 30);
+                                    }
+                                    return next;
+                                });
+                            }}
+                            className={`tap-target inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-bold transition ${
+                                stageLocked
+                                    ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
+                                    : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
+                            }`}
+                            title="무대 미스터치 방지 잠금 (블루투스 페달은 잠금 중에도 작동)"
+                        >
+                            {stageLocked ? <Lock size={13} /> : <Unlock size={13} />}
+                            <span className="hidden sm:inline">{stageLocked ? '잠김' : '잠금'}</span>
+                        </button>
+                        <span
+                            className="hidden lg:inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-white/60"
+                            title="블루투스 악보 넘김 페달 및 방향키 지원"
+                        >
+                            ⌨️ 페달 지원
+                        </span>
+                        <span
+                            className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold ${realtimeMeta.tone}`}
+                            data-testid="team-mode-sync"
+                        >
+                            <span className={`h-2 w-2 rounded-full ${realtimeMeta.dot}`} />
+                            {realtimeMeta.label}
+                        </span>
+                    </div>
                 </header>
 
                 <div className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-3 sm:grid-cols-2">
@@ -468,21 +604,40 @@ export default function WorshipTeamMode({
                         <div className="relative flex min-h-[16.5rem] flex-col justify-between gap-4 sm:min-h-[32rem] sm:gap-5 lg:min-h-full">
                             <div className="grid grid-cols-[minmax(0,1fr)_7.75rem] gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,0.32fr)]">
                                 <div className="min-w-0">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffe0b8]/45 sm:text-xs sm:tracking-[0.2em]">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300 sm:text-xs sm:tracking-[0.2em]">
                                         현재 섹션
                                     </p>
                                     <h1 className="mt-1.5 break-words text-3xl font-black leading-tight text-[#ffe0b8] sm:mt-2 sm:text-6xl">
                                         {displayedSection}
                                     </h1>
                                 </div>
-                                <div className="min-w-0 rounded-lg border border-[#ffe0b8]/16 bg-black/20 px-3 py-2.5 sm:px-4 sm:py-3">
-                                    <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#ffe0b8]/45 sm:text-[10px] sm:tracking-[0.18em]">
+                                <div className="min-w-0 rounded-lg border border-[#ffe0b8]/25 bg-black/40 px-3 py-2.5 sm:px-4 sm:py-3">
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-amber-300 sm:text-[10px] sm:tracking-[0.18em]">
                                         다음
                                     </p>
                                     <p className="mt-1.5 break-words text-base font-black leading-tight text-white sm:mt-2 sm:text-xl">
                                         {nextSection}
                                     </p>
                                 </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handlePrevSection}
+                                    disabled={sectionIndex <= 0}
+                                    className="tap-target inline-flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20 disabled:opacity-25 transition active:scale-95"
+                                >
+                                    <ChevronLeft size={14} /> 이전 섹션
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleNextSection}
+                                    disabled={sectionIndex >= sections.length - 1}
+                                    className="tap-target inline-flex items-center gap-1 rounded-xl border border-[#ffe0b8]/40 bg-[#ffe0b8]/15 px-3 py-1.5 text-xs font-bold text-[#ffe0b8] hover:bg-[#ffe0b8]/25 disabled:opacity-25 transition active:scale-95"
+                                >
+                                    다음 섹션 <ChevronRight size={14} />
+                                </button>
                             </div>
 
                             <ol aria-label="송폼 진행 순서" className="flex flex-wrap gap-2">
@@ -498,7 +653,7 @@ export default function WorshipTeamMode({
                                             {currentBpm ?? '--'}
                                         </p>
                                         <div className="flex flex-col items-start gap-1 pb-1 sm:gap-2 sm:pb-2">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffe0b8]/45 sm:text-xs sm:tracking-[0.18em]">
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300 sm:text-xs sm:tracking-[0.18em]">
                                                 BPM
                                             </p>
                                             <p className="inline-flex rounded-full bg-[#ffe0b8]/[0.12] px-2 py-1 text-[10px] font-black text-[#ffe0b8] sm:px-3 sm:text-xs">
@@ -683,45 +838,6 @@ function useNowTick(intervalMs: number) {
     }, [intervalMs]);
 
     return now;
-}
-
-function useWakeLock(enabled: boolean) {
-    useEffect(() => {
-        if (!enabled || typeof navigator === 'undefined') {
-            return;
-        }
-
-        let sentinel: { release: () => Promise<void> } | null = null;
-        let isReleased = false;
-        const wakeLock = (navigator as Navigator & {
-            wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
-        }).wakeLock;
-
-        if (!wakeLock) {
-            return;
-        }
-
-        void wakeLock.request('screen')
-            .then((nextSentinel) => {
-                if (isReleased) {
-                    void nextSentinel.release();
-                    return;
-                }
-
-                sentinel = nextSentinel;
-            })
-            .catch(() => {
-                sentinel = null;
-            });
-
-        return () => {
-            isReleased = true;
-
-            if (sentinel) {
-                void sentinel.release();
-            }
-        };
-    }, [enabled]);
 }
 
 function getRealtimeStatusMeta(status: RealtimeConnectionStatus, localTransportAvailable: boolean) {

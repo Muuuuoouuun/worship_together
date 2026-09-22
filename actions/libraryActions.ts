@@ -1,7 +1,7 @@
 'use server';
 
 import { DEMO_TEAM_ID } from '@/lib/constants';
-import { hasDuplicateSongIds, normalizeSetlistSongOrder } from '@/lib/libraryPrototypeStorage';
+import { normalizeSetlistSongOrder } from '@/lib/libraryPrototypeStorage';
 import { getSupabaseClient, supabase as configuredSupabase } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -16,6 +16,7 @@ export async function createSong(formData: FormData) {
     const dataXml = getNullableString(formData, 'dataXml');
     const bpmValue = getNullableString(formData, 'bpm');
     const parsedBpm = bpmValue ? Number(bpmValue) : null;
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
     if (!title) {
         redirect('/dashboard/songs?error=missing-song-title');
@@ -28,7 +29,7 @@ export async function createSong(formData: FormData) {
     const { error } = await supabase
         .from('songs')
         .insert({
-            team_id: DEMO_TEAM_ID,
+            team_id: teamId,
             title,
             artist,
             original_key: originalKey,
@@ -50,6 +51,7 @@ export async function createSong(formData: FormData) {
 export async function createSetlist(formData: FormData) {
     if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
     const supabase = getSupabaseClient();
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
     const title = getString(formData, 'title');
     const theme = getNullableString(formData, 'theme');
     const worshipDateInput = getString(formData, 'worshipDate');
@@ -73,8 +75,7 @@ export async function createSetlist(formData: FormData) {
     }
 
     if (!songIds.length) redirect('/dashboard/songs?error=invalid-setlist-songs');
-    if (hasDuplicateSongIds(songIds)) redirect('/dashboard/songs?error=duplicate-setlist-songs');
-    const { data: teamSongs, error: songsError } = await supabase.from('songs').select('id').eq('team_id', DEMO_TEAM_ID).in('id', [...new Set(songIds)]);
+    const { data: teamSongs, error: songsError } = await supabase.from('songs').select('id').eq('team_id', teamId).in('id', [...new Set(songIds)]);
     if (songsError || !teamSongs || songIds.some(id => !teamSongs.some(song => song.id === id))) {
         redirect('/dashboard/songs?error=invalid-setlist-songs');
     }
@@ -82,7 +83,7 @@ export async function createSetlist(formData: FormData) {
     const { error } = await supabase
         .from('setlists')
         .insert({
-            team_id: DEMO_TEAM_ID,
+            team_id: teamId,
             title,
             theme,
             worship_date: worshipDate.toISOString(),
@@ -103,6 +104,7 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
     if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const setlistId = getString(formData, 'setlistId');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
     if (!setlistId) {
         redirect('/dashboard/songs?error=missing-setlist-id');
@@ -112,7 +114,7 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
         .from('setlists')
         .select('title, theme, worship_date, song_order')
         .eq('id', setlistId)
-        .eq('team_id', DEMO_TEAM_ID)
+        .eq('team_id', teamId)
         .maybeSingle();
 
     if (fetchError || !setlist) {
@@ -129,7 +131,7 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
     const { error } = await supabase
         .from('setlists')
         .insert({
-            team_id: DEMO_TEAM_ID,
+            team_id: teamId,
             title: `${setlist.title} Copy`,
             theme: setlist.theme,
             worship_date: nextWorshipDate.toISOString(),
@@ -146,10 +148,59 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
     redirect('/dashboard/songs?created=template');
 }
 
+export async function deleteSong(formData: FormData) {
+    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
+    const supabase = getSupabaseClient();
+    const songId = getString(formData, 'songId');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
+
+    if (!songId) redirect('/dashboard/songs?error=missing-song-id');
+
+    const { error } = await supabase
+        .from('songs')
+        .delete()
+        .eq('id', songId)
+        .eq('team_id', teamId);
+
+    if (error) {
+        console.error('Failed to delete song:', error);
+        redirect('/dashboard/songs?error=delete-song');
+    }
+
+    revalidatePath('/dashboard');
+    revalidatePath('/dashboard/songs');
+    redirect('/dashboard/songs?deleted=song');
+}
+
+export async function deleteSetlist(formData: FormData) {
+    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
+    const supabase = getSupabaseClient();
+    const setlistId = getString(formData, 'setlistId');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
+
+    if (!setlistId) redirect('/dashboard/songs?error=missing-setlist-id');
+
+    const { error } = await supabase
+        .from('setlists')
+        .delete()
+        .eq('id', setlistId)
+        .eq('team_id', teamId);
+
+    if (error) {
+        console.error('Failed to delete setlist:', error);
+        redirect('/dashboard/songs?error=delete-setlist');
+    }
+
+    revalidatePath('/dashboard');
+    revalidatePath('/dashboard/songs');
+    redirect('/dashboard/songs?deleted=setlist');
+}
+
 export async function updateSongBpmPreset(formData: FormData) {
     if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const songId = getString(formData, 'songId');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
     const bpmValue = getNullableString(formData, 'bpm');
     const parsedBpm = bpmValue ? Number(bpmValue) : null;
 
@@ -165,7 +216,7 @@ export async function updateSongBpmPreset(formData: FormData) {
         .from('songs')
         .update({ bpm: parsedBpm })
         .eq('id', songId)
-        .eq('team_id', DEMO_TEAM_ID);
+        .eq('team_id', teamId);
 
     if (error) {
         console.error('Failed to update song BPM preset:', error);

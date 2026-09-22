@@ -54,6 +54,14 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
             return;
         }
 
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            try {
+                navigator.vibrate?.([40, 60, 40]);
+            } catch {
+                // Ignore vibration errors on non-supporting devices
+            }
+        }
+
         setVisibleToasts((currentToasts) => [
             ...toastEntries.slice(-MAX_VISIBLE_TOASTS).reverse(),
             ...currentToasts,

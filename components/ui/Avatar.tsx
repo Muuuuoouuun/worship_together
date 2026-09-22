@@ -17,7 +17,7 @@ const avatarVariants = cva(
         default: "border border-border/80 bg-muted text-foreground",
         leader: "ring-2 ring-secondary bg-secondary/15 text-secondary border-transparent",
         vocal: "ring-2 ring-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-transparent",
-        band: "ring-2 ring-accent/60 bg-accent/15 text-accent dark:text-accent-foreground border-transparent",
+        band: "ring-2 ring-accent/60 bg-accent/15 text-accent dark:text-teal-300 border-transparent",
         media: "ring-2 ring-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-transparent",
         primary: "ring-2 ring-primary bg-primary/15 text-primary border-transparent",
       },

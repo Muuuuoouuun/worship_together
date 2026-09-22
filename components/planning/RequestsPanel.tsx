@@ -145,6 +145,22 @@ function RequestContent({ request, names, userId, owner, disabled, run }: {
                     </form>
                 ) : <p className="text-sm text-muted-foreground">작성자, 받는 인도자, 팀 관리자가 답글을 남길 수 있습니다.</p>}
             </section>
+            {(owner || request.authorId === userId) ? (
+                <div className="pt-2 border-t border-border flex justify-end">
+                    <button
+                        type="button"
+                        className="text-xs text-destructive hover:underline font-semibold"
+                        disabled={disabled}
+                        onClick={async () => {
+                            if (window.confirm('이 요청을 삭제하시겠습니까? (답글 포함 모두 삭제)')) {
+                                await run({ type: 'request.delete', requestId: request.id }, '요청을 삭제했습니다.');
+                            }
+                        }}
+                    >
+                        요청 삭제
+                    </button>
+                </div>
+            ) : null}
         </div>
     );
 }

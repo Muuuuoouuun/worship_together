@@ -20,9 +20,9 @@ const badgeVariants = cva(
         warning:
           "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400",
         destructive:
-          "border-destructive/30 bg-destructive/10 text-destructive dark:text-destructive-foreground",
+          "border-destructive/30 bg-destructive/10 text-destructive dark:text-rose-400",
         accent:
-          "border-accent/25 bg-accent/10 text-accent dark:text-accent-foreground",
+          "border-accent/25 bg-accent/10 text-accent dark:text-teal-300",
       },
       size: {
         sm: "px-2 py-0.5 text-[11px] rounded-md leading-tight",

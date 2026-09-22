@@ -17,13 +17,13 @@ export default function SongFormEditor({ songId, teamId, initialForm }: { songId
     const [invalidTimes, setInvalidTimes] = useState<string[]>([]);
     function change(next: SongFormSection[]) { setSections(next); setDirty(true); setMessage(''); }
     function move(index: number, offset: number) {
+        const targetIndex = index + offset;
+        if (targetIndex < 0 || targetIndex >= sections.length) return;
         const next = [...sections];
-        [next[index], next[index + offset]] = [next[index + offset], next[index]];
-        // Timings belong to the supplied recording. A reordered arrangement no longer has verified timings.
-        change(next.map(section => ({ ...section, startSeconds: null })));
-        setInvalidTimes([]);
+        [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+        change(next);
         setSource('manual');
-        setMessage('순서를 바꾸어 영상 시작 시간을 초기화했습니다. 필요하면 다시 입력해주세요.');
+        setMessage('섹션 순서를 변경했습니다.');
     }
     function parse() {
         if (!validateYouTubeUrl(url)) { setMessage('올바른 HTTPS 유튜브 영상 링크를 입력해주세요.'); return; }

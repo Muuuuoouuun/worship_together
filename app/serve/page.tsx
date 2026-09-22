@@ -8,7 +8,7 @@ export default function ServePage() {
             eyebrow="섬김"
             title="예배 후 마음이 실제 섬김 약속으로 이어지게 합니다."
             description="필요한 역할, 시간, 준비사항, 담당자를 명확히 보여주어 예배팀과 공동체 섬김이 자연스럽게 연결됩니다."
-            primaryAction={{ href: '#open-roles', label: '열린 역할 보기' }}
+            primaryAction={{ href: '/dashboard/planning?filter=vacant', label: '열린 섬김 역할 보기' }}
             secondaryAction={{ href: '/groups', label: '그룹 찾기' }}
             metrics={[
                 {

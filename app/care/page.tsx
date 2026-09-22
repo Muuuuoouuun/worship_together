@@ -8,8 +8,8 @@ export default function CarePage() {
             eyebrow="케어"
             title="기도와 돌봄 요청은 공개 범위와 담당자를 분명히 합니다."
             description="예배 후 말씀과 묵상에서 이어지는 기도제목을 안전하게 받고, 리더가 놓치지 않도록 후속조치를 큐로 관리합니다."
-            primaryAction={{ href: '#request', label: '기도 요청 시작' }}
-            secondaryAction={{ href: '/community', label: '팀 커뮤니티' }}
+            primaryAction={{ href: '/community', label: '기도 및 나눔 작성' }}
+            secondaryAction={{ href: '/dashboard/planning', label: '일정 및 소통 확인' }}
             metrics={[
                 {
                     label: '공개 범위',

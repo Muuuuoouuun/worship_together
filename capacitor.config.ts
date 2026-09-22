@@ -13,6 +13,11 @@ const config: CapacitorConfig = {
         cleartext: serverUrl.startsWith("http://"),
       }
     : undefined,
+  android: {
+    allowMixedContent: true,
+    captureInput: true,
+    webContentsDebuggingEnabled: process.env.NODE_ENV !== "production",
+  },
 };
 
 export default config;

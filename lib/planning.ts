@@ -1,12 +1,22 @@
 import { z } from 'zod';
 import { createClientId } from './clientId';
 import { worshipRoles, type TeamMember } from '../types/team';
-import { canManagePlanning, emptyPlanningState, requestKinds, scheduleTemplates, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
+import { canManagePlanning, emptyPlanningState, planningDate, requestKinds, scheduleTemplates, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
 
 const id = z.string().min(1).max(200);
 const body = z.string().trim().min(1, '내용을 입력해주세요.').max(1500);
 const role = z.enum(Object.keys(worshipRoles) as [keyof typeof worshipRoles, ...Array<keyof typeof worshipRoles>]);
-const scheduleInput = z.object({ title: z.string().trim().min(1).max(80), kind: z.enum(['rehearsal', 'worship']), startsAt: z.iso.datetime({ offset: true }), endsAt: z.iso.datetime({ offset: true }), location: z.string().trim().max(120), notes: z.string().trim().max(1500) });
+const scheduleInput = z.object({
+    title: z.string().trim().min(1).max(80),
+    kind: z.enum(['rehearsal', 'worship']),
+    startsAt: z.iso.datetime({ offset: true }),
+    endsAt: z.iso.datetime({ offset: true }),
+    location: z.string().trim().max(120),
+    notes: z.string().trim().max(1500),
+    setlistTitle: z.string().trim().max(120).nullish(),
+    setlistSongs: z.array(z.string().trim().max(100)).max(30).nullish(),
+    setlistId: z.string().trim().max(200).nullish(),
+});
 const rotationTeamSchema = z.object({ id, name: z.string().trim().min(1).max(50), memberIds: z.array(id) });
 const rotationGroupSchema = z.object({
     id,
@@ -22,19 +32,52 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('request.create'), setlistId: z.string().max(200), setlistTitle: z.string().trim().min(1).max(120), kind: z.enum(['question', 'reminder', 'change']), body, leaderId: id }),
     z.object({ type: z.literal('request.reply'), requestId: id, body }),
     z.object({ type: z.literal('request.status'), requestId: id, status: z.enum(['open', 'reviewing', 'resolved']) }),
+    z.object({ type: z.literal('request.delete'), requestId: id }),
     z.object({ type: z.literal('event.save'), eventId: id.optional(), input: scheduleInput }),
     z.object({ type: z.literal('event.cancel'), eventId: id }),
+    z.object({ type: z.literal('event.delete'), eventId: id }),
     z.object({ type: z.literal('event.createRecurring'), input: scheduleInput, weeksCount: z.number().int().min(1).max(12) }),
     z.object({ type: z.literal('event.createWithTemplate'), input: scheduleInput, templateKey: z.enum(['standard', 'full', 'acoustic', 'vocalTeam']), weeksCount: z.number().int().min(1).max(12).optional() }),
+    z.object({
+        type: z.literal('event.updateSetlist'),
+        eventId: id,
+        setlistTitle: z.string().trim().min(1, '콘티 제목을 입력해주세요.').max(120),
+        setlistSongs: z.array(z.string().trim().max(100)).max(30).optional(),
+        setlistId: z.string().trim().max(200).optional(),
+        notifyDuty: z.boolean().optional(),
+    }),
     z.object({ type: z.literal('slot.save'), eventId: id, slotId: id.optional(), role, memberId: id.nullable() }),
     z.object({ type: z.literal('slot.remove'), eventId: id, slotId: id }),
     z.object({ type: z.literal('slots.applyTemplate'), eventId: id, templateKey: z.enum(['standard', 'full', 'acoustic', 'vocalTeam']) }),
     z.object({ type: z.literal('slots.copyFromEvent'), targetEventId: id, sourceEventId: id }),
+    z.object({ type: z.literal('slots.autoAssign'), eventId: id }),
+    z.object({ type: z.literal('slots.clear'), eventId: id }),
+    z.object({ type: z.literal('schedule.sendDutyReminder'), eventId: id }),
+    z.object({
+        type: z.literal('event.createMonthlySundays'),
+        year: z.number().int().min(2020).max(2100),
+        month: z.number().int().min(1).max(12),
+        startHour: z.number().int().min(0).max(23),
+        startMinute: z.number().int().min(0).max(59),
+        endHour: z.number().int().min(0).max(23),
+        endMinute: z.number().int().min(0).max(59),
+        title: z.string().trim().min(1).max(80),
+        location: z.string().trim().max(120).optional(),
+        templateKey: z.enum(['standard', 'full', 'acoustic', 'vocalTeam']).optional(),
+    }),
     z.object({ type: z.literal('attendance.set'), eventId: id, slotId: id, attendance: z.enum(['confirmed', 'absent']), reason: z.string().trim().max(500) }),
     z.object({ type: z.literal('attendance.batchConfirm'), items: z.array(z.object({ eventId: id, slotId: id })).min(1).max(50) }),
-    z.object({ type: z.literal('alert.create'), eventId: id, slotId: id.nullable(), kind: z.enum(['substitute', 'notice']), body }),
+    z.object({
+        type: z.literal('alert.create'),
+        eventId: id,
+        slotId: id.nullable(),
+        kind: z.enum(['substitute', 'notice']),
+        body,
+        targetAudience: z.enum(['duty', 'all']).optional(),
+    }),
     z.object({ type: z.literal('alert.resolve'), alertId: id }),
     z.object({ type: z.literal('slot.volunteer'), eventId: id, slotId: id }),
+    z.object({ type: z.literal('slot.unvolunteer'), eventId: id, slotId: id }),
     z.object({ type: z.literal('slot.accept'), eventId: id, slotId: id, memberId: id }),
     z.object({
         type: z.literal('rotation.save'),
@@ -54,6 +97,7 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('rotation.apply'), rotationId: id, eventId: id }),
     z.object({ type: z.literal('rotation.batchApply'), rotationId: id, eventIds: z.array(id).min(1).max(20) }),
     z.object({ type: z.literal('notification.read'), notificationId: id }),
+    z.object({ type: z.literal('notification.readAll') }),
 ]);
 const stamp = z.string();
 const stateSchema = z.object({
@@ -102,19 +146,37 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         const clash = state.events.find(other => !other.cancelled && Date.parse(other.startsAt) < Date.parse(event.endsAt) && Date.parse(event.startsAt) < Date.parse(other.endsAt) && other.slots.some(slot => slot.id !== slotId && slot.memberId === memberId && slot.attendance !== 'absent'));
         if (clash) throw new Error(`이미 겹치는 일정에 배치되어 있습니다: ${clash.title}`);
     };
-    const urgent = (event: TeamSchedule, slotId: string | null, kind: 'absence' | 'substitute' | 'notice', text: string) => {
+    const urgent = (event: TeamSchedule, slotId: string | null, kind: 'absence' | 'substitute' | 'notice', text: string, targetRecipients?: string[]) => {
         if (slotId && state.alerts.some(item => item.eventId === event.id && item.slotId === slotId && !item.resolvedAt)) throw new Error('이 배치에는 이미 열린 긴급 요청이 있습니다.');
         const alertId = createClientId();
         state.alerts.unshift({ id: alertId, eventId: event.id, slotId, kind, body: text, authorId: userId, createdAt: now, resolvedAt: null });
-        notify(everyone, kind === 'absence' ? '결석 · 대체 인원이 필요해요' : kind === 'substitute' ? '대체 인원을 구해요' : '긴급 안내', `${event.title} · ${text}`, 'schedule', event.id, true);
+        const recipients = targetRecipients ?? everyone;
+        notify(recipients, kind === 'absence' ? '결석 · 대체 인원이 필요해요' : kind === 'substitute' ? '대체 인원을 구해요' : '긴급 안내', `${event.title} · ${text}`, 'schedule', event.id, true);
     };
     switch (command.type) {
         case 'request.create': {
             if (!managers.includes(command.leaderId)) throw new Error('수신할 인도자 또는 관리자를 선택해주세요.');
-            if (state.requests.length >= 300) throw new Error('요청 보관 한도에 도달했습니다.');
+            if (state.requests.length >= 300) {
+                const pruneIndex = state.requests.findLastIndex ? state.requests.findLastIndex(r => r.status === 'resolved') : -1;
+                if (pruneIndex !== -1) {
+                    state.requests.splice(pruneIndex, 1);
+                } else {
+                    throw new Error('요청 보관 한도에 도달했습니다.');
+                }
+            }
             const requestId = createClientId();
             state.requests.unshift({ ...command, id: requestId, authorId: userId, status: 'open', createdAt: now, updatedAt: now, replies: [] });
             notify([command.leaderId], `콘티 ${requestKinds[command.kind]}`, `${command.setlistTitle} · ${command.body}`, 'requests', requestId);
+            break;
+        }
+        case 'request.delete': {
+            const index = state.requests.findIndex(item => item.id === command.requestId);
+            if (index === -1) throw new Error('요청을 찾지 못했습니다.');
+            const request = state.requests[index];
+            const canDelete = request.authorId === userId || request.leaderId === userId || actor.permission === 'owner';
+            if (!canDelete) throw new Error('작성자 또는 관리자만 요청을 삭제할 수 있습니다.');
+            state.requests.splice(index, 1);
+            state.notifications = state.notifications.filter(item => item.entityId !== command.requestId);
             break;
         }
         case 'request.reply': case 'request.status': {
@@ -139,8 +201,25 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             const start = Date.parse(command.input.startsAt), end = Date.parse(command.input.endsAt);
             if (end <= start || end - start > 86400000) throw new Error('종료는 시작 이후, 일정 길이는 24시간 이내로 설정해주세요.');
             const existing = command.eventId ? eventById(command.eventId) : undefined;
-            if (!existing && state.events.length >= 200) throw new Error('일정 보관 한도에 도달했습니다.');
-            const event: TeamSchedule = { ...command.input, startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString(), id: existing?.id ?? createClientId(), cancelled: false, slots: existing?.slots ?? [] };
+            if (!existing && state.events.length >= 200) {
+                const pruneIndex = state.events.findLastIndex ? state.events.findLastIndex(e => e.cancelled) : -1;
+                if (pruneIndex !== -1) {
+                    state.events.splice(pruneIndex, 1);
+                } else {
+                    throw new Error('일정 보관 한도에 도달했습니다.');
+                }
+            }
+            const event: TeamSchedule = {
+                setlistTitle: existing?.setlistTitle,
+                setlistSongs: existing?.setlistSongs,
+                setlistId: existing?.setlistId,
+                ...command.input,
+                startsAt: new Date(start).toISOString(),
+                endsAt: new Date(end).toISOString(),
+                id: existing?.id ?? createClientId(),
+                cancelled: false,
+                slots: existing?.slots ?? [],
+            };
             for (const slot of event.slots) if (slot.attendance !== 'absent') available(event, slot.memberId, slot.id);
             if (existing) Object.assign(existing, event); else state.events.unshift(event);
             notify(everyone, existing ? '일정이 변경되었어요' : '새 연습·예배 일정', event.title, 'schedule', event.id);
@@ -150,6 +229,36 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             manage(); const event = eventById(command.eventId); event.cancelled = true;
             state.alerts.filter(item => item.eventId === event.id && !item.resolvedAt).forEach(item => { item.resolvedAt = now; });
             notify(everyone, '일정이 취소되었어요', event.title, 'schedule', event.id, true); break;
+        }
+        case 'event.delete': {
+            manage();
+            const index = state.events.findIndex(item => item.id === command.eventId);
+            if (index === -1) throw new Error('삭제할 일정을 찾지 못했습니다.');
+            state.events.splice(index, 1);
+            state.alerts = state.alerts.filter(item => item.eventId !== command.eventId);
+            state.notifications = state.notifications.filter(item => item.entityId !== command.eventId);
+            break;
+        }
+        case 'event.updateSetlist': {
+            manage();
+            const event = eventById(command.eventId);
+            event.setlistTitle = command.setlistTitle;
+            if (command.setlistSongs !== undefined) event.setlistSongs = command.setlistSongs;
+            if (command.setlistId !== undefined) event.setlistId = command.setlistId;
+            if (command.notifyDuty !== false) {
+                const dutyMemberIds = event.slots.map(s => s.memberId).filter((mid): mid is string => Boolean(mid));
+                const recipients = dutyMemberIds.length > 0 ? dutyMemberIds : everyone;
+                const songsSummary = event.setlistSongs?.length ? ` (${event.setlistSongs.length}곡)` : '';
+                notify(
+                    recipients,
+                    '콘티가 등록·변경되었어요',
+                    `${event.title} · ${command.setlistTitle}${songsSummary}`,
+                    'schedule',
+                    event.id,
+                    false
+                );
+            }
+            break;
         }
         case 'slot.save': {
             manage(); const event = eventById(command.eventId);
@@ -198,8 +307,13 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         }
         case 'alert.create': {
             const event = eventById(command.eventId);
-            if (command.kind === 'notice') { manage(); urgent(event, null, 'notice', command.body); }
-            else {
+            if (command.kind === 'notice') {
+                manage();
+                const dutyMemberIds = event.slots.map(s => s.memberId).filter((mid): mid is string => Boolean(mid));
+                const targetAudience = command.targetAudience ?? 'duty';
+                const recipients = (targetAudience === 'duty' && dutyMemberIds.length > 0) ? dutyMemberIds : everyone;
+                urgent(event, null, 'notice', command.body, recipients);
+            } else {
                 if (!command.slotId) throw new Error('대체할 배치를 선택해주세요.');
                 const slot = slotById(event, command.slotId);
                 if (slot.memberId !== userId) manage();
@@ -223,6 +337,12 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (!slot.volunteers.includes(userId)) { slot.volunteers.push(userId); notify(managers, '대체 지원자가 있어요', `${event.title} · ${actor.name}`, 'schedule', event.id, true); }
             break;
         }
+        case 'slot.unvolunteer': {
+            const event = eventById(command.eventId);
+            const slot = slotById(event, command.slotId);
+            slot.volunteers = slot.volunteers.filter(v => v !== userId);
+            break;
+        }
         case 'slot.accept': {
             manage(); const event = eventById(command.eventId); const slot = slotById(event, command.slotId);
             if (!slot.volunteers.includes(command.memberId)) throw new Error('지원한 팀원만 확정할 수 있습니다.');
@@ -236,6 +356,14 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             const notification = state.notifications.find(item => item.id === command.notificationId);
             if (!notification || !notification.recipientIds.includes(userId)) throw new Error('본인의 알림만 확인할 수 있습니다.');
             if (!notification.readBy.includes(userId)) notification.readBy.push(userId);
+            break;
+        }
+        case 'notification.readAll': {
+            state.notifications.forEach(item => {
+                if (item.recipientIds.includes(userId) && !item.readBy.includes(userId)) {
+                    item.readBy.push(userId);
+                }
+            });
             break;
         }
         case 'event.createRecurring': {
@@ -328,6 +456,136 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                 });
             }
             notify(everyone, '이전 배정을 복사해왔어요', `${targetEvent.title} ← ${sourceEvent.title}`, 'schedule', targetEvent.id);
+            break;
+        }
+        case 'slots.autoAssign': {
+            manage();
+            const event = eventById(command.eventId);
+            const emptySlots = event.slots.filter(s => s.memberId === null);
+            if (emptySlots.length === 0) throw new Error('배정할 빈자리가 없습니다.');
+            const workloadMap = new Map<string, number>();
+            for (const m of members) workloadMap.set(m.userId, 0);
+            for (const ev of state.events) {
+                if (ev.cancelled) continue;
+                for (const sl of ev.slots) {
+                    if (sl.memberId && workloadMap.has(sl.memberId)) {
+                        workloadMap.set(sl.memberId, workloadMap.get(sl.memberId)! + 1);
+                    }
+                }
+            }
+            const assignedInEvent = new Set(event.slots.map(s => s.memberId).filter((mid): mid is string => Boolean(mid)));
+            let assignedCount = 0;
+            for (const slot of emptySlots) {
+                const candidates = members.filter(m => !assignedInEvent.has(m.userId) && (m.role === slot.role || slot.role === 'member'));
+                const validCandidates = candidates.filter(m => {
+                    try {
+                        available(event, m.userId);
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                });
+                validCandidates.sort((a, b) => (workloadMap.get(a.userId) ?? 0) - (workloadMap.get(b.userId) ?? 0));
+                if (validCandidates.length > 0) {
+                    const chosen = validCandidates[0];
+                    slot.memberId = chosen.userId;
+                    slot.attendance = 'pending';
+                    slot.volunteers = [];
+                    closeSlotAlerts(event.id, slot.id);
+                    assignedInEvent.add(chosen.userId);
+                    workloadMap.set(chosen.userId, (workloadMap.get(chosen.userId) ?? 0) + 1);
+                    assignedCount++;
+                }
+            }
+            if (assignedCount === 0) throw new Error('배정 가능한 적합한 팀원이 없습니다. (일정 충돌 또는 파트 불일치)');
+            notify(everyone, '스마트 자동 배정이 완료되었어요', `${event.title} · ${assignedCount}명 배정`, 'schedule', event.id);
+            break;
+        }
+        case 'slots.clear': {
+            manage();
+            const event = eventById(command.eventId);
+            let clearedCount = 0;
+            for (const slot of event.slots) {
+                if (slot.memberId !== null) {
+                    slot.memberId = null;
+                    slot.attendance = 'pending';
+                    slot.volunteers = [];
+                    closeSlotAlerts(event.id, slot.id);
+                    clearedCount++;
+                }
+            }
+            if (clearedCount === 0) throw new Error('초기화할 배정 인원이 없습니다.');
+            notify(everyone, '인원 배치가 초기화되었어요', event.title, 'schedule', event.id);
+            break;
+        }
+        case 'schedule.sendDutyReminder': {
+            manage();
+            const event = eventById(command.eventId);
+            const pendingSlots = event.slots.filter(s => s.memberId && s.attendance === 'pending');
+            if (pendingSlots.length === 0) throw new Error('참석 응답 대기 중인 팀원이 없습니다.');
+            const pendingMemberIds = [...new Set(pendingSlots.map(s => s.memberId!))];
+            const eventDate = planningDate(event.startsAt);
+            notify(
+                pendingMemberIds,
+                '섬김 참석 여부를 확정해주세요',
+                `${event.title} (${eventDate}) 섬김 참석 여부를 확인해주세요.`,
+                'schedule',
+                event.id,
+                true
+            );
+            break;
+        }
+        case 'event.createMonthlySundays': {
+            manage();
+            const { year, month, startHour, startMinute, endHour, endMinute, title, location, templateKey } = command;
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const sundays: Date[] = [];
+            const date = new Date(year, month - 1, 1);
+            while (date.getMonth() === month - 1) {
+                if (date.getDay() === 0) {
+                    sundays.push(new Date(date));
+                }
+                date.setDate(date.getDate() + 1);
+            }
+            if (sundays.length === 0) throw new Error('해당 월에 주일(일요일)이 없습니다.');
+            if (state.events.length + sundays.length > 200) throw new Error('일정 보관 한도에 도달했습니다.');
+
+            const template = templateKey ? scheduleTemplates[templateKey] : undefined;
+            const newEvents: TeamSchedule[] = [];
+            for (const sun of sundays) {
+                const y = sun.getFullYear();
+                const m = pad(sun.getMonth() + 1);
+                const d = pad(sun.getDate());
+                const startsAt = `${y}-${m}-${d}T${pad(startHour)}:${pad(startMinute)}:00+09:00`;
+                const endsAt = `${y}-${m}-${d}T${pad(endHour)}:${pad(endMinute)}:00+09:00`;
+                const startMs = Date.parse(startsAt);
+                const endMs = Date.parse(endsAt);
+                if (endMs <= startMs) throw new Error('종료 시간은 시작 시간 이후여야 합니다.');
+
+                const slots: ScheduleSlot[] = template
+                    ? template.roles.map(r => ({
+                        id: createClientId(),
+                        role: r,
+                        memberId: null,
+                        attendance: 'pending',
+                        volunteers: [],
+                    }))
+                    : [];
+
+                newEvents.push({
+                    id: createClientId(),
+                    title,
+                    kind: 'worship',
+                    startsAt,
+                    endsAt,
+                    location: location ?? '',
+                    notes: '',
+                    cancelled: false,
+                    slots,
+                });
+            }
+            state.events.unshift(...newEvents);
+            notify(everyone, '월간 주일예배 일정이 일괄 등록되었어요', `${title} (${year}년 ${month}월 · ${sundays.length}회)`, 'schedule', newEvents[0].id);
             break;
         }
         case 'rotation.save': {

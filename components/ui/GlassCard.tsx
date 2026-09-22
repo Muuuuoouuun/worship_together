@@ -9,16 +9,16 @@ interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const GlassCard: React.FC<GlassCardProps> = ({ children, className, variant = 'light', ...props }) => {
     const variantStyles = {
-        light: 'border-border bg-card text-card-foreground shadow-sm',
-        dark: 'border-border bg-muted text-foreground',
-        gold: 'border-secondary bg-card text-card-foreground shadow-sm',
+        light: 'border-border/80 bg-card/85 backdrop-blur-md text-card-foreground shadow-sm',
+        dark: 'border-border/80 bg-muted/80 backdrop-blur-md text-foreground shadow-sm',
+        gold: 'border-secondary/40 bg-secondary/10 backdrop-blur-md text-card-foreground shadow-sm',
     };
 
     return (
         <div
             {...props}
             className={cn(
-                'rounded-2xl border p-6',
+                'rounded-2xl border p-6 transition-all duration-200',
                 variantStyles[variant],
                 className
             )}

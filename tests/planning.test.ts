@@ -832,4 +832,137 @@ test('attendance.batchConfirm confirms multiple slots atomically and rejects oth
     }, /본인의 참석 여부/);
 });
 
+test('event.updateSetlist updates setlist info and notifies only assigned duty members', t => {
+    const f = fixture(t);
+    const event = createEvent(f, schedule({ title: '주일 2부 예배' }));
+    // Assign author to slot, but other is NOT assigned
+    addSlot(f, event.id, author.id);
+
+    const updated = f.send(owner.id, {
+        type: 'event.updateSetlist',
+        eventId: event.id,
+        setlistTitle: '9월 첫째 주 콘티',
+        setlistSongs: ['꽃들도', '은혜', '주는 완전합니다'],
+        notifyDuty: true,
+    });
+    const ev = updated.events.find(e => e.id === event.id)!;
+    assert.equal(ev.setlistTitle, '9월 첫째 주 콘티');
+    assert.deepEqual(ev.setlistSongs, ['꽃들도', '은혜', '주는 완전합니다']);
+
+    // Notification check: author is duty -> author receives it. other is not duty -> other does not.
+    const authorView = f.read(author.id);
+    const authorNotif = authorView.notifications.find(n => n.entityId === event.id && n.title.includes('콘티'));
+    assert.ok(authorNotif, 'Assigned duty member should receive setlist notification');
+    assert.match(authorNotif.body, /9월 첫째 주 콘티/);
+    assert.match(authorNotif.body, /3곡/);
+
+    const otherView = f.read(other.id);
+    const otherNotif = otherView.notifications.find(n => n.entityId === event.id && n.title.includes('콘티'));
+    assert.equal(otherNotif, undefined, 'Non-duty member should not receive duty-targeted setlist notification');
+
+    // Rejects non-manager
+    rejectsAtomically(f, other.id, {
+        type: 'event.updateSetlist',
+        eventId: event.id,
+        setlistTitle: '해킹 콘티',
+    }, managerError);
+});
+
+test('alert.create with targetAudience=duty notifies only duty members, while all notifies everyone', t => {
+    const f = fixture(t);
+    const event = createEvent(f, schedule({ title: '주일 11시 예배' }));
+    addSlot(f, event.id, author.id); // author is on duty, other is not
+
+    // 1. Leader sends notice with targetAudience: 'duty'
+    f.send(owner.id, {
+        type: 'alert.create',
+        eventId: event.id,
+        slotId: null,
+        kind: 'notice',
+        body: '이번 주 당번분들은 30분 전까지 도착해주세요!',
+        targetAudience: 'duty',
+    });
+
+    const authorNotifs = f.read(author.id).notifications;
+    const dutyNoticeForAuthor = authorNotifs.find(n => n.body.includes('30분 전까지 도착'));
+    assert.ok(dutyNoticeForAuthor, 'Duty member must receive duty notice');
+
+    const otherNotifs = f.read(other.id).notifications;
+    const dutyNoticeForOther = otherNotifs.find(n => n.body.includes('30분 전까지 도착'));
+    assert.equal(dutyNoticeForOther, undefined, 'Unassigned member must not receive duty-only notice');
+
+    // 2. Leader sends notice with targetAudience: 'all'
+    f.send(owner.id, {
+        type: 'alert.create',
+        eventId: event.id,
+        slotId: null,
+        kind: 'notice',
+        body: '찬양팀 전체 수련회 일정 공지',
+        targetAudience: 'all',
+    });
+
+    const authorAllNotif = f.read(author.id).notifications.find(n => n.body.includes('전체 수련회'));
+    const otherAllNotif = f.read(other.id).notifications.find(n => n.body.includes('전체 수련회'));
+    assert.ok(authorAllNotif, 'Author must receive all-member notice');
+    assert.ok(otherAllNotif, 'Other member must receive all-member notice');
+});
+
+test('event.delete permanently removes event and associated alerts/notifications and rejects non-managers', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const slot = addSlot(f, event.id, author.id);
+    f.send(owner.id, { type: 'alert.create', eventId: event.id, slotId: slot.id, kind: 'substitute', body: '대체 구함' });
+    
+    assert.equal(f.read().events.length, 1);
+    assert.equal(f.read().alerts.length, 1);
+
+    // Non-manager cannot delete
+    assert.throws(() => f.send(author.id, { type: 'event.delete', eventId: event.id }), managerError);
+
+    // Manager can delete
+    f.send(owner.id, { type: 'event.delete', eventId: event.id });
+    assert.equal(f.read().events.length, 0);
+    assert.equal(f.read().alerts.filter(a => a.eventId === event.id).length, 0);
+});
+
+test('request.delete permanently removes request and rejects unauthorized users', t => {
+    const f = fixture(t);
+    f.send(author.id, { type: 'request.create', setlistId: 's-1', setlistTitle: '콘티 1', kind: 'question', body: '송폼 질문', leaderId: leader.id });
+    const requestId = f.read().requests[0].id;
+
+    // Unrelated member cannot delete
+    assert.throws(() => f.send(other.id, { type: 'request.delete', requestId }), /작성자 또는 관리자/);
+
+    // Author can delete
+    f.send(author.id, { type: 'request.delete', requestId });
+    assert.equal(f.read().requests.length, 0);
+});
+
+test('slot.unvolunteer allows members to withdraw their volunteer application', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    const vacancy = addSlot(f, event.id, null);
+
+    f.send(other.id, { type: 'slot.volunteer', eventId: event.id, slotId: vacancy.id });
+    assert.deepEqual(f.read().events[0].slots[0].volunteers, [other.id]);
+
+    f.send(other.id, { type: 'slot.unvolunteer', eventId: event.id, slotId: vacancy.id });
+    assert.deepEqual(f.read().events[0].slots[0].volunteers, []);
+});
+
+test('notification.readAll marks all unread notifications for recipient as read', t => {
+    const f = fixture(t);
+    const event = createEvent(f);
+    f.send(owner.id, { type: 'alert.create', eventId: event.id, slotId: null, kind: 'notice', body: '공지 1', targetAudience: 'all' });
+    f.send(owner.id, { type: 'alert.create', eventId: event.id, slotId: null, kind: 'notice', body: '공지 2', targetAudience: 'all' });
+
+    const before = f.read(author.id).notifications.filter(n => !n.readBy.includes(author.id));
+    assert.ok(before.length >= 2, 'Author should have multiple unread notifications');
+
+    f.send(author.id, { type: 'notification.readAll' });
+    const after = f.read(author.id).notifications.filter(n => !n.readBy.includes(author.id));
+    assert.equal(after.length, 0, 'All notifications should be marked as read');
+});
+
+
 

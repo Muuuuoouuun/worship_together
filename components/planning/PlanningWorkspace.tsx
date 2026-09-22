@@ -107,7 +107,7 @@ function Board({ teamId, members, userId, online, initialTab, initialSetlist }: 
                 next = planningForViewer(full, roster, userId);
                 window.dispatchEvent(new Event('worship-planning-changed'));
             }
-            receive(next); window.dispatchEvent(new Event('worship-planning-changed')); setMessage(command.type === 'notification.read' ? '확인 상태를 저장했습니다.' : online ? '팀에 저장했습니다.' : '이 브라우저에 저장했습니다.');
+            receive(next); window.dispatchEvent(new Event('worship-planning-changed')); setMessage(command.type === 'notification.read' || command.type === 'notification.readAll' ? '확인 상태를 저장했습니다.' : online ? '팀에 저장했습니다.' : '이 브라우저에 저장했습니다.');
             return true;
         } catch (cause) { setError(cause instanceof Error ? cause.message : '저장하지 못했습니다. 다시 시도해주세요.'); return false; }
         finally { inFlight.current = false; setBusy(false); }
@@ -117,7 +117,27 @@ function Board({ teamId, members, userId, online, initialTab, initialSetlist }: 
     return <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm leading-6 text-muted-foreground">{online ? '팀에 함께 저장 · 새 알림 자동 확인' : '기기 저장 · 체험 중'}<br />앱을 닫은 상태의 푸시 알림은 지원하지 않습니다.</p><button className={button} onClick={() => void refresh()} disabled={busy}><RefreshCw size={16} /> 새로고침</button></div>
         {toast && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-secondary bg-card p-4"><p className="min-w-0 flex-1 break-words font-bold text-foreground">{toast}</p><button className={button} onClick={() => { setTab('schedule'); setToast(''); }}>긴급 요청 보기</button><button aria-label="새 알림 닫기" className={button} onClick={() => setToast('')}>닫기</button></div>}
-        <details open={inboxOpen} onToggle={event => setInboxOpen(event.currentTarget.open)} className="rounded-2xl border border-border bg-card p-4"><summary className="flex min-h-12 cursor-pointer items-center gap-2 font-bold"><Bell size={19} /> 내 알림 <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">미확인 {unread.length}</span>{unread.some(item => item.urgent) && <span className="text-sm text-secondary">긴급 확인 필요</span>}</summary><p className="mb-3 text-xs leading-5 text-muted-foreground">‘확인했어요’를 눌렀을 때만 확인 상태로 기록합니다.</p><div className="space-y-3">{[...state.notifications].sort((a,b) => Number(a.readBy.includes(userId)) - Number(b.readBy.includes(userId))).map(item => <article key={item.id} className="rounded-xl border border-border p-4"><p className="font-bold">{item.urgent ? '긴급 · ' : ''}{item.title}</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{item.body}</p><p className="mt-2 text-xs text-muted-foreground">{planningDate(item.createdAt)} · {item.readBy.includes(userId) ? '확인함' : '미확인'}</p><div className="mt-3 flex flex-wrap gap-2"><button className={button} onClick={() => setTab(item.target)}>내용 보기</button>{!item.readBy.includes(userId) && <button className={button} disabled={busy} onClick={() => void onCommand({ type: 'notification.read', notificationId: item.id })}>확인했어요</button>}</div></article>)}{!state.notifications.length && <p className="py-3 text-sm text-muted-foreground">아직 받은 알림이 없습니다.</p>}</div></details>
+        <details open={inboxOpen} onToggle={event => setInboxOpen(event.currentTarget.open)} className="rounded-2xl border border-border bg-card p-4">
+            <summary className="flex min-h-12 cursor-pointer items-center justify-between font-bold">
+                <div className="flex items-center gap-2">
+                    <Bell size={19} /> 내 알림 <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">미확인 {unread.length}</span>{unread.some(item => item.urgent) && <span className="text-sm text-secondary">긴급 확인 필요</span>}
+                </div>
+            </summary>
+            <div className="mt-2 mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs leading-5 text-muted-foreground">‘확인했어요’를 눌렀을 때만 확인 상태로 기록합니다.</p>
+                {unread.length > 0 && (
+                    <button
+                        type="button"
+                        className="text-xs font-bold text-primary hover:underline px-2 py-1 rounded bg-primary/10 transition-colors"
+                        disabled={busy}
+                        onClick={() => void onCommand({ type: 'notification.readAll' })}
+                    >
+                        ✓ 모두 확인 (전체 읽음)
+                    </button>
+                )}
+            </div>
+            <div className="space-y-3">{[...state.notifications].sort((a,b) => Number(a.readBy.includes(userId)) - Number(b.readBy.includes(userId))).map(item => <article key={item.id} className="rounded-xl border border-border p-4"><p className="font-bold">{item.urgent ? '긴급 · ' : ''}{item.title}</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{item.body}</p><p className="mt-2 text-xs text-muted-foreground">{planningDate(item.createdAt)} · {item.readBy.includes(userId) ? '확인함' : '미확인'}</p><div className="mt-3 flex flex-wrap gap-2"><button className={button} onClick={() => setTab(item.target)}>내용 보기</button>{!item.readBy.includes(userId) && <button className={button} disabled={busy} onClick={() => void onCommand({ type: 'notification.read', notificationId: item.id })}>확인했어요</button>}</div></article>)}{!state.notifications.length && <p className="py-3 text-sm text-muted-foreground">아직 받은 알림이 없습니다.</p>}</div>
+        </details>
         <div role="tablist" aria-label="예배 준비 메뉴" className="grid grid-cols-3 gap-2">
             {[
                 { id: 'schedule', title: '일정 · 인원 배치', icon: CalendarDays },

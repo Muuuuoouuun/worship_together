@@ -15,6 +15,7 @@ export type ScheduleSlot = {
 export type TeamSchedule = {
     id: string; title: string; kind: 'rehearsal' | 'worship'; startsAt: string; endsAt: string;
     location: string; notes: string; cancelled: boolean; slots: ScheduleSlot[];
+    setlistTitle?: string | null; setlistSongs?: string[] | null; setlistId?: string | null;
 };
 export type UrgentAlert = {
     id: string; eventId: string; slotId: string | null; kind: 'absence' | 'substitute' | 'notice';
@@ -49,31 +50,43 @@ export type PlanningState = {
     rotations?: RotationGroup[];
 };
 export const emptyPlanningState = (): PlanningState => ({ version: 1, requests: [], events: [], alerts: [], notifications: [], rotations: [] });
-export type ScheduleInput = { title: string; kind: TeamSchedule['kind']; startsAt: string; endsAt: string; location: string; notes: string };
+export type ScheduleInput = {
+    title: string; kind: TeamSchedule['kind']; startsAt: string; endsAt: string; location: string; notes: string;
+    setlistTitle?: string | null; setlistSongs?: string[] | null; setlistId?: string | null;
+};
 export type PlanningCommand =
     | { type: 'request.create'; setlistId: string; setlistTitle: string; kind: SetlistRequest['kind']; body: string; leaderId: string }
     | { type: 'request.reply'; requestId: string; body: string }
     | { type: 'request.status'; requestId: string; status: SetlistRequest['status'] }
+    | { type: 'request.delete'; requestId: string }
     | { type: 'event.save'; eventId?: string; input: ScheduleInput }
     | { type: 'event.cancel'; eventId: string }
+    | { type: 'event.delete'; eventId: string }
     | { type: 'event.createRecurring'; input: ScheduleInput; weeksCount: number }
     | { type: 'event.createWithTemplate'; input: ScheduleInput; templateKey: ScheduleTemplateKey; weeksCount?: number }
+    | { type: 'event.updateSetlist'; eventId: string; setlistTitle: string; setlistSongs?: string[]; setlistId?: string; notifyDuty?: boolean }
     | { type: 'slot.save'; eventId: string; slotId?: string; role: WorshipRole; memberId: string | null }
     | { type: 'slot.remove'; eventId: string; slotId: string }
     | { type: 'slots.applyTemplate'; eventId: string; templateKey: ScheduleTemplateKey }
     | { type: 'slots.copyFromEvent'; targetEventId: string; sourceEventId: string }
+    | { type: 'slots.autoAssign'; eventId: string }
+    | { type: 'slots.clear'; eventId: string }
+    | { type: 'schedule.sendDutyReminder'; eventId: string }
+    | { type: 'event.createMonthlySundays'; year: number; month: number; startHour: number; startMinute: number; endHour: number; endMinute: number; title: string; location?: string; templateKey?: ScheduleTemplateKey }
     | { type: 'attendance.set'; eventId: string; slotId: string; attendance: 'confirmed' | 'absent'; reason: string }
     | { type: 'attendance.batchConfirm'; items: Array<{ eventId: string; slotId: string }> }
-    | { type: 'alert.create'; eventId: string; slotId: string | null; kind: 'substitute' | 'notice'; body: string }
+    | { type: 'alert.create'; eventId: string; slotId: string | null; kind: 'substitute' | 'notice'; body: string; targetAudience?: 'duty' | 'all' }
     | { type: 'alert.resolve'; alertId: string }
     | { type: 'slot.volunteer'; eventId: string; slotId: string }
+    | { type: 'slot.unvolunteer'; eventId: string; slotId: string }
     | { type: 'slot.accept'; eventId: string; slotId: string; memberId: string }
     | { type: 'rotation.save'; rotationId?: string; group: { name: string; targetRole: WorshipRole | 'all'; cycleType: 'team' | 'individual'; teams?: RotationTeam[]; members?: string[]; currentStep?: number; notes?: string } }
     | { type: 'rotation.remove'; rotationId: string }
     | { type: 'rotation.step'; rotationId: string; direction: 'next' | 'prev' }
     | { type: 'rotation.apply'; rotationId: string; eventId: string }
     | { type: 'rotation.batchApply'; rotationId: string; eventIds: string[] }
-    | { type: 'notification.read'; notificationId: string };
+    | { type: 'notification.read'; notificationId: string }
+    | { type: 'notification.readAll' };
 export type PlanningPanelProps = {
     state: PlanningState; members: TeamMember[]; userId: string; busy: boolean;
     onCommand: (command: PlanningCommand) => Promise<boolean>;

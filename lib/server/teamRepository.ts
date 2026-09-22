@@ -119,4 +119,66 @@ export class TeamRepository {
         const result = this.db.prepare('UPDATE online_members SET role = ? WHERE team_id = ? AND user_id = ?').run(role, teamId, memberId);
         if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
     }
+    addMemberDirect(teamId: string, userId: string, name: string, role: WorshipRole): TeamMember {
+        this.owner(teamId, userId);
+        const trimmed = name.trim();
+        if (!trimmed || trimmed.length > 40) throw new Error('팀원 이름은 1~40자로 입력해주세요.');
+        if (!roles.has(role)) throw new Error('담당 역할을 확인해주세요.');
+        return this.db.transaction(() => {
+            const count = this.db.prepare('SELECT count(*) AS count FROM online_members WHERE team_id = ?').get(teamId) as { count: number };
+            if (count.count >= 100) throw new Error('이 팀의 참여 인원이 가득 찼습니다.');
+            const memberId = `direct-${randomUUID()}`;
+            this.db.prepare('INSERT INTO online_members(team_id, user_id, name, role, permission) VALUES (?, ?, ?, ?, ?)').run(teamId, memberId, trimmed, role, 'member');
+            return { userId: memberId, name: trimmed, role, permission: 'member' as const };
+        })();
+    }
+    addMembersBatch(teamId: string, userId: string, items: Array<{ name: string; role: WorshipRole }>): TeamMember[] {
+        this.owner(teamId, userId);
+        if (!items.length) throw new Error('추가할 팀원 명단이 없습니다.');
+        return this.db.transaction(() => {
+            const count = this.db.prepare('SELECT count(*) AS count FROM online_members WHERE team_id = ?').get(teamId) as { count: number };
+            if (count.count + items.length > 100) throw new Error('이 팀의 최대 인원(100명)을 초과합니다.');
+            const added: TeamMember[] = [];
+            for (const item of items) {
+                const trimmed = item.name.trim();
+                if (!trimmed) continue;
+                const r = roles.has(item.role) ? item.role : 'member';
+                const memberId = `direct-${randomUUID()}`;
+                this.db.prepare('INSERT INTO online_members(team_id, user_id, name, role, permission) VALUES (?, ?, ?, ?, ?)').run(teamId, memberId, trimmed.slice(0, 40), r, 'member');
+                added.push({ userId: memberId, name: trimmed.slice(0, 40), role: r, permission: 'member' });
+            }
+            return added;
+        })();
+    }
+    setMemberPermission(teamId: string, userId: string, targetUserId: string, permission: 'owner' | 'member'): void {
+        this.owner(teamId, userId);
+        if (permission !== 'owner' && permission !== 'member') throw new Error('권한을 확인해주세요.');
+        if (userId === targetUserId && permission === 'member') {
+            const ownerCount = this.db.prepare('SELECT count(*) AS count FROM online_members WHERE team_id = ? AND permission = ?').get(teamId, 'owner') as { count: number };
+            if (ownerCount.count <= 1) throw new Error('마지막 관리자는 일반 팀원으로 변경할 수 없습니다.');
+        }
+        const result = this.db.prepare('UPDATE online_members SET permission = ? WHERE team_id = ? AND user_id = ?').run(permission, teamId, targetUserId);
+        if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
+    }
+    deleteTeam(teamId: string, userId: string): void {
+        this.owner(teamId, userId);
+        this.db.transaction(() => {
+            this.db.prepare('DELETE FROM online_invites WHERE team_id = ?').run(teamId);
+            this.db.prepare('DELETE FROM online_members WHERE team_id = ?').run(teamId);
+            this.db.prepare('DELETE FROM online_planning WHERE team_id = ?').run(teamId);
+            this.db.prepare('DELETE FROM online_teams WHERE id = ?').run(teamId);
+        })();
+    }
+    removeMember(teamId: string, userId: string, targetUserId: string): void {
+        this.owner(teamId, userId);
+        if (userId === targetUserId) throw new Error('팀 관리자는 직접 탈퇴하거나 팀을 삭제해야 합니다.');
+        const result = this.db.prepare('DELETE FROM online_members WHERE team_id = ? AND user_id = ?').run(teamId, targetUserId);
+        if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
+    }
+    leaveTeam(teamId: string, userId: string): void {
+        const member = this.db.prepare('SELECT permission FROM online_members WHERE team_id = ? AND user_id = ?').get(teamId, userId) as { permission: string } | undefined;
+        if (!member) throw new Error('이 팀의 팀원이 아닙니다.');
+        if (member.permission === 'owner') throw new Error('팀 관리자는 팀을 삭제하거나 권한을 위임해야 합니다.');
+        this.db.prepare('DELETE FROM online_members WHERE team_id = ? AND user_id = ?').run(teamId, userId);
+    }
 }

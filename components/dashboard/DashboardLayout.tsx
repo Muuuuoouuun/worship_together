@@ -13,6 +13,11 @@ interface DashboardLayoutProps {
 }
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, currentPath = '/dashboard' }) => {
+    const isItemActive = (href: string) =>
+        href === '/dashboard'
+            ? currentPath === '/dashboard'
+            : currentPath === href || currentPath.startsWith(href + '/') || currentPath.startsWith(href + '?');
+
     return (
         <div className="flex min-h-screen bg-background text-foreground">
             <Suspense fallback={null}><PlanningInbox /></Suspense>
@@ -36,7 +41,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, currentPath
                         예배 운영
                     </div>
                     {primaryNavItems.map((item) => {
-                        const active = currentPath === item.href;
+                        const active = isItemActive(item.href);
 
                         return (
                             <Link
@@ -59,7 +64,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, currentPath
                         나눔과 돌봄
                     </div>
                     {secondaryNavItems.map((item) => {
-                        const active = currentPath === item.href;
+                        const active = isItemActive(item.href);
 
                         return (
                             <Link

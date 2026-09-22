@@ -37,6 +37,11 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
         }
     }, [raw]);
 
+    const isClient = useSyncExternalStore(
+        () => () => {},
+        () => true,
+        () => false
+    );
     const [setlists, setSetlists] = useState<LibrarySetlist[]>([]);
     const [error, setError] = useState('');
     const [openedAt] = useState(() => Date.now());
@@ -44,18 +49,25 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
     const teamId = team?.id ?? DEMO_TEAM_ID;
 
     useEffect(() => {
+        let active = true;
         function refresh() {
             try {
-                setSetlists(readPrototypeLibrary(teamId)?.setlists ?? []);
-                setError('');
+                const data = readPrototypeLibrary(teamId)?.setlists ?? [];
+                if (active) {
+                    setSetlists(data);
+                    setError('');
+                }
             } catch {
-                setError('저장된 콘티를 읽지 못했습니다. 콘티 화면에서 저장 상태를 확인해주세요.');
+                if (active) {
+                    setError('저장된 콘티를 읽지 못했습니다. 콘티 화면에서 저장 상태를 확인해주세요.');
+                }
             }
         }
-        refresh();
+        queueMicrotask(refresh);
         window.addEventListener('storage', refresh);
         window.addEventListener(LIBRARY_CHANGED_EVENT, refresh);
         return () => {
+            active = false;
             window.removeEventListener('storage', refresh);
             window.removeEventListener(LIBRARY_CHANGED_EVENT, refresh);
         };
@@ -138,7 +150,26 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
             </div>
 
             {/* 메인 히어로 카드 (이번 주 예배) */}
-            <section className="relative overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-muted/30 p-6 shadow-sm sm:p-8">
+            {!isClient ? (
+                <section aria-label="예배 준비 정보 불러오는 중" className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-6 sm:p-8 min-h-[300px] animate-pulse">
+                    <div className="flex flex-col gap-6">
+                        <div className="flex items-center justify-between">
+                            <div className="h-7 w-28 rounded-full bg-muted" />
+                            <div className="h-4 w-32 rounded bg-muted" />
+                        </div>
+                        <div className="space-y-3">
+                            <div className="h-8 w-2/3 rounded-lg bg-muted" />
+                            <div className="h-4 w-5/6 rounded bg-muted" />
+                        </div>
+                        <div className="h-16 rounded-2xl bg-muted/60" />
+                        <div className="flex gap-3">
+                            <div className="h-12 w-36 rounded-2xl bg-muted" />
+                            <div className="h-12 w-36 rounded-2xl bg-muted" />
+                        </div>
+                    </div>
+                </section>
+            ) : (
+                <section className="relative overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-muted/30 p-6 shadow-sm sm:p-8">
                 {/* 배경 장식 원 */}
                 <div className="absolute -right-12 -top-12 size-56 rounded-full bg-primary/5 blur-2xl pointer-events-none" />
                 <div className="absolute -bottom-12 -left-12 size-48 rounded-full bg-secondary/5 blur-2xl pointer-events-none" />
@@ -241,6 +272,7 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
                     </p>
                 </div>
             </section>
+            )}
 
             {/* 퀵 액션 카드 (4분할 그리드) */}
             <div>
