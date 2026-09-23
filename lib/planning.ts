@@ -52,6 +52,7 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('slots.copyFromEvent'), targetEventId: id, sourceEventId: id }),
     z.object({ type: z.literal('slots.autoAssign'), eventId: id }),
     z.object({ type: z.literal('slots.clear'), eventId: id }),
+    z.object({ type: z.literal('slots.autoFillFromRecent'), eventId: id }),
     z.object({ type: z.literal('schedule.sendDutyReminder'), eventId: id }),
     z.object({
         type: z.literal('event.createMonthlySundays'),
@@ -65,7 +66,7 @@ const commandSchema = z.discriminatedUnion('type', [
         location: z.string().trim().max(120).optional(),
         templateKey: z.enum(['standard', 'full', 'acoustic', 'vocalTeam']).optional(),
     }),
-    z.object({ type: z.literal('attendance.set'), eventId: id, slotId: id, attendance: z.enum(['confirmed', 'absent']), reason: z.string().trim().max(500) }),
+    z.object({ type: z.literal('attendance.set'), eventId: id, slotId: id, attendance: z.enum(['confirmed', 'absent']), reason: z.string().trim().max(500), autoRequestSubstitute: z.boolean().optional() }),
     z.object({ type: z.literal('attendance.batchConfirm'), items: z.array(z.object({ eventId: id, slotId: id })).min(1).max(50) }),
     z.object({
         type: z.literal('alert.create'),
@@ -98,6 +99,8 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('rotation.batchApply'), rotationId: id, eventIds: z.array(id).min(1).max(20) }),
     z.object({ type: z.literal('notification.read'), notificationId: id }),
     z.object({ type: z.literal('notification.readAll') }),
+    z.object({ type: z.literal('member.blockDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(200).optional() }),
+    z.object({ type: z.literal('member.unblockDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
 ]);
 const stamp = z.string();
 const stateSchema = z.object({
@@ -107,12 +110,13 @@ const stateSchema = z.object({
     alerts: z.array(z.object({ id, eventId: id, slotId: id.nullable(), kind: z.enum(['absence', 'substitute', 'notice']), body: z.string(), authorId: id, createdAt: stamp, resolvedAt: stamp.nullable() })),
     notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp })),
     rotations: z.array(rotationGroupSchema).optional().default([]),
+    blockedDates: z.array(z.object({ memberId: id, date: z.string(), reason: z.string().optional() })).optional().default([]),
 });
 export function parsePlanningState(value: unknown): PlanningState {
     if (value == null) return emptyPlanningState();
     const result = stateSchema.safeParse(value);
     if (!result.success) throw new Error('저장된 일정 자료를 읽지 못했습니다. 새로고침 후 다시 확인해주세요.');
-    return { ...result.data, rotations: result.data.rotations ?? [] };
+    return { ...result.data, rotations: result.data.rotations ?? [], blockedDates: result.data.blockedDates ?? [] };
 }
 export function planningForViewer(state: PlanningState, members: TeamMember[], userId: string): PlanningState {
     if (!members.some(member => member.userId === userId)) throw new Error('이 팀에 접근할 수 없습니다.');
@@ -284,7 +288,27 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (slot.memberId !== userId) throw new Error('본인의 참석 여부만 응답할 수 있습니다.');
             if (slot.attendance === command.attendance) break;
             if (command.attendance === 'confirmed') { available(event, userId, slot.id); closeSlotAlerts(event.id, slot.id); slot.volunteers = []; notify(managers, '참석 응답', `${actor.name} · ${event.title}`, 'schedule', event.id); }
-            else { closeSlotAlerts(event.id, slot.id); urgent(event, slot.id, 'absence', `${actor.name} · ${worshipRoles[slot.role]} 결석${command.reason ? `: ${command.reason}` : ''}`); }
+            else {
+                closeSlotAlerts(event.id, slot.id);
+                urgent(event, slot.id, 'absence', `${actor.name} · ${worshipRoles[slot.role]} 결석${command.reason ? `: ${command.reason}` : ''}`);
+                if (command.autoRequestSubstitute !== false) {
+                    // Auto-suggest substitute: find candidates matching this role, sorted by workload
+                    const wMap = new Map<string, number>();
+                    for (const m of members) wMap.set(m.userId, 0);
+                    for (const ev of state.events) { if (ev.cancelled) continue; for (const sl of ev.slots) { if (sl.memberId && wMap.has(sl.memberId)) wMap.set(sl.memberId, wMap.get(sl.memberId)! + 1); } }
+                    const eventDate = event.startsAt.slice(0, 10);
+                    const blocked = new Set((state.blockedDates ?? []).filter(b => b.date === eventDate).map(b => b.memberId));
+                    const assignedInEvent = new Set(event.slots.map(s => s.memberId).filter((mid): mid is string => Boolean(mid)));
+                    const subs = members
+                        .filter(m => m.userId !== userId && !assignedInEvent.has(m.userId) && !blocked.has(m.userId) && (m.role === slot.role || slot.role === 'member'))
+                        .filter(m => { try { available(event, m.userId); return true; } catch { return false; } })
+                        .sort((a, b) => (wMap.get(a.userId) ?? 0) - (wMap.get(b.userId) ?? 0));
+                    if (subs.length > 0) {
+                        const topNames = subs.slice(0, 3).map(m => m.name).join(', ');
+                        notify(managers, '대체 인원 후보가 있어요', `${event.title} · ${worshipRoles[slot.role]} · 추천: ${topNames}`, 'schedule', event.id);
+                    }
+                }
+            }
             slot.attendance = command.attendance; break;
         }
         case 'attendance.batchConfirm': {
@@ -474,9 +498,11 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                 }
             }
             const assignedInEvent = new Set(event.slots.map(s => s.memberId).filter((mid): mid is string => Boolean(mid)));
+            const eventDate = event.startsAt.slice(0, 10);
+            const blocked = new Set((state.blockedDates ?? []).filter(b => b.date === eventDate).map(b => b.memberId));
             let assignedCount = 0;
             for (const slot of emptySlots) {
-                const candidates = members.filter(m => !assignedInEvent.has(m.userId) && (m.role === slot.role || slot.role === 'member'));
+                const candidates = members.filter(m => !assignedInEvent.has(m.userId) && !blocked.has(m.userId) && (m.role === slot.role || slot.role === 'member'));
                 const validCandidates = candidates.filter(m => {
                     try {
                         available(event, m.userId);
@@ -516,6 +542,40 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             }
             if (clearedCount === 0) throw new Error('초기화할 배정 인원이 없습니다.');
             notify(everyone, '인원 배치가 초기화되었어요', event.title, 'schedule', event.id);
+            break;
+        }
+        case 'slots.autoFillFromRecent': {
+            manage();
+            const event = eventById(command.eventId);
+            if (event.slots.length > 0 && event.slots.some(s => s.memberId !== null)) throw new Error('이미 배정된 인원이 있습니다. 배분 초기화 후 다시 시도해주세요.');
+            const eventDate = event.startsAt.slice(0, 10);
+            const blocked = new Set((state.blockedDates ?? []).filter(b => b.date === eventDate).map(b => b.memberId));
+            const candidates = state.events
+                .filter(e => e.id !== event.id && !e.cancelled && e.kind === event.kind && e.slots.some(s => s.memberId))
+                .sort((a, b) => Math.abs(Date.parse(event.startsAt) - Date.parse(a.startsAt)) - Math.abs(Date.parse(event.startsAt) - Date.parse(b.startsAt)));
+            if (candidates.length === 0) throw new Error('복사할 수 있는 이전 일정이 없습니다.');
+            const source = candidates[0];
+            if (event.slots.length === 0) {
+                // No slots yet — copy entire slot structure from source
+                for (const src of source.slots) {
+                    let candidateId: string | null = null;
+                    if (src.memberId && members.some(m => m.userId === src.memberId) && !blocked.has(src.memberId)) {
+                        try { available(event, src.memberId); candidateId = src.memberId; } catch { candidateId = null; }
+                    }
+                    event.slots.push({ id: createClientId(), role: src.role, memberId: candidateId, attendance: 'pending', volunteers: [] });
+                }
+            } else {
+                // Slots exist but are empty — try to fill from source
+                for (const slot of event.slots) {
+                    if (slot.memberId !== null) continue;
+                    const srcSlot = source.slots.find(s => s.role === slot.role && s.memberId && members.some(m => m.userId === s.memberId) && !blocked.has(s.memberId!));
+                    if (srcSlot && srcSlot.memberId) {
+                        try { available(event, srcSlot.memberId); slot.memberId = srcSlot.memberId; slot.attendance = 'pending'; } catch { /* skip */ }
+                    }
+                }
+            }
+            const filledCount = event.slots.filter(s => s.memberId !== null).length;
+            notify(everyone, '지난 배정을 자동으로 복사했어요', `${event.title} ← ${source.title} (${filledCount}명 배정)`, 'schedule', event.id);
             break;
         }
         case 'schedule.sendDutyReminder': {
@@ -704,6 +764,21 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                 appliedEventsCount++;
             }
             notify(everyone, '로테이션 일괄 배정이 완료되었어요', `${rot.name} · ${appliedEventsCount}개 일정`, 'schedule', command.eventIds[0]);
+            break;
+        }
+        case 'member.blockDate': {
+            state.blockedDates = state.blockedDates ?? [];
+            if (state.blockedDates.some(b => b.memberId === userId && b.date === command.date)) throw new Error('이미 등록된 불가일입니다.');
+            if (state.blockedDates.filter(b => b.memberId === userId).length >= 60) throw new Error('불가일은 최대 60일까지 등록할 수 있습니다.');
+            state.blockedDates.push({ memberId: userId, date: command.date, reason: command.reason });
+            notify(managers, '불가일 등록', `${actor.name} · ${command.date}${command.reason ? ` (${command.reason})` : ''}`, 'schedule', userId);
+            break;
+        }
+        case 'member.unblockDate': {
+            state.blockedDates = state.blockedDates ?? [];
+            const idx = state.blockedDates.findIndex(b => b.memberId === userId && b.date === command.date);
+            if (idx === -1) throw new Error('등록된 불가일이 아닙니다.');
+            state.blockedDates.splice(idx, 1);
             break;
         }
     }

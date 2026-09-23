@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import SessionCueToasts from '@/components/session/SessionCueToasts';
+import SoundEngineerWorkspace from '@/components/session/SoundEngineerWorkspace';
 import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
 import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRealtimeSession';
 import { isPrototypeSessionId } from '@/lib/constants';
@@ -212,6 +213,7 @@ export default function WorshipTeamMode({
     const [recipientChoice, setRecipientChoice] = useState('preset');
     const [lastSentEntryId, setLastSentEntryId] = useState<string | null>(null);
     const [clientId] = useState(createClientId);
+    const [modeView, setModeView] = useState<'stage' | 'sound'>('stage');
     const [stageLocked, setStageLocked] = useState(false);
     const [recentActionId, setRecentActionId] = useState<string | null>(null);
     const [pendingActionId, setPendingActionId] = useState<string | null>(null);
@@ -565,6 +567,32 @@ export default function WorshipTeamMode({
                     </div>
                 </header>
 
+                {/* 뷰 모드 전환 (무대 세션 뷰 ↔ 음향·미디어 큐시트) */}
+                <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1">
+                    <button
+                        type="button"
+                        onClick={() => setModeView('stage')}
+                        className={`tap-target flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
+                            modeView === 'stage'
+                                ? 'bg-[#ffe0b8] text-black shadow-xs'
+                                : 'text-white/60 hover:text-white'
+                        }`}
+                    >
+                        🎤 무대 세션 뷰 (BPM/큐)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setModeView('sound')}
+                        className={`tap-target flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
+                            modeView === 'sound'
+                                ? 'bg-emerald-400 text-black shadow-xs'
+                                : 'text-white/60 hover:text-white'
+                        }`}
+                    >
+                        🎚️ 음향·미디어 큐시트
+                    </button>
+                </div>
+
                 <div className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-3 sm:grid-cols-2">
                     <label className="text-xs font-bold text-white/70">내 수신 역할
                         <select aria-label="내 수신 역할" value={selectedFeedbackRole} onChange={(event) => setFeedbackRole(event.target.value as SessionFeedbackRole)} className="mt-2 block min-h-11 w-full rounded-lg bg-[#152321] px-3 text-sm text-white">
@@ -595,6 +623,32 @@ export default function WorshipTeamMode({
                     </section>
                 ) : null}
 
+                {modeView === 'sound' ? (
+                    <SoundEngineerWorkspace
+                        songs={songs}
+                        currentSongId={currentSongId}
+                        currentSection={currentSection}
+                        sections={sections}
+                        teamName={teamName}
+                        onSendCue={(msg, targetRole) => {
+                            const entry: SessionFeedbackEntry = {
+                                id: createClientId(),
+                                clientId,
+                                role: (targetRole as SessionFeedbackRole) || 'broadcast',
+                                message: msg,
+                                createdAt: new Date().toISOString(),
+                                teamId,
+                                songId: currentSongId,
+                                songTitle: currentSong?.title ?? null,
+                                page: currentPage,
+                                section: currentSection,
+                                recipient: { kind: 'everyone' },
+                            };
+                            setLastSentEntryId(entry.id);
+                            void sendFeedback(entry);
+                        }}
+                    />
+                ) : (
                 <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[minmax(0,1fr)_auto]">
                     <section
                         className={`stage-bpm-panel order-1 relative overflow-hidden rounded-lg border border-[#f0b56b]/20 bg-[#f0b56b]/[0.075] p-3 sm:p-5 lg:order-none lg:col-start-1 lg:row-start-1 ${blinkActive ? 'stage-bpm-panel--beat' : ''} ${blinkActive && activeBeat === 1 ? 'stage-bpm-panel--downbeat' : ''}`}
@@ -812,6 +866,7 @@ export default function WorshipTeamMode({
                         </aside>
                     </section>
                 </section>
+                )}
             </div>
         </main>
     );

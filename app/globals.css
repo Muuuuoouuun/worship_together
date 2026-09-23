@@ -119,7 +119,11 @@
   }
 
   .app-bottom-space {
-    padding-bottom: max(7rem, calc(env(safe-area-inset-bottom) + 5.5rem));
+    padding-bottom: max(5rem, calc(env(safe-area-inset-bottom) + 4rem));
+  }
+
+  .dark-sheet-invert {
+    filter: invert(0.92) hue-rotate(180deg) contrast(1.05);
   }
 
   .no-scrollbar {

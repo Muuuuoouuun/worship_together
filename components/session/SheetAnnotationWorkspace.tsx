@@ -2,7 +2,7 @@
 
 import { createClientId } from '@/lib/clientId';
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
-import { Download, FileUp, Hand, Maximize2, Minimize2, Pencil, Share2, Sun, SunDim, Trash2, Undo2 } from 'lucide-react';
+import { BookOpen, Download, FileUp, Hand, Maximize2, Minimize2, Moon, Pencil, Share2, Sun, SunDim, Trash2, Undo2 } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
@@ -50,6 +50,9 @@ export default function SheetAnnotationWorkspace({
     const [busy, setBusy] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [zoom, setZoom] = useState(1);
+    const [isDarkInverted, setIsDarkInverted] = useState(false);
+    const [isDualPage, setIsDualPage] = useState(false);
+    const [showTools, setShowTools] = useState(true);
 
     const documentRef = useRef<SheetDocument | null>(null);
     const strokeRef = useRef<SheetMark | null>(null);
@@ -69,13 +72,15 @@ export default function SheetAnnotationWorkspace({
 
     usePageTurner({
         onNext: () => {
-            if (canTurnPage && shown && page < shown.pages.length) {
-                onPageChange(page + 1);
+            const step = isDualPage ? 2 : 1;
+            if (canTurnPage && shown && page + step <= shown.pages.length + (isDualPage ? 1 : 0)) {
+                onPageChange(Math.min(shown.pages.length, page + step));
             }
         },
         onPrev: () => {
+            const step = isDualPage ? 2 : 1;
             if (canTurnPage && page > 1) {
-                onPageChange(page - 1);
+                onPageChange(Math.max(1, page - step));
             }
         },
         enabled: canTurnPage && Boolean(shown?.pages.length),
@@ -387,8 +392,8 @@ export default function SheetAnnotationWorkspace({
                     팀 공유본 {published ? `· ${published.pages.length}p` : '없음'}
                 </button>
             </div>
-            {view === 'draft' && (
-                <div className="space-y-2">
+            {showTools && view === 'draft' && (
+                <div className="space-y-2 animate-in fade-in duration-150">
                     <div className="flex flex-wrap gap-2" role="group" aria-label="필기 도구">
                         <button className={button} aria-pressed={tool === 'move'} onClick={() => setTool('move')}>
                             <Hand size={16} /> 이동
@@ -418,7 +423,7 @@ export default function SheetAnnotationWorkspace({
                             onClick={clearPageMarks}
                             title="현재 페이지의 모든 필기 삭제"
                         >
-                            <Trash2 size={16} /> 페이지 전체 지우기
+                            <Trash2 size={16} /> 전체 지우기
                         </button>
                     </div>
                     <div className="flex items-center gap-2">
@@ -447,25 +452,57 @@ export default function SheetAnnotationWorkspace({
             )}
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                    <button className={button} disabled={!canTurnPage || page <= 1} onClick={() => onPageChange(page - 1)}>
-                        이전 페이지
+                    <button
+                        className={button}
+                        disabled={!canTurnPage || page <= 1}
+                        onClick={() => onPageChange(Math.max(1, page - (isDualPage ? 2 : 1)))}
+                    >
+                        이전
                     </button>
                     <span className="text-sm font-bold">
-                        {page} / {shown?.pages.length ?? 0}p
+                        {isDualPage && shown && page + 1 <= shown.pages.length ? `${page}-${page + 1}` : page} / {shown?.pages.length ?? 0}p
                     </span>
                     <button
                         className={button}
                         disabled={!canTurnPage || page >= (shown?.pages.length ?? 0)}
-                        onClick={() => onPageChange(page + 1)}
+                        onClick={() => onPageChange(Math.min(shown?.pages.length ?? page, page + (isDualPage ? 2 : 1)))}
                     >
-                        다음 페이지
+                        다음
                     </button>
-                    <button className={button} aria-label="악보 확대 전환" onClick={() => setZoom(zoom === 1 ? 1.5 : 1)}>
-                        {zoom === 1 ? '확대 150%' : '화면에 맞춤'}
-                    </button>
+                    {!isDualPage && (
+                        <button className={button} aria-label="악보 확대 전환" onClick={() => setZoom(zoom === 1 ? 1.5 : 1)}>
+                            {zoom === 1 ? '확대 150%' : '맞춤'}
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        className={`${button} ${isDarkInverted ? 'border-amber-400/60 bg-amber-400/15 text-amber-600 dark:text-amber-300 font-bold' : ''}`}
+                        title="무대 어두운 조명에서 눈부심을 방지하는 흑백 반전 모드"
+                        onClick={() => setIsDarkInverted((prev) => !prev)}
+                    >
+                        {isDarkInverted ? <Sun size={16} /> : <Moon size={16} />}
+                        <span className="text-xs">{isDarkInverted ? '라이트' : '다크 악보'}</span>
+                    </button>
+
+                    <button
+                        className={`${button} ${isDualPage ? 'border-primary bg-primary text-primary-foreground font-bold' : ''}`}
+                        title="가로 모드에서 2페이지 나란히 펼침 보기"
+                        onClick={() => setIsDualPage((prev) => !prev)}
+                    >
+                        <BookOpen size={16} />
+                        <span className="text-xs">{isDualPage ? '1쪽 보기' : '2쪽 펼침'}</span>
+                    </button>
+
+                    <button
+                        className={button}
+                        title="필기 도구 숨기기 / 펼치기"
+                        onClick={() => setShowTools((prev) => !prev)}
+                    >
+                        <span className="text-xs">{showTools ? '도구 숨김' : '도구 펼침'}</span>
+                    </button>
+
                     {isWakeLockSupported && (
                         <button
                             className={`${button} ${
@@ -493,11 +530,86 @@ export default function SheetAnnotationWorkspace({
             {shown?.pages.length ? (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span>💡</span>
-                    <span>블루투스 페달 또는 키보드 방향키(←, →), PageUp/Down으로 악보를 넘길 수 있습니다.</span>
+                    <span>블루투스 페달 또는 키보드 방향키(←, →), PageUp/Down으로 {isDualPage ? '2페이지씩' : '악보를'} 넘길 수 있습니다.</span>
                 </div>
             ) : null}
-            <div className="overflow-auto rounded-xl border border-primary/15 bg-white text-gray-900">
-                {activePage ? (
+            <div className={`overflow-auto rounded-xl border border-primary/15 transition-all ${
+                isDarkInverted ? 'bg-[#0a0f0e] dark-sheet-invert' : 'bg-white text-gray-900'
+            }`}>
+                {isDualPage && shown ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-2 bg-neutral-900/10">
+                        {/* 1번째 페이지 (page) */}
+                        {activePage ? (
+                            <div
+                                className="relative overflow-hidden rounded-lg bg-white shadow-xs"
+                                style={{ aspectRatio: `${activePage.width}/${activePage.height}` }}
+                            >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={activePage.image}
+                                    alt={`${title} 악보 ${page}페이지`}
+                                    className="block h-full w-full"
+                                    draggable={false}
+                                />
+                                <svg
+                                    data-testid="sheet-overlay"
+                                    aria-label="악보 필기 영역"
+                                    className="absolute inset-0 h-full w-full"
+                                    viewBox={`0 0 1000 ${(1000 * activePage.height) / activePage.width}`}
+                                    preserveAspectRatio="none"
+                                    style={{
+                                        touchAction: view === 'draft' && tool !== 'move' ? 'none' : 'auto',
+                                        cursor: tool === 'move' ? 'auto' : 'crosshair',
+                                    }}
+                                    onPointerDown={pointerDown}
+                                    onPointerMove={pointerMove}
+                                    onPointerUp={pointerUp}
+                                    onPointerCancel={() => {
+                                        strokeRef.current = null;
+                                        setStroke(null);
+                                    }}
+                                >
+                                    {activePage.marks.map(renderMark)}
+                                    {stroke ? renderMark(stroke) : null}
+                                </svg>
+                                <span className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+                                    {page}p
+                                </span>
+                            </div>
+                        ) : null}
+
+                        {/* 2번째 페이지 (page + 1) */}
+                        {page < shown.pages.length && shown.pages[page] ? (
+                            <div
+                                className="relative overflow-hidden rounded-lg bg-white shadow-xs"
+                                style={{ aspectRatio: `${shown.pages[page].width}/${shown.pages[page].height}` }}
+                            >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={shown.pages[page].image}
+                                    alt={`${title} 악보 ${page + 1}페이지`}
+                                    className="block h-full w-full"
+                                    draggable={false}
+                                />
+                                <svg
+                                    aria-label="2페이지 필기 오버레이"
+                                    className="absolute inset-0 h-full w-full pointer-events-none"
+                                    viewBox={`0 0 1000 ${(1000 * shown.pages[page].height) / shown.pages[page].width}`}
+                                    preserveAspectRatio="none"
+                                >
+                                    {shown.pages[page].marks.map(renderMark)}
+                                </svg>
+                                <span className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+                                    {page + 1}p
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="hidden md:flex items-center justify-center rounded-lg border border-dashed border-muted p-8 text-xs text-muted-foreground">
+                                마지막 페이지입니다.
+                            </div>
+                        )}
+                    </div>
+                ) : activePage ? (
                     <div
                         className="relative"
                         style={{ width: `${zoom * 100}%`, aspectRatio: `${activePage.width}/${activePage.height}` }}

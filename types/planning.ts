@@ -45,11 +45,14 @@ export const scheduleTemplates = {
 } as const;
 export type ScheduleTemplateKey = keyof typeof scheduleTemplates;
 
+export type BlockedDate = { memberId: string; date: string; reason?: string };
+
 export type PlanningState = {
     version: 1; requests: SetlistRequest[]; events: TeamSchedule[]; alerts: UrgentAlert[]; notifications: PlanningNotification[];
     rotations?: RotationGroup[];
+    blockedDates?: BlockedDate[];
 };
-export const emptyPlanningState = (): PlanningState => ({ version: 1, requests: [], events: [], alerts: [], notifications: [], rotations: [] });
+export const emptyPlanningState = (): PlanningState => ({ version: 1, requests: [], events: [], alerts: [], notifications: [], rotations: [], blockedDates: [] });
 export type ScheduleInput = {
     title: string; kind: TeamSchedule['kind']; startsAt: string; endsAt: string; location: string; notes: string;
     setlistTitle?: string | null; setlistSongs?: string[] | null; setlistId?: string | null;
@@ -71,9 +74,10 @@ export type PlanningCommand =
     | { type: 'slots.copyFromEvent'; targetEventId: string; sourceEventId: string }
     | { type: 'slots.autoAssign'; eventId: string }
     | { type: 'slots.clear'; eventId: string }
+    | { type: 'slots.autoFillFromRecent'; eventId: string }
     | { type: 'schedule.sendDutyReminder'; eventId: string }
     | { type: 'event.createMonthlySundays'; year: number; month: number; startHour: number; startMinute: number; endHour: number; endMinute: number; title: string; location?: string; templateKey?: ScheduleTemplateKey }
-    | { type: 'attendance.set'; eventId: string; slotId: string; attendance: 'confirmed' | 'absent'; reason: string }
+    | { type: 'attendance.set'; eventId: string; slotId: string; attendance: 'confirmed' | 'absent'; reason: string; autoRequestSubstitute?: boolean }
     | { type: 'attendance.batchConfirm'; items: Array<{ eventId: string; slotId: string }> }
     | { type: 'alert.create'; eventId: string; slotId: string | null; kind: 'substitute' | 'notice'; body: string; targetAudience?: 'duty' | 'all' }
     | { type: 'alert.resolve'; alertId: string }
@@ -85,6 +89,8 @@ export type PlanningCommand =
     | { type: 'rotation.step'; rotationId: string; direction: 'next' | 'prev' }
     | { type: 'rotation.apply'; rotationId: string; eventId: string }
     | { type: 'rotation.batchApply'; rotationId: string; eventIds: string[] }
+    | { type: 'member.blockDate'; date: string; reason?: string }
+    | { type: 'member.unblockDate'; date: string }
     | { type: 'notification.read'; notificationId: string }
     | { type: 'notification.readAll' };
 export type PlanningPanelProps = {

@@ -120,9 +120,9 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
     const estimatedMinutes = songCount * 4;
 
     return (
-        <div className="mx-auto max-w-5xl space-y-8 animate-in fade-in duration-300">
+        <div className="mx-auto max-w-5xl space-y-5 sm:space-y-6 animate-in fade-in duration-300">
             {/* 상단 웰컴 & 팀 상태 헤더 */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-5">
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-3 sm:pb-4">
                 <div>
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-bold uppercase tracking-wider text-secondary">
@@ -132,7 +132,7 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
                             {team ? team.name : '기본 예배팀'}
                         </Badge>
                     </div>
-                    <h1 className="mt-1.5 text-2xl font-serif font-black tracking-tight text-foreground sm:text-3xl">
+                    <h1 className="mt-1 text-xl font-serif font-black tracking-tight text-foreground sm:text-2xl md:text-3xl">
                         {team ? `${team.name}의 준비 현황` : '우리 팀의 예배 준비'}
                     </h1>
                 </div>
@@ -151,32 +151,32 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
 
             {/* 메인 히어로 카드 (이번 주 예배) */}
             {!isClient ? (
-                <section aria-label="예배 준비 정보 불러오는 중" className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-6 sm:p-8 min-h-[300px] animate-pulse">
-                    <div className="flex flex-col gap-6">
+                <section aria-label="예배 준비 정보 불러오는 중" className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-4 sm:p-6 min-h-[220px] animate-pulse">
+                    <div className="flex flex-col gap-4">
                         <div className="flex items-center justify-between">
                             <div className="h-7 w-28 rounded-full bg-muted" />
                             <div className="h-4 w-32 rounded bg-muted" />
                         </div>
-                        <div className="space-y-3">
-                            <div className="h-8 w-2/3 rounded-lg bg-muted" />
+                        <div className="space-y-2">
+                            <div className="h-7 w-2/3 rounded-lg bg-muted" />
                             <div className="h-4 w-5/6 rounded bg-muted" />
                         </div>
-                        <div className="h-16 rounded-2xl bg-muted/60" />
+                        <div className="h-14 rounded-2xl bg-muted/60" />
                         <div className="flex gap-3">
-                            <div className="h-12 w-36 rounded-2xl bg-muted" />
-                            <div className="h-12 w-36 rounded-2xl bg-muted" />
+                            <div className="h-11 w-32 rounded-xl bg-muted" />
+                            <div className="h-11 w-32 rounded-xl bg-muted" />
                         </div>
                     </div>
                 </section>
             ) : (
-                <section className="relative overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-muted/30 p-6 shadow-sm sm:p-8">
+                <section className="relative overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-br from-card via-card to-muted/30 p-4 shadow-sm sm:p-6">
                 {/* 배경 장식 원 */}
                 <div className="absolute -right-12 -top-12 size-56 rounded-full bg-primary/5 blur-2xl pointer-events-none" />
                 <div className="absolute -bottom-12 -left-12 size-48 rounded-full bg-secondary/5 blur-2xl pointer-events-none" />
 
-                <div className="relative z-10 flex flex-col gap-6">
+                <div className="relative z-10 flex flex-col gap-4 sm:gap-5">
                     {/* 상단 메타 바 */}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
                         <div className="flex items-center gap-2.5">
                             <Badge variant={dDayInfo.variant} size="lg" dot pulse={dDayInfo.isToday}>
                                 {dDayInfo.text}

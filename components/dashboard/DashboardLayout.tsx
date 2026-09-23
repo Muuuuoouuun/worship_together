@@ -124,7 +124,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, currentPath
                 </header>
 
                 {/* 메인 콘텐츠 영역 */}
-                <main className="flex-1 p-4 pb-28 sm:p-6 sm:pb-32 md:p-8 lg:p-10 lg:pb-24 max-w-7xl w-full mx-auto">
+                <main className="flex-1 p-3 pb-20 sm:p-5 sm:pb-24 md:p-6 lg:p-8 lg:pb-16 max-w-7xl w-full mx-auto">
                     {children}
                 </main>
 

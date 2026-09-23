@@ -642,7 +642,7 @@ export default function LibraryWorkspace({
                                 <span className="text-xs text-muted-foreground font-normal">펼치기</span>
                             </summary>
                             <div className="mt-4 pt-3 border-t border-border/60">
-                                <SetlistComposer songs={songs} disabled={!ready} saveAction={hasBackend ? undefined : addSetlist} />
+                                <SetlistComposer songs={songs} teamId={teamId} disabled={!ready} saveAction={hasBackend ? undefined : addSetlist} />
                             </div>
                         </details>
                     </div>
