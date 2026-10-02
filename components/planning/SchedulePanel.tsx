@@ -1,19 +1,25 @@
 'use client';
 
-import { cloneElement, isValidElement, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { canManagePlanning, planningDate, scheduleTemplates, type PlanningCommand, type PlanningPanelProps, type ScheduleSlot, type ScheduleTemplateKey, type TeamSchedule, type UrgentAlert } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
-import { Bell, CalendarDays, Check, ClipboardCopy, List, MessageSquare, Music, Send, Share2, Sparkles, X } from 'lucide-react';
+import { Bell, CalendarDays, CalendarPlus, CalendarX2, Check, ClipboardCopy, Copy, Download, ExternalLink, List, MessageSquare, Music, RotateCcw, Search, Send, Share2, Sparkles, Table, Users, X } from 'lucide-react';
+import { downloadIcsFile, getMyGoogleCalendarUrl, generateMyScheduleShareText } from '@/lib/calendarExport';
 import CalendarView from './CalendarView';
-import EventShareModal from './EventShareModal';
-import MonthlySundaysModal from './MonthlySundaysModal';
+import MatrixView from './MatrixView';
 
-const control = 'min-h-12 w-full min-w-0 rounded-xl border border-input bg-background px-3 py-2 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const button = 'inline-flex min-h-12 min-w-12 items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
-const primary = `${button} bg-primary text-primary-foreground`;
-const disclosure = 'min-h-12 cursor-pointer rounded-lg px-2 py-3 font-semibold focus-visible:outline-2 focus-visible:outline-ring';
-const card = 'min-w-0 rounded-2xl border border-border bg-card p-4 text-card-foreground sm:p-5';
+const EventShareModal = dynamic(() => import('./EventShareModal'), { ssr: false });
+const MonthlySundaysModal = dynamic(() => import('./MonthlySundaysModal'), { ssr: false });
+const BlockedDatesModal = dynamic(() => import('./BlockedDatesModal'), { ssr: false });
+const ScheduleRsvpModal = dynamic(() => import('./ScheduleRsvpModal'), { ssr: false });
+
+const control = 'min-h-11 w-full min-w-0 rounded-xl border border-input/80 bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const button = 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98] shadow-2xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
+const primary = `${button} bg-primary text-primary-foreground hover:bg-primary/90 border-transparent shadow-xs font-bold`;
+const disclosure = 'min-h-10 cursor-pointer rounded-xl px-2.5 py-2 font-semibold text-sm transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring';
+const card = 'min-w-0 rounded-2xl border border-border/70 bg-card p-4 text-card-foreground shadow-2xs sm:p-5 transition-shadow hover:shadow-xs';
 const attendanceLabels = { pending: '응답 대기', confirmed: '참석 확정', absent: '불참' };
 const alertLabels = { absence: '불참 알림', substitute: '대체 인원 요청', notice: '긴급 공지' };
 type Send = PlanningPanelProps['onCommand'];
@@ -23,12 +29,12 @@ function getRelativeDateLabel(iso: string, nowMs: number) {
     const targetMs = Date.parse(iso);
     const diffHours = (targetMs - nowMs) / (1000 * 60 * 60);
     const diffDays = Math.round((targetMs - nowMs) / (1000 * 60 * 60 * 24));
-    if (diffHours < -24) return { text: '종료', cls: 'bg-muted text-muted-foreground' };
+    if (diffHours < -24) return { text: '종료', cls: 'bg-muted/70 text-muted-foreground font-medium' };
     if (diffHours >= -24 && diffHours < 0) return { text: '진행 중', cls: 'bg-secondary/15 text-secondary font-bold' };
-    if (diffHours >= 0 && diffHours <= 18) return { text: '오늘', cls: 'bg-primary text-primary-foreground font-bold' };
-    if (diffDays === 1) return { text: '내일', cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold' };
-    if (diffDays > 1 && diffDays <= 7) return { text: `D-${diffDays}`, cls: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 font-bold' };
-    return { text: `D-${diffDays}`, cls: 'bg-muted text-muted-foreground' };
+    if (diffHours >= 0 && diffHours <= 18) return { text: '오늘', cls: 'bg-primary text-primary-foreground font-bold shadow-xs' };
+    if (diffDays === 1) return { text: '내일', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold' };
+    if (diffDays > 1 && diffDays <= 7) return { text: `D-${diffDays}`, cls: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 font-bold' };
+    return { text: `D-${diffDays}`, cls: 'bg-muted/70 text-muted-foreground' };
 }
 
 function generateKakaoShareText(event: TeamSchedule, names: Map<string, string>): string {
@@ -62,36 +68,36 @@ ${setlistPart}${event.notes ? `메모: ${event.notes}\n` : ''}
 ${roleLines.length ? roleLines.join('\n') : '• 아직 배정된 인원이 없습니다.'}`;
 }
 
-function getUpcomingSundayKST(): { startsAt: string; endsAt: string } {
+function getUpcomingDayKST(targetDay: number, startHour: number, startMinute: number, durationMinutes: number): { startsAt: string; endsAt: string } {
     const now = new Date();
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     const kstNow = new Date(utc + (9 * 3600000));
     const day = kstNow.getDay();
-    let daysUntilSunday = day === 0 ? 0 : 7 - day;
-    if (day === 0 && kstNow.getHours() >= 12) {
-        daysUntilSunday = 7;
+    let daysUntil = (targetDay - day + 7) % 7;
+    if (daysUntil === 0 && (kstNow.getHours() > startHour || (kstNow.getHours() === startHour && kstNow.getMinutes() >= startMinute))) {
+        daysUntil = 7;
     }
-    const targetDate = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate() + daysUntilSunday, 11, 0, 0);
-    const endDate = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate() + daysUntilSunday, 12, 30, 0);
+    const targetDate = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate() + daysUntil, startHour, startMinute, 0);
+    const endDate = new Date(targetDate.getTime() + durationMinutes * 60000);
     const pad = (n: number) => String(n).padStart(2, '0');
     const toKstIso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00+09:00`;
     return { startsAt: toKstIso(targetDate), endsAt: toKstIso(endDate) };
 }
 
+function getUpcomingSundayKST(): { startsAt: string; endsAt: string } {
+    return getUpcomingDayKST(0, 11, 0, 90);
+}
+
 function getUpcomingSaturdayKST(): { startsAt: string; endsAt: string } {
-    const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const kstNow = new Date(utc + (9 * 3600000));
-    const day = kstNow.getDay();
-    let daysUntilSaturday = day <= 6 ? 6 - day : 6;
-    if (day === 6 && kstNow.getHours() >= 19) {
-        daysUntilSaturday = 7;
-    }
-    const targetDate = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate() + daysUntilSaturday, 17, 0, 0);
-    const endDate = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate() + daysUntilSaturday, 19, 0, 0);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const toKstIso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00+09:00`;
-    return { startsAt: toKstIso(targetDate), endsAt: toKstIso(endDate) };
+    return getUpcomingDayKST(6, 17, 0, 120);
+}
+
+function getUpcomingFridayKST(): { startsAt: string; endsAt: string } {
+    return getUpcomingDayKST(5, 20, 0, 90);
+}
+
+function getUpcomingWednesdayKST(): { startsAt: string; endsAt: string } {
+    return getUpcomingDayKST(3, 19, 30, 90);
 }
 
 function generateMonthlyKakaoShareText(events: TeamSchedule[], names: Map<string, string>): string {
@@ -176,8 +182,10 @@ function CommandForm({ children, build, send, disabled, submitLabel, reset = tru
     </form>;
 }
 
-function EventForm({ event, ...actions }: Actions & { event?: TeamSchedule }) {
+function EventForm({ event, defaultDate, ...actions }: Actions & { event?: TeamSchedule; defaultDate?: string }) {
     const [weeks, setWeeks] = useState(1);
+    const defaultStart = event ? kstInput(event.startsAt) : defaultDate ? `${defaultDate}T11:00` : '';
+    const defaultEnd = event ? kstInput(event.endsAt) : defaultDate ? `${defaultDate}T12:30` : '';
     return <CommandForm {...actions} reset={!event} submitLabel={event ? '일정 변경 저장' : weeks > 1 ? `${weeks}주 정기 일정 등록` : '일정 만들기'} build={data => {
         // datetime-local carries no zone: always interpret the entered wall time as KST.
         const startsAt = `${text(data, 'startsAt')}:00+09:00`;
@@ -201,8 +209,8 @@ function EventForm({ event, ...actions }: Actions & { event?: TeamSchedule }) {
         <Field label="제목 (필수)"><input name="title" required defaultValue={event?.title ?? ''} className={control} /></Field>
         <p className="text-sm text-muted-foreground">모든 시간은 한국 시간(KST, UTC+09:00)입니다.</p>
         <div className="grid gap-3 md:grid-cols-2">
-            <Field label="시작 (필수)"><input type="datetime-local" step="60" name="startsAt" required defaultValue={event ? kstInput(event.startsAt) : ''} className={control} /></Field>
-            <Field label="종료 (필수)"><input type="datetime-local" step="60" name="endsAt" required defaultValue={event ? kstInput(event.endsAt) : ''} className={control} /></Field>
+            <Field label="시작 (필수)"><input type="datetime-local" step="60" name="startsAt" required defaultValue={defaultStart} className={control} /></Field>
+            <Field label="종료 (필수)"><input type="datetime-local" step="60" name="endsAt" required defaultValue={defaultEnd} className={control} /></Field>
         </div>
         {!event ? (
             <Field label="정기 반복 생성 (선택)">
@@ -523,7 +531,7 @@ function AlertCard({ alert, event, names, manager, ...actions }: Actions & {
     </li>;
 }
 
-function SlotCard({ slot, event, alerts, members, names, userId, manager, allEvents, workloadMap, ...actions }: Actions & {
+const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, userId, manager, allEvents, workloadMap, ...actions }: Actions & {
     slot: ScheduleSlot; event: TeamSchedule; alerts: UrgentAlert[]; members: TeamMember[];
     names: Map<string, string>; userId: string; manager: boolean;
     allEvents: TeamSchedule[]; workloadMap: Map<string, number>;
@@ -534,9 +542,12 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
     const volunteered = slot.volunteers.includes(userId);
     const [showingAbsentForm, setShowingAbsentForm] = useState(false);
     const [copiedPersonal, setCopiedPersonal] = useState(false);
+    const [sendingInvite, setSendingInvite] = useState(false);
 
     const recommendedCandidates = useMemo(() => {
         if (!isVacantOrAbsent || !manager || event.cancelled) return [];
+        const evStart = Date.parse(event.startsAt);
+        const evEnd = Date.parse(event.endsAt);
         const candidates = members.filter(m => {
             if (m.userId === slot.memberId) return false;
             const roleMatches = m.role === slot.role || (slot.role === 'vocal' && m.role === 'leader') || m.role === 'member';
@@ -544,8 +555,8 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
             const hasClash = allEvents.some(other =>
                 other.id !== event.id &&
                 !other.cancelled &&
-                Date.parse(other.startsAt) < Date.parse(event.endsAt) &&
-                Date.parse(event.startsAt) < Date.parse(other.endsAt) &&
+                Date.parse(other.startsAt) < evEnd &&
+                evStart < Date.parse(other.endsAt) &&
                 other.slots.some(s => s.memberId === m.userId && s.attendance !== 'absent')
             );
             return !hasClash;
@@ -605,6 +616,25 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
             </div>
 
             <div className="flex items-center gap-1.5">
+                {manager && slot.memberId && slot.attendance === 'pending' && !event.cancelled ? (
+                    <button
+                        type="button"
+                        className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary/10 inline-flex items-center gap-1 border border-primary/30"
+                        title="팀원에게 앱 사역 초대 알림을 전송합니다"
+                        disabled={actions.disabled || sendingInvite}
+                        onClick={async () => {
+                            setSendingInvite(true);
+                            try {
+                                await actions.send({ type: 'slot.sendInvite', eventId: event.id, slotId: slot.id });
+                            } finally {
+                                setSendingInvite(false);
+                            }
+                        }}
+                    >
+                        <Send size={11} />
+                        <span>{sendingInvite ? '발송 중…' : slot.invitedAt ? '초대 재발송' : '초대 알림'}</span>
+                    </button>
+                ) : null}
                 {manager && slot.memberId && slot.attendance === 'pending' ? (
                     <button
                         type="button"
@@ -646,6 +676,29 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
             </div>
         </div>
 
+        {/* 초대/동의 타임스탬프 & 불참 사유 */}
+        {(slot.invitedAt || slot.respondedAt || (slot.attendance === 'absent' && slot.declineReason)) ? (
+            <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-muted-foreground pt-0.5">
+                {slot.invitedAt ? (
+                    <span className="inline-flex items-center gap-1 text-primary font-medium">
+                        <Send size={10} className="shrink-0" />
+                        <span>초대 발송: {new Date(slot.invitedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                    </span>
+                ) : null}
+                {slot.respondedAt ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+                        <Check size={11} className={slot.attendance === 'confirmed' ? 'text-emerald-600' : 'text-rose-500'} />
+                        <span>{slot.attendance === 'confirmed' ? '동의 완료' : '응답'}: {new Date(slot.respondedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                    </span>
+                ) : null}
+                {slot.attendance === 'absent' && slot.declineReason ? (
+                    <div className="w-full rounded-lg bg-destructive/10 px-2.5 py-1 text-destructive font-medium">
+                        불참 사유: {slot.declineReason}
+                    </div>
+                ) : null}
+            </div>
+        ) : null}
+
         {/* 💡 스마트 빈자리 추천 칩 */}
         {recommendedCandidates.length > 0 ? (
             <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-xs">
@@ -671,9 +724,32 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
         {!event.cancelled && assigned ? (
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-primary flex items-center gap-1">
-                        <Sparkles size={13} /> 내 섬김 참석 여부
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-primary flex items-center gap-1">
+                            <Sparkles size={13} /> 내 섬김 참석 여부
+                        </span>
+                        <div className="flex items-center gap-1">
+                            <a
+                                href={getMyGoogleCalendarUrl(event, slot.role)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
+                                title="내 구글 캘린더에 1클릭 추가"
+                            >
+                                <CalendarPlus size={11} />
+                                <span>구글 등록</span>
+                            </a>
+                            <button
+                                type="button"
+                                className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
+                                title="애플/스마트폰 캘린더(.ics) 1클릭 다운로드"
+                                onClick={() => downloadIcsFile(event, '예배팀', names)}
+                            >
+                                <Download size={11} />
+                                <span>.ics</span>
+                            </button>
+                        </div>
+                    </div>
                     <div className="flex items-center gap-2">
                         {slot.attendance !== 'confirmed' ? (
                             <button
@@ -682,7 +758,7 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
                                 disabled={actions.disabled}
                                 onClick={() => void actions.send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' })}
                             >
-                                <Check size={14} /> 1탭 참석 확정
+                                <Check size={14} /> 참석 확정
                             </button>
                         ) : (
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
@@ -701,22 +777,57 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
                 </div>
 
                 {showingAbsentForm ? (
-                    <CommandForm
-                        {...actions}
-                        submitLabel="불참으로 변경 저장"
-                        build={data => ({
-                            type: 'attendance.set',
-                            eventId: event.id,
-                            slotId: slot.id,
-                            attendance: 'absent',
-                            reason: text(data, 'reason'),
-                        })}
-                    >
-                        <Field label="불참 사유 (선택)">
-                            <textarea name="reason" rows={2} placeholder="예: 출장, 시험 등" className={control} />
-                        </Field>
-                        <p className="text-xs text-muted-foreground">불참으로 변경하면 대체 인원 요청이 자동 등록됩니다.</p>
-                    </CommandForm>
+                    <div className="space-y-2 pt-1 border-t border-border/40">
+                        <div className="space-y-1">
+                            <span className="text-[11px] font-semibold text-muted-foreground">1클릭 불참 사유 선택:</span>
+                            <div className="flex flex-wrap gap-1">
+                                {['개인 사정', '시험/학업', '출장/야근', '가족 행사', '건강/컨디션'].map(r => (
+                                    <button
+                                        key={r}
+                                        type="button"
+                                        disabled={actions.disabled}
+                                        className="rounded-md border border-destructive/20 bg-destructive/5 px-2 py-0.5 text-[11px] font-semibold text-destructive hover:bg-destructive/15 transition-all active:scale-95"
+                                        title={`‘${r}’ 사유로 1클릭 불참 응답`}
+                                        onClick={() => void actions.send({
+                                            type: 'attendance.set',
+                                            eventId: event.id,
+                                            slotId: slot.id,
+                                            attendance: 'absent',
+                                            reason: r,
+                                            autoRequestSubstitute: true,
+                                        })}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <CommandForm
+                            {...actions}
+                            submitLabel="직접 입력한 사유로 저장"
+                            build={data => ({
+                                type: 'attendance.set',
+                                eventId: event.id,
+                                slotId: slot.id,
+                                attendance: 'absent',
+                                reason: text(data, 'reason'),
+                                autoRequestSubstitute: data.get('autoRequestSubstitute') === 'on',
+                            })}
+                        >
+                            <Field label="기타 불참 사유 직접 입력">
+                                <textarea name="reason" rows={2} placeholder="직접 사유를 입력하세요 (선택)" className={control} />
+                            </Field>
+                            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="autoRequestSubstitute"
+                                    defaultChecked
+                                    className="rounded"
+                                />
+                                <span>인도자에게 대체 인원 자동 추천 알림 발송</span>
+                            </label>
+                        </CommandForm>
+                    </div>
                 ) : null}
             </div>
         ) : null}
@@ -733,14 +844,26 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
         {!event.cancelled && !assigned && needsHelp && members.some(m => m.userId === userId) ? (
             <div className="flex items-center justify-between gap-2 pt-1 text-xs">
                 <span className="text-muted-foreground">대체/충원이 필요한 빈자리입니다.</span>
-                <button
-                    type="button"
-                    className={`${primary} text-xs py-1 px-3 min-h-8`}
-                    disabled={actions.disabled || volunteered}
-                    onClick={() => void actions.send({ type: 'slot.volunteer', eventId: event.id, slotId: slot.id })}
-                >
-                    {volunteered ? '지원 완료 · 확정 대기' : '이 역할에 지원하기'}
-                </button>
+                {volunteered ? (
+                    <button
+                        type="button"
+                        className={`${button} text-xs py-1 px-2.5 min-h-8 text-destructive border-destructive/30 hover:bg-destructive/10 font-bold`}
+                        disabled={actions.disabled}
+                        title="지원 신청을 취소합니다"
+                        onClick={() => void actions.send({ type: 'slot.unvolunteer', eventId: event.id, slotId: slot.id })}
+                    >
+                        지원 취소
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        className={`${primary} text-xs py-1 px-3 min-h-8`}
+                        disabled={actions.disabled}
+                        onClick={() => void actions.send({ type: 'slot.volunteer', eventId: event.id, slotId: slot.id })}
+                    >
+                        이 역할에 지원하기
+                    </button>
+                )}
             </div>
         ) : null}
 
@@ -768,7 +891,7 @@ function SlotCard({ slot, event, alerts, members, names, userId, manager, allEve
             </div>
         ) : null}
     </li>;
-}
+});
 
 export default function SchedulePanel({ state, members, userId, busy, onCommand }: PlanningPanelProps) {
     const headingId = useId();
@@ -784,16 +907,18 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
         return () => clearInterval(timer);
     }, []);
     const manager = canManagePlanning(members, userId);
-    const names = new Map(members.map(member => [member.userId, member.name]));
-    const eventMap = new Map(state.events.map(event => [event.id, event]));
-    const alertsByEvent = new Map<string, UrgentAlert[]>();
-    const sortedAlerts = [...state.alerts].sort((a, b) => Number(Boolean(a.resolvedAt)) - Number(Boolean(b.resolvedAt)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    for (const alert of sortedAlerts) {
-        const group = alertsByEvent.get(alert.eventId) ?? [];
-        group.push(alert);
-        alertsByEvent.set(alert.eventId, group);
-    }
-    const openAlerts = sortedAlerts.filter(alert => !alert.resolvedAt);
+    const names = useMemo(() => new Map(members.map(member => [member.userId, member.name])), [members]);
+    const eventMap = useMemo(() => new Map(state.events.map(event => [event.id, event])), [state.events]);
+    const { alertsByEvent, openAlerts } = useMemo(() => {
+        const byEvent = new Map<string, UrgentAlert[]>();
+        const sortedAlerts = [...state.alerts].sort((a, b) => Number(Boolean(a.resolvedAt)) - Number(Boolean(b.resolvedAt)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
+        for (const alert of sortedAlerts) {
+            const group = byEvent.get(alert.eventId) ?? [];
+            group.push(alert);
+            byEvent.set(alert.eventId, group);
+        }
+        return { alertsByEvent: byEvent, openAlerts: sortedAlerts.filter(alert => !alert.resolvedAt) };
+    }, [state.alerts]);
 
     const workloadMap = useMemo(() => {
         const map = new Map<string, number>();
@@ -809,26 +934,101 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
         return map;
     }, [members, state.events]);
 
-    const events = state.events.filter(event => {
-        if (filter === 'past') {
-            if (Date.parse(event.endsAt) >= now) return false;
-        } else if (filter === 'my') {
-            if (Date.parse(event.endsAt) < now || !event.slots.some(s => s.memberId === userId)) return false;
-        } else if (filter === 'vacant') {
-            if (Date.parse(event.endsAt) < now || (event.slots.length > 0 && !event.slots.some(s => !s.memberId || s.attendance === 'absent'))) return false;
-        } else if (filter === 'upcoming') {
-            if (Date.parse(event.endsAt) < now) return false;
-        }
-        if (roleFilter !== 'all') {
-            if (!event.slots.some(s => s.role === roleFilter)) return false;
-        }
-        return true;
-    }).sort((a, b) => filter === 'past' ? Date.parse(b.startsAt) - Date.parse(a.startsAt) : Date.parse(a.startsAt) - Date.parse(b.startsAt));
+    const [searchQuery, setSearchQuery] = useState('');
+    const searchInputRef = useRef<HTMLInputElement>(null);
+
+    const events = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        return state.events.filter(event => {
+            if (filter === 'past') {
+                if (Date.parse(event.endsAt) >= now) return false;
+            } else if (filter === 'my') {
+                if (Date.parse(event.endsAt) < now || !event.slots.some(s => s.memberId === userId)) return false;
+            } else if (filter === 'vacant') {
+                if (Date.parse(event.endsAt) < now || (event.slots.length > 0 && !event.slots.some(s => !s.memberId || s.attendance === 'absent'))) return false;
+            } else if (filter === 'upcoming') {
+                if (Date.parse(event.endsAt) < now) return false;
+            }
+            if (roleFilter !== 'all') {
+                if (!event.slots.some(s => s.role === roleFilter)) return false;
+            }
+            if (query) {
+                const matchTitle = event.title.toLowerCase().includes(query);
+                const matchLocation = event.location?.toLowerCase().includes(query);
+                const matchNotes = event.notes?.toLowerCase().includes(query);
+                const matchSetlistTitle = event.setlistTitle?.toLowerCase().includes(query);
+                const matchSongs = event.setlistSongs?.some(song => song.toLowerCase().includes(query));
+                const matchMembers = event.slots.some(s => {
+                    if (!s.memberId) return false;
+                    const name = names.get(s.memberId)?.toLowerCase() ?? '';
+                    return name.includes(query);
+                });
+                const matchRoles = event.slots.some(s => worshipRoles[s.role]?.toLowerCase().includes(query));
+                if (!matchTitle && !matchLocation && !matchNotes && !matchSetlistTitle && !matchSongs && !matchMembers && !matchRoles) {
+                    return false;
+                }
+            }
+            return true;
+        }).sort((a, b) => filter === 'past' ? Date.parse(b.startsAt) - Date.parse(a.startsAt) : Date.parse(a.startsAt) - Date.parse(b.startsAt));
+    }, [state.events, filter, now, userId, roleFilter, searchQuery, names]);
     const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
     const [copiedMonthly, setCopiedMonthly] = useState(false);
-    const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+    const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'matrix'>('list');
     const [shareModalEvent, setShareModalEvent] = useState<TeamSchedule | null>(null);
+    const [rsvpModalEvent, setRsvpModalEvent] = useState<TeamSchedule | null>(null);
     const [monthlySundaysModalOpen, setMonthlySundaysModalOpen] = useState(false);
+    const [blockedDatesModalOpen, setBlockedDatesModalOpen] = useState(false);
+    const [selectedCalendarEventId, setSelectedCalendarEventId] = useState<string | null>(null);
+    const [createEventDate, setCreateEventDate] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement | null;
+            const isEditing = target && (
+                target.tagName === 'INPUT' ||
+                target.tagName === 'TEXTAREA' ||
+                target.tagName === 'SELECT' ||
+                target.isContentEditable
+            );
+
+            if ((e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) && !isEditing) {
+                e.preventDefault();
+                if (viewMode !== 'list') setViewMode('list');
+                setTimeout(() => {
+                    searchInputRef.current?.focus();
+                    searchInputRef.current?.select();
+                }, 20);
+                return;
+            }
+
+            if (e.key === 'Escape') {
+                if (searchQuery) {
+                    setSearchQuery('');
+                    searchInputRef.current?.blur();
+                } else if (selectedCalendarEventId) {
+                    setSelectedCalendarEventId(null);
+                } else if (createEventDate) {
+                    setCreateEventDate(null);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [viewMode, searchQuery, selectedCalendarEventId, createEventDate]);
+
+    const activeRsvpEvent = useMemo(() => {
+        if (!rsvpModalEvent) return null;
+        return state.events.find(e => e.id === rsvpModalEvent.id) ?? rsvpModalEvent;
+    }, [state.events, rsvpModalEvent]);
+
+    const myBlockedCount = useMemo(() => {
+        return (state.blockedDates ?? []).filter(b => b.memberId === userId).length;
+    }, [state.blockedDates, userId]);
+
+    const selectedCalendarEvent = useMemo(() => {
+        return state.events.find(e => e.id === selectedCalendarEventId) ?? null;
+    }, [state.events, selectedCalendarEventId]);
 
     const myUpcomingSlots = useMemo(() => {
         const list: Array<{ event: TeamSchedule; slot: ScheduleSlot }> = [];
@@ -874,6 +1074,36 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             }
             setCopiedMonthly(true);
             setTimeout(() => setCopiedMonthly(false), 2000);
+        } catch {
+            window.prompt('아래 텍스트를 복사하여 카카오톡에 붙여넣으세요:', text);
+        }
+    };
+
+    const [copiedMySchedule, setCopiedMySchedule] = useState(false);
+    const [previewSetlistEventId, setPreviewSetlistEventId] = useState<string | null>(null);
+    const [showAllMyDuties, setShowAllMyDuties] = useState(false);
+    const [activeDeclineSlotId, setActiveDeclineSlotId] = useState<string | null>(null);
+
+    const vacantHelpEvents = useMemo(() => {
+        return state.events.filter(e =>
+            !e.cancelled &&
+            Date.parse(e.endsAt) >= now &&
+            e.slots.some(s => (!s.memberId || s.attendance === 'absent') && s.memberId !== userId)
+        );
+    }, [state.events, now, userId]);
+
+    const handleCopyMySchedule = async () => {
+        const myName = names.get(userId) ?? '나';
+        const items = myUpcomingSlots.map(({ event, slot }) => ({ event, role: slot.role }));
+        const text = generateMyScheduleShareText(items, myName);
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                window.prompt('아래 텍스트를 복사하여 카카오톡에 붙여넣으세요:', text);
+            }
+            setCopiedMySchedule(true);
+            setTimeout(() => setCopiedMySchedule(false), 2000);
         } catch {
             window.prompt('아래 텍스트를 복사하여 카카오톡에 붙여넣으세요:', text);
         }
@@ -952,207 +1182,537 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
         )}
 
         {/* 나의 다가오는 섬김 & 1초 빠른 응답 배너 */}
-        {myUpcomingSlots.length > 0 ? (
-            <section aria-label="나의 다가오는 섬김과 참석 응답" className={`${card} border-primary/40 bg-primary/5 space-y-3`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-bold text-base flex items-center gap-2 text-foreground">
-                        <Sparkles size={18} className="text-primary" />
+        <section aria-label="나의 다가오는 섬김과 참석 응답" className={`${card} border-primary/30 bg-primary/5 space-y-3.5`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <Sparkles size={18} className="text-primary" />
+                    <h3 className="font-bold text-base text-foreground">
                         나의 다가오는 섬김 ({myUpcomingSlots.length}건)
                     </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                        {myPendingSlots.length > 1 ? (
-                            <button
-                                type="button"
-                                className={`${button} text-xs py-1 px-3 min-h-8 font-bold bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 shadow-xs`}
-                                disabled={actions.disabled}
-                                onClick={() => void actions.send({
-                                    type: 'attendance.batchConfirm',
-                                    items: myPendingSlots.map(p => ({ eventId: p.event.id, slotId: p.slot.id }))
-                                })}
-                            >
-                                <Check size={13} /> 내 사역 {myPendingSlots.length}건 모두 참석 확정
-                            </button>
-                        ) : null}
-                        {myPendingSlots.length > 0 ? (
-                            <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 px-2.5 py-0.5 text-xs font-bold">
-                                응답 필요 {myPendingSlots.length}건
-                            </span>
-                        ) : (
-                            <span className="rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 text-xs font-bold">
-                                모두 확정됨 ✓
-                            </span>
-                        )}
-                    </div>
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    {myUpcomingSlots.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => void handleCopyMySchedule()}
+                            className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold border-border/80 bg-background text-foreground hover:bg-muted flex items-center gap-1.5`}
+                            title="내 이번 달 사역 일정을 카카오톡용으로 원클릭 복사합니다"
+                        >
+                            {copiedMySchedule ? (
+                                <>
+                                    <Check size={13} className="text-emerald-600 dark:text-emerald-400 font-bold" />
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">내 사역 복사됨!</span>
+                                </>
+                            ) : (
+                                <>
+                                    <ClipboardCopy size={13} />
+                                    <span>내 일정 카톡 복사</span>
+                                </>
+                            )}
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => setBlockedDatesModalOpen(true)}
+                        className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold border-border/80 bg-background hover:border-destructive/40 text-muted-foreground hover:text-destructive flex items-center gap-1.5`}
+                        title="섬길 수 없는 날짜를 미리 등록해 두면 자동 배분에서 제외됩니다"
+                    >
+                        <CalendarX2 size={13} />
+                        <span>사역 불가일 등록</span>
+                        {myBlockedCount > 0 ? (
+                            <span className="rounded-full bg-destructive/15 text-destructive px-1.5 py-0.2 text-[10px] font-bold">
+                                {myBlockedCount}
+                            </span>
+                        ) : null}
+                    </button>
+                    {myPendingSlots.length > 1 ? (
+                        <button
+                            type="button"
+                            className={`${button} text-xs py-1 px-3 min-h-8 font-bold bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 shadow-xs`}
+                            disabled={actions.disabled}
+                            onClick={() => void actions.send({
+                                type: 'attendance.batchConfirm',
+                                items: myPendingSlots.map(p => ({ eventId: p.event.id, slotId: p.slot.id }))
+                            })}
+                        >
+                            <Check size={13} /> 내 사역 {myPendingSlots.length}건 모두 참석 확정
+                        </button>
+                    ) : null}
+                    {myPendingSlots.length > 0 ? (
+                        <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 px-2.5 py-0.5 text-xs font-bold">
+                            응답 필요 {myPendingSlots.length}건
+                        </span>
+                    ) : myUpcomingSlots.length > 0 ? (
+                        <span className="rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 text-xs font-bold">
+                            모두 확정됨 ✓
+                        </span>
+                    ) : null}
+                </div>
+            </div>
 
-                {myPendingSlots.length > 0 ? (
-                    <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">아직 참석 여부를 응답하지 않은 일정이 있습니다. 1초 만에 확인해 주세요!</p>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                            {myPendingSlots.map(({ event, slot }) => {
-                                const rel = getRelativeDateLabel(event.startsAt, now);
-                                return (
-                                    <div key={slot.id} className="flex flex-col justify-between rounded-xl border border-primary/20 bg-background p-3 space-y-2">
-                                        <div>
-                                            <div className="flex items-center gap-2 text-xs">
+            {myUpcomingSlots.length === 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pt-1">
+                    <p>현재 배정된 다가오는 사역 일정이 없습니다.</p>
+                    <span className="text-[11px] text-muted-foreground">
+                        휴가나 시험 등 일정이 있으시면 미리 사역 불가일을 등록해 주세요.
+                    </span>
+                </div>
+            ) : myPendingSlots.length > 0 ? (
+                <div className="space-y-2.5">
+                    <p className="text-xs text-muted-foreground font-medium">참석 여부 응답이 필요한 사역입니다. 버튼 1번으로 확정하거나 사유를 선택하세요.</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {myPendingSlots.map(({ event, slot }) => {
+                            const rel = getRelativeDateLabel(event.startsAt, now);
+                            const isDeclineOpen = activeDeclineSlotId === slot.id;
+                            const isSetlistPreviewOpen = previewSetlistEventId === event.id;
+
+                            return (
+                                <div key={slot.id} className="flex flex-col justify-between rounded-xl border border-primary/25 bg-background p-3.5 space-y-3 shadow-2xs">
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between gap-2 text-xs">
+                                            <div className="flex items-center gap-1.5">
                                                 <span className={`rounded-full px-2 py-0.5 font-bold ${rel.cls}`}>{rel.text}</span>
-                                                <span className="font-semibold text-secondary">{worshipRoles[slot.role]}</span>
+                                                <span className="font-semibold text-primary">{worshipRoles[slot.role]}</span>
                                             </div>
-                                            <p className="font-bold mt-1 text-sm">{event.title}</p>
-                                            <p className="text-xs text-muted-foreground">{planningDate(event.startsAt)}</p>
-                                            {event.setlistTitle ? (
-                                                <div className="mt-1 flex items-center gap-1.5 text-xs text-primary font-medium">
-                                                    <Music size={13} className="shrink-0" />
-                                                    <span className="truncate">콘티: {event.setlistTitle}{event.setlistSongs?.length ? ` (${event.setlistSongs.length}곡)` : ''}</span>
-                                                </div>
-                                            ) : null}
+                                            <div className="flex items-center gap-1">
+                                                <a
+                                                    href={getMyGoogleCalendarUrl(event, slot.role)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                    title="내 구글 캘린더에 1클릭 추가"
+                                                >
+                                                    <CalendarPlus size={11} />
+                                                    <span>구글 등록</span>
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                    title="애플/스마트폰 캘린더(.ics) 1클릭 다운로드"
+                                                    onClick={() => downloadIcsFile(event, '예배팀', names)}
+                                                >
+                                                    <Download size={11} />
+                                                    <span>.ics</span>
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-2 pt-1">
+
+                                        <p className="font-bold text-sm text-foreground">{event.title}</p>
+                                        <p className="text-xs text-muted-foreground">{planningDate(event.startsAt)}</p>
+
+                                        {event.setlistTitle ? (
+                                            <div className="pt-0.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPreviewSetlistEventId(prev => prev === event.id ? null : event.id)}
+                                                    className="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:underline"
+                                                >
+                                                    <Music size={13} className="shrink-0" />
+                                                    <span>콘티: {event.setlistTitle} {event.setlistSongs?.length ? `(${event.setlistSongs.length}곡)` : ''} {isSetlistPreviewOpen ? '▲' : '▼'}</span>
+                                                </button>
+                                                {isSetlistPreviewOpen && event.setlistSongs?.length ? (
+                                                    <div className="mt-1.5 rounded-lg border border-primary/20 bg-primary/5 p-2 text-xs space-y-1">
+                                                        <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
+                                                            {event.setlistSongs.map((song, idx) => (
+                                                                <li key={idx} className="font-medium text-foreground">{song}</li>
+                                                            ))}
+                                                        </ol>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+
+                                        {slot.invitedAt ? (
+                                            <p className="text-[11px] text-primary font-medium flex items-center gap-1">
+                                                <Send size={10} className="shrink-0" />
+                                                <span>초대장 수신 ({new Date(slot.invitedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})</span>
+                                            </p>
+                                        ) : null}
+                                    </div>
+
+                                    <div className="space-y-2 pt-1 border-t border-border/40">
+                                        <div className="flex items-center gap-2">
                                             <button
                                                 type="button"
                                                 className={`${primary} text-xs py-1.5 px-3 flex-1 min-h-9`}
                                                 disabled={actions.disabled}
                                                 onClick={() => void actions.send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' })}
                                             >
-                                                <Check size={14} /> 1탭 참석 확정
+                                                <Check size={14} /> 참석 확정 (1클릭)
                                             </button>
                                             <button
                                                 type="button"
-                                                className={`${button} text-xs py-1.5 px-2.5 min-h-9 text-destructive`}
+                                                className={`${button} text-xs py-1.5 px-2.5 min-h-9 text-destructive border-destructive/30 hover:bg-destructive/10`}
                                                 disabled={actions.disabled}
-                                                onClick={() => void actions.send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '불참' })}
+                                                onClick={() => setActiveDeclineSlotId(prev => prev === slot.id ? null : slot.id)}
                                             >
-                                                불참
+                                                불참 사유 {isDeclineOpen ? '닫기' : '선택'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`${button} text-xs py-1.5 px-2 min-h-9 text-muted-foreground hover:text-foreground`}
+                                                title="이 일정의 전체 사역 동의 현황 확인"
+                                                onClick={() => setRsvpModalEvent(event)}
+                                            >
+                                                <Users size={13} />
                                             </button>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-                        <div>
-                            <p>
-                                다음 섬김: <strong className="text-foreground">{myUpcomingSlots[0].event.title}</strong> ({planningDate(myUpcomingSlots[0].event.startsAt)} · {worshipRoles[myUpcomingSlots[0].slot.role]})
-                            </p>
-                            {myUpcomingSlots[0].event.setlistTitle ? (
-                                <p className="mt-0.5 text-xs font-semibold text-primary flex items-center gap-1">
-                                    <Music size={12} className="shrink-0" /> 이번 주 콘티: {myUpcomingSlots[0].event.setlistTitle}{myUpcomingSlots[0].event.setlistSongs?.length ? ` (${myUpcomingSlots[0].event.setlistSongs.length}곡: ${myUpcomingSlots[0].event.setlistSongs.join(', ')})` : ''}
-                                </p>
-                            ) : null}
-                        </div>
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                            참석 응답 완료 🙌
-                        </span>
-                    </div>
-                )}
-            </section>
-        ) : null}
 
-        <section aria-label="미해결 긴급 알림" className={`${card} space-y-3 border-destructive/50`}>
-            <h3 className="font-bold">긴급 알림 <span className="text-destructive">{openAlerts.length}</span></h3>
-            {openAlerts.length ? <ul className="space-y-3">{openAlerts.map(alert => <AlertCard key={alert.id} {...actions} alert={alert} event={eventMap.get(alert.eventId)} names={names} manager={manager} />)}</ul> : <p className="text-sm text-muted-foreground">미해결 긴급 알림이 없습니다.</p>}
+                                        {isDeclineOpen && (
+                                            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2 space-y-1.5">
+                                                <span className="text-[11px] font-semibold text-destructive">1클릭 불참 사유 선택:</span>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {['개인 사정', '시험/학업', '출장/야근', '가족 행사', '건강/컨디션'].map(r => (
+                                                        <button
+                                                            key={r}
+                                                            type="button"
+                                                            disabled={actions.disabled}
+                                                            className="rounded-md border border-destructive/20 bg-background px-2 py-0.5 text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-all active:scale-95 shadow-2xs"
+                                                            title={`‘${r}’ 사유로 1클릭 불참 응답`}
+                                                            onClick={() => void actions.send({
+                                                                type: 'attendance.set',
+                                                                eventId: event.id,
+                                                                slotId: slot.id,
+                                                                attendance: 'absent',
+                                                                reason: r,
+                                                                autoRequestSubstitute: true,
+                                                            })}
+                                                        >
+                                                            {r}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {/* 확정된 가장 가까운 사역 1클릭 액션 카드 */}
+                    <div className="rounded-xl border border-primary/20 bg-background p-3.5 space-y-3 shadow-2xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 text-xs font-bold flex items-center gap-1">
+                                    <Check size={12} /> 확정됨
+                                </span>
+                                <span className="rounded-md bg-secondary/15 px-2 py-0.5 text-xs font-bold text-secondary">
+                                    {worshipRoles[myUpcomingSlots[0].slot.role]}
+                                </span>
+                                <span className="font-bold text-sm text-foreground">
+                                    {myUpcomingSlots[0].event.title}
+                                </span>
+                            </div>
+                            <span className="text-xs text-muted-foreground font-medium">
+                                {planningDate(myUpcomingSlots[0].event.startsAt)}
+                            </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <a
+                                    href={getMyGoogleCalendarUrl(myUpcomingSlots[0].event, myUpcomingSlots[0].slot.role)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold flex items-center gap-1.5`}
+                                    title="내 구글 캘린더에 1클릭 추가"
+                                >
+                                    <CalendarPlus size={13} className="text-primary" />
+                                    <span>구글 캘린더 등록</span>
+                                </a>
+                                <button
+                                    type="button"
+                                    onClick={() => downloadIcsFile(myUpcomingSlots[0].event, '예배팀', names)}
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold flex items-center gap-1.5`}
+                                    title="애플 및 스마트폰 캘린더 파일(.ics) 1클릭 다운로드"
+                                >
+                                    <Download size={13} className="text-primary" />
+                                    <span>애플/모바일 .ics</span>
+                                </button>
+                                {myUpcomingSlots[0].event.setlistTitle ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setPreviewSetlistEventId(prev => prev === myUpcomingSlots[0].event.id ? null : myUpcomingSlots[0].event.id)}
+                                        className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold flex items-center gap-1.5 border-primary/30 text-primary`}
+                                    >
+                                        <Music size={13} />
+                                        <span>콘티 곡 순서 {previewSetlistEventId === myUpcomingSlots[0].event.id ? '닫기 ▲' : '보기 ▼'}</span>
+                                    </button>
+                                ) : null}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActiveDeclineSlotId(prev => prev === myUpcomingSlots[0].slot.id ? null : myUpcomingSlots[0].slot.id)}
+                                className="text-xs text-muted-foreground hover:text-destructive underline-offset-2 hover:underline"
+                            >
+                                참석 상태 변경
+                            </button>
+                        </div>
+
+                        {/* 콘티 악보/곡 순서 인라인 프리뷰 */}
+                        {previewSetlistEventId === myUpcomingSlots[0].event.id && myUpcomingSlots[0].event.setlistSongs?.length ? (
+                            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-foreground">🎵 콘티: {myUpcomingSlots[0].event.setlistTitle}</span>
+                                    <span className="text-[11px] text-muted-foreground">{myUpcomingSlots[0].event.setlistSongs.length}곡</span>
+                                </div>
+                                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                                    {myUpcomingSlots[0].event.setlistSongs.map((song, idx) => (
+                                        <li key={idx} className="font-medium text-foreground">{song}</li>
+                                    ))}
+                                </ol>
+                                {myUpcomingSlots[0].event.setlistId && (
+                                    <div className="pt-1">
+                                        <a
+                                            href={`/dashboard/songs?team=${myUpcomingSlots[0].event.setlistId}`}
+                                            className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+                                        >
+                                            <span>악보 보관함에서 열기</span>
+                                            <ExternalLink size={12} />
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        ) : null}
+
+                        {/* 참석 변경 1클릭 사유 칩 (확정 후 부득이한 불참 발생 시) */}
+                        {activeDeclineSlotId === myUpcomingSlots[0].slot.id && (
+                            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 space-y-1.5">
+                                <span className="text-[11px] font-semibold text-destructive">부득이한 사정으로 불참하게 되셨나요? 1클릭 사유 선택:</span>
+                                <div className="flex flex-wrap gap-1">
+                                    {['개인 사정', '시험/학업', '출장/야근', '가족 행사', '건강/컨디션'].map(r => (
+                                        <button
+                                            key={r}
+                                            type="button"
+                                            disabled={actions.disabled}
+                                            className="rounded-md border border-destructive/20 bg-background px-2 py-0.5 text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-all active:scale-95 shadow-2xs"
+                                            title={`‘${r}’ 사유로 불참 변경`}
+                                            onClick={() => {
+                                                void actions.send({
+                                                    type: 'attendance.set',
+                                                    eventId: myUpcomingSlots[0].event.id,
+                                                    slotId: myUpcomingSlots[0].slot.id,
+                                                    attendance: 'absent',
+                                                    reason: r,
+                                                    autoRequestSubstitute: true,
+                                                });
+                                                setActiveDeclineSlotId(null);
+                                            }}
+                                        >
+                                            {r}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 이후 다가오는 사역 더보기 토글 */}
+                    {myUpcomingSlots.length > 1 && (
+                        <div className="pt-0.5">
+                            <button
+                                type="button"
+                                onClick={() => setShowAllMyDuties(!showAllMyDuties)}
+                                className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                            >
+                                <span>{showAllMyDuties ? '이후 다가오는 사역 접기 ▲' : `이후 다가오는 사역 (${myUpcomingSlots.length - 1}건 더보기) ▼`}</span>
+                            </button>
+
+                            {showAllMyDuties && (
+                                <ul className="mt-2 space-y-2">
+                                    {myUpcomingSlots.slice(1).map(({ event, slot }) => (
+                                        <li key={slot.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-background p-2.5 text-xs">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-semibold text-primary">{worshipRoles[slot.role]}</span>
+                                                <span className="font-bold text-foreground">{event.title}</span>
+                                                <span className="text-muted-foreground">({planningDate(event.startsAt)})</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <a
+                                                    href={getMyGoogleCalendarUrl(event, slot.role)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                                                >
+                                                    구글 등록
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => downloadIcsFile(event, '예배팀', names)}
+                                                    className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                                                >
+                                                    .ics
+                                                </button>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* 빈자리 충원 지원 유도 배너 (팀에 빈자리/결석이 있을 때) */}
+            {vacantHelpEvents.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs">
+                    <span className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span>찬양팀에 대체/충원이 필요한 빈자리가 {vacantHelpEvents.length}건 있습니다.</span>
+                    </span>
+                    <button
+                        type="button"
+                        className={`${button} text-xs py-1 px-2.5 min-h-7 bg-background font-bold text-amber-700 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/20 shadow-2xs`}
+                        onClick={() => { setFilter('vacant'); setViewMode('list'); }}
+                    >
+                        빈자리 보고 1클릭 지원하기
+                    </button>
+                </div>
+            )}
         </section>
 
-        {/* 1초 원클릭 스마트 프리셋 바 */}
-        {manager ? (
-            <section aria-label="1초 빠른 일정 생성 프리셋" className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-bold text-sm flex items-center gap-1.5 text-foreground">
-                        <Sparkles size={16} className="text-primary" />
-                        1초 빠른 일정 생성 프리셋
-                    </h3>
-                    <span className="text-xs text-muted-foreground">날짜/시간 자동 계산 & 표준 밴드(7명) 슬롯 자동 탑재</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        className={`${button} text-xs py-1.5 px-3 min-h-9 font-semibold bg-background hover:border-primary`}
-                        disabled={actions.disabled}
-                        onClick={async () => {
-                            const times = getUpcomingSundayKST();
-                            await actions.send({
-                                type: 'event.createWithTemplate',
-                                input: {
-                                    title: '주일 2부 예배',
-                                    kind: 'worship',
-                                    startsAt: times.startsAt,
-                                    endsAt: times.endsAt,
-                                    location: '본당 3층 대예배실',
-                                    notes: '10:00 음향/악기 리허설 시작',
-                                },
-                                templateKey: 'standard',
-                                weeksCount: 1,
-                            });
-                        }}
-                    >
-                        ⛪ 이번 주 주일 예배 (11:00)
-                    </button>
-                    <button
-                        type="button"
-                        className={`${button} text-xs py-1.5 px-3 min-h-9 font-semibold bg-background hover:border-primary`}
-                        disabled={actions.disabled}
-                        onClick={async () => {
-                            const times = getUpcomingSaturdayKST();
-                            await actions.send({
-                                type: 'event.save',
-                                input: {
-                                    title: '찬양팀 토요 연습',
-                                    kind: 'rehearsal',
-                                    startsAt: times.startsAt,
-                                    endsAt: times.endsAt,
-                                    location: '찬양팀 연습실',
-                                    notes: '콘티 사전 숙지 후 모입니다.',
-                                },
-                            });
-                        }}
-                    >
-                        🎵 이번 주 토요 연습 (17:00)
-                    </button>
-                    <button
-                        type="button"
-                        className={`${button} text-xs py-1.5 px-3 min-h-9 font-semibold bg-background hover:border-primary text-secondary`}
-                        disabled={actions.disabled}
-                        onClick={async () => {
-                            if (window.confirm('이번 주부터 4주간의 주일 예배를 표준 밴드 세션(7명) 슬롯과 함께 한 번에 생성하시겠습니까?')) {
-                                const times = getUpcomingSundayKST();
-                                await actions.send({
-                                    type: 'event.createWithTemplate',
-                                    input: {
-                                        title: '주일 예배',
-                                        kind: 'worship',
-                                        startsAt: times.startsAt,
-                                        endsAt: times.endsAt,
-                                        location: '본당 3층 대예배실',
-                                        notes: '주일 찬양 섬김',
-                                    },
-                                    templateKey: 'standard',
-                                    weeksCount: 4,
-                                });
-                            }
-                        }}
-                    >
-                        📅 주일 예배 4주치 일괄 생성
-                    </button>
-                    <button
-                        type="button"
-                        className={`${button} text-xs py-1.5 px-3 min-h-9 font-semibold bg-background hover:border-primary text-primary`}
-                        disabled={actions.disabled}
-                        onClick={() => setMonthlySundaysModalOpen(true)}
-                    >
-                        ✨ 이번 달 주일예배 일괄 등록 (4~5주)
-                    </button>
-                </div>
+        {/* 미해결 긴급 알림 (있을 때만 노출) */}
+        {openAlerts.length > 0 ? (
+            <section aria-label="미해결 긴급 알림" className={`${card} space-y-3 border-destructive/50`}>
+                <h3 className="font-bold">긴급 알림 <span className="text-destructive">{openAlerts.length}</span></h3>
+                <ul className="space-y-3">{openAlerts.map(alert => <AlertCard key={alert.id} {...actions} alert={alert} event={eventMap.get(alert.eventId)} names={names} manager={manager} />)}</ul>
             </section>
         ) : null}
 
-        {manager ? <details className={card}>
-            <summary className={disclosure}>새 일정 직접 만들기 (정기 반복 지원)</summary>
-            <div className="pt-3"><EventForm {...actions} /></div>
-        </details> : null}
+        {/* 일정 관리 상단 툴바 (관리자) */}
+        {manager ? (
+            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-border/80 bg-card p-3 shadow-2xs">
+                <div className="flex flex-wrap items-center gap-2">
+                    <details className="relative">
+                        <summary className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary/15 list-none select-none">
+                            <Sparkles size={14} />
+                            <span>빠른 일정 템플릿 ▼</span>
+                        </summary>
+                        <div className="absolute left-0 top-full mt-1.5 z-30 w-64 rounded-2xl border border-border bg-card p-2 shadow-xl space-y-1">
+                            <button
+                                type="button"
+                                className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors flex items-center justify-between"
+                                disabled={actions.disabled}
+                                onClick={async (e) => {
+                                    (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                                    const times = getUpcomingSundayKST();
+                                    await actions.send({
+                                        type: 'event.createWithTemplate',
+                                        input: {
+                                            title: '주일 2부 예배',
+                                            kind: 'worship',
+                                            startsAt: times.startsAt,
+                                            endsAt: times.endsAt,
+                                            location: '본당 3층 대예배실',
+                                            notes: '10:00 음향/악기 리허설 시작',
+                                        },
+                                        templateKey: 'standard',
+                                        weeksCount: 1,
+                                    });
+                                }}
+                            >
+                                <span>⛪ 이번 주 주일 예배</span>
+                                <span className="text-[11px] text-muted-foreground">11:00</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors flex items-center justify-between"
+                                disabled={actions.disabled}
+                                onClick={async (e) => {
+                                    (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                                    const times = getUpcomingSaturdayKST();
+                                    await actions.send({
+                                        type: 'event.save',
+                                        input: {
+                                            title: '찬양팀 토요 연습',
+                                            kind: 'rehearsal',
+                                            startsAt: times.startsAt,
+                                            endsAt: times.endsAt,
+                                            location: '찬양팀 연습실',
+                                            notes: '콘티 사전 숙지 후 모입니다.',
+                                        },
+                                    });
+                                }}
+                            >
+                                <span>🎵 이번 주 토요 연습</span>
+                                <span className="text-[11px] text-muted-foreground">17:00</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors flex items-center justify-between"
+                                disabled={actions.disabled}
+                                onClick={async (e) => {
+                                    (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                                    const times = getUpcomingFridayKST();
+                                    await actions.send({
+                                        type: 'event.createWithTemplate',
+                                        input: {
+                                            title: '금요 기도회',
+                                            kind: 'worship',
+                                            startsAt: times.startsAt,
+                                            endsAt: times.endsAt,
+                                            location: '본당 3층 대예배실',
+                                            notes: '뜨겁게 찬양과 기도로 준비합니다.',
+                                        },
+                                        templateKey: 'acoustic',
+                                        weeksCount: 1,
+                                    });
+                                }}
+                            >
+                                <span>🙏 이번 주 금요 기도회</span>
+                                <span className="text-[11px] text-muted-foreground">20:00</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors flex items-center justify-between"
+                                disabled={actions.disabled}
+                                onClick={async (e) => {
+                                    (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                                    const times = getUpcomingWednesdayKST();
+                                    await actions.send({
+                                        type: 'event.save',
+                                        input: {
+                                            title: '수요 예배',
+                                            kind: 'worship',
+                                            startsAt: times.startsAt,
+                                            endsAt: times.endsAt,
+                                            location: '본당 3층 대예배실',
+                                            notes: '수요 예배 찬양 섬김',
+                                        },
+                                    });
+                                }}
+                            >
+                                <span>📖 이번 주 수요 예배</span>
+                                <span className="text-[11px] text-muted-foreground">19:30</span>
+                            </button>
+                        </div>
+                    </details>
 
-        {/* 보기 모드 전환 (목록 보기 ↔ 월간 달력) 및 필터 */}
+                    <button
+                        type="button"
+                        className={`${button} text-xs py-1.5 px-3 min-h-9 font-semibold border-primary/30 text-primary hover:bg-primary/10 flex items-center gap-1.5`}
+                        onClick={() => setMonthlySundaysModalOpen(true)}
+                    >
+                        <CalendarDays size={13} />
+                        <span>이번 달 주일 일괄 생성</span>
+                    </button>
+                </div>
+
+                <details className="w-full sm:w-auto">
+                    <summary className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-colors list-none select-none">
+                        <span>+ 직접 일정 만들기</span>
+                    </summary>
+                    <div className="mt-3 w-full rounded-2xl border border-border bg-background p-4 shadow-sm sm:max-w-lg">
+                        <EventForm {...actions} />
+                    </div>
+                </details>
+            </div>
+        ) : null}
+
+        {/* 보기 모드 전환 (목록 보기 ↔ 캘린더 ↔ 사역 배분표) 및 필터 */}
         <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center rounded-xl border border-border bg-card p-0.5 shadow-2xs">
@@ -1166,7 +1726,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                         }`}
                         onClick={() => setViewMode('list')}
                     >
-                        <List size={14} /> 목록 보기
+                        <List size={14} /> 목록
                     </button>
                     <button
                         type="button"
@@ -1178,37 +1738,38 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                         }`}
                         onClick={() => setViewMode('calendar')}
                     >
-                        <CalendarDays size={14} /> 캘린더 보기
+                        <CalendarDays size={14} /> 캘린더
+                    </button>
+                    <button
+                        type="button"
+                        aria-pressed={viewMode === 'matrix'}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                            viewMode === 'matrix'
+                                ? 'bg-primary text-primary-foreground shadow-xs'
+                                : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        onClick={() => setViewMode('matrix')}
+                    >
+                        <Table size={14} /> 사역 배분표
                     </button>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {manager && (
-                        <button
-                            type="button"
-                            onClick={() => setMonthlySundaysModalOpen(true)}
-                            className={`${button} text-xs py-1.5 px-3 min-h-9 font-bold border-primary/30 text-primary hover:bg-primary/10 flex items-center gap-1.5`}
-                        >
-                            <Sparkles size={13} />
-                            <span>이번 달 주일 일괄 생성</span>
-                        </button>
-                    )}
-
                     <button
                         type="button"
-                        className={`${button} text-xs py-1.5 px-3 min-h-9 flex items-center gap-1.5 font-bold border-secondary/40 text-secondary hover:bg-secondary/10`}
+                        className={`${button} text-xs py-1.5 px-3 min-h-9 flex items-center gap-1.5 font-bold border-primary/30 text-primary hover:bg-primary/10`}
                         title="이번 달 다가오는 모든 예배/연습 섬김 명단을 카카오톡 단톡방용으로 전체 복사합니다"
                         onClick={() => void handleCopyMonthly()}
                     >
                         {copiedMonthly ? (
                             <>
                                 <Check size={14} className="text-emerald-600" />
-                                <span className="text-emerald-600 font-bold">전체 사역표 복사됨!</span>
+                                <span className="text-emerald-600 font-bold">사역표 복사됨!</span>
                             </>
                         ) : (
                             <>
                                 <ClipboardCopy size={14} />
-                                <span>📋 이번 달 사역표 카톡 전체 복사</span>
+                                <span>📋 카톡 전체 복사</span>
                             </>
                         )}
                     </button>
@@ -1217,6 +1778,40 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
 
             {viewMode === 'list' ? (
                 <>
+                    {/* 빠른 검색 바 (일정 제목, 곡명, 팀원 이름, 장소 등) */}
+                    <div className="relative flex items-center">
+                        <Search size={15} className="absolute left-3.5 text-muted-foreground pointer-events-none" />
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="일정 제목, 찬양곡, 팀원 이름, 장소 검색..."
+                            className="w-full rounded-xl border border-input/80 bg-background pl-9 pr-28 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                        />
+                        <div className="absolute right-2.5 flex items-center gap-1.5">
+                            {searchQuery ? (
+                                <>
+                                    <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                                        {events.length}건
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }}
+                                        className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        title="검색어 지우기 (Esc)"
+                                    >
+                                        <X size={13} />
+                                    </button>
+                                </>
+                            ) : (
+                                <kbd className="hidden sm:inline-flex items-center text-[10px] bg-muted/80 px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground font-mono font-medium select-none">
+                                    / 검색
+                                </kbd>
+                            )}
+                        </div>
+                    </div>
+
                     <div role="group" aria-label="일정 기간 필터" className="flex flex-wrap gap-2">
                         {([
                             ['upcoming', '예정·진행 중'],
@@ -1239,7 +1834,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
 
                     {/* 파트별 빠른 필터 칩 바 */}
                     <div role="group" aria-label="파트별 필터" className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 text-xs">
-                        <span className="text-muted-foreground font-semibold shrink-0">파트 필터:</span>
+                        <span className="text-muted-foreground font-semibold shrink-0">파트:</span>
                         {([
                             ['all', '전체'],
                             ['leader', '인도자'],
@@ -1256,7 +1851,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                 type="button"
                                 className={`rounded-full px-2.5 py-1 font-semibold transition-colors shrink-0 ${
                                     roleFilter === val
-                                        ? 'bg-secondary text-secondary-foreground font-bold shadow-xs'
+                                        ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                                         : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
                                 }`}
                                 onClick={() => setRoleFilter(val)}
@@ -1269,25 +1864,337 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             ) : null}
         </div>
         {viewMode === 'calendar' ? (
-            <CalendarView
-                events={state.events}
-                members={members}
-                names={names}
-                userId={userId}
-                manager={manager}
-                onSelectEvent={(event) => setShareModalEvent(event)}
-                onOpenMonthlySundaysModal={() => setMonthlySundaysModalOpen(true)}
-                onAddEventOnDate={() => {
-                    const detailsEl = document.querySelector('details summary');
-                    if (detailsEl instanceof HTMLElement) {
-                        detailsEl.click();
-                    }
-                }}
-            />
+            <div className="space-y-4">
+                <CalendarView
+                    events={state.events}
+                    members={members}
+                    names={names}
+                    userId={userId}
+                    manager={manager}
+                    onSelectEvent={(event) => setSelectedCalendarEventId(event.id)}
+                    onOpenMonthlySundaysModal={() => setMonthlySundaysModalOpen(true)}
+                    onAddEventOnDate={(dateStr) => {
+                        setCreateEventDate(dateStr);
+                    }}
+                />
+
+                {/* 캘린더에서 날짜 '+' 클릭 시 빠른 일정 생성 카드 */}
+                {createEventDate && (
+                    <div className="rounded-2xl border-2 border-primary bg-card p-4 sm:p-5 shadow-lg space-y-3 animate-in fade-in">
+                        <div className="flex items-center justify-between border-b border-border pb-3">
+                            <h3 className="font-bold text-base text-foreground flex items-center gap-2">
+                                <Sparkles size={16} className="text-primary" />
+                                <span>{createEventDate} 새 일정 등록</span>
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setCreateEventDate(null)}
+                                className="rounded-xl p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <EventForm {...actions} defaultDate={createEventDate} />
+                    </div>
+                )}
+
+                {/* 캘린더에서 일정 클릭 시 하단에 바로 열리는 퀵 상세 & 배정 패널 */}
+                {selectedCalendarEvent && (
+                    <div className="rounded-2xl border-2 border-primary/40 bg-card p-4 sm:p-5 shadow-lg space-y-4 animate-in fade-in">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+                            <div className="space-y-0.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold">
+                                        선택된 일정
+                                    </span>
+                                    <h3 className="font-bold text-lg text-foreground">{selectedCalendarEvent.title}</h3>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    <time dateTime={selectedCalendarEvent.startsAt}>{planningDate(selectedCalendarEvent.startsAt)}</time>
+                                    <span> ~ </span>
+                                    <time dateTime={selectedCalendarEvent.endsAt}>{planningDate(selectedCalendarEvent.endsAt)}</time>
+                                    {selectedCalendarEvent.location ? ` · 장소: ${selectedCalendarEvent.location}` : ''}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setRsvpModalEvent(selectedCalendarEvent)}
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 text-emerald-700 dark:text-emerald-400 font-bold border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 flex items-center gap-1`}
+                                    title="팀원 사역 동의 현황 및 상세 이력 확인"
+                                >
+                                    <Users size={13} />
+                                    <span>동의 현황</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShareModalEvent(selectedCalendarEvent)}
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 text-primary font-bold border-primary/30 flex items-center gap-1`}
+                                >
+                                    <Share2 size={13} />
+                                    <span>공유 & 캘린더</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedCalendarEventId(null)}
+                                    className="rounded-xl p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    title="닫기"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 스마트 빠른 액션 바 (관리자) */}
+                        {manager && !selectedCalendarEvent.cancelled && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-b border-border/60 pb-3">
+                                {(selectedCalendarEvent.slots.length === 0 || selectedCalendarEvent.slots.some(s => s.memberId === null)) && (
+                                    <button
+                                        type="button"
+                                        className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/20`}
+                                        disabled={actions.disabled}
+                                        title="가장 최근 같은 종류(예배/연습) 일정의 파트 및 배정 인원을 그대로 복사해옵니다"
+                                        onClick={() => void actions.send({ type: 'slots.autoFillFromRecent', eventId: selectedCalendarEvent.id })}
+                                    >
+                                        <Copy size={13} />
+                                        <span>지난 배정 복사</span>
+                                    </button>
+                                )}
+
+                                {selectedCalendarEvent.slots.some(s => s.memberId === null) && (
+                                    <button
+                                        type="button"
+                                        className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20`}
+                                        disabled={actions.disabled}
+                                        onClick={() => void actions.send({ type: 'slots.autoAssign', eventId: selectedCalendarEvent.id })}
+                                    >
+                                        <Sparkles size={13} />
+                                        <span>스마트 자동 배분</span>
+                                    </button>
+                                )}
+
+                                {selectedCalendarEvent.slots.some(s => s.memberId && s.attendance === 'pending') && (
+                                    <button
+                                        type="button"
+                                        className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-primary/30 bg-primary/10 text-primary hover:bg-primary/20`}
+                                        disabled={actions.disabled}
+                                        onClick={() => void actions.send({ type: 'schedule.sendDutyReminder', eventId: selectedCalendarEvent.id })}
+                                    >
+                                        <Bell size={13} />
+                                        <span>출석 리마인드 알람</span>
+                                    </button>
+                                )}
+
+                                <button
+                                    type="button"
+                                    className={`${button} text-xs py-1 px-2 min-h-8 text-muted-foreground`}
+                                    onClick={() => void handleCopyKakao(selectedCalendarEvent)}
+                                >
+                                    <ClipboardCopy size={12} />
+                                    <span>카톡 복사</span>
+                                </button>
+                            </div>
+                        )}
+
+                        {/* 역할 배정 및 슬롯 목록 */}
+                        <div className="space-y-3">
+                            <h4 className="font-bold text-sm text-foreground">
+                                배정 인원 ({selectedCalendarEvent.slots.filter(s => s.memberId).length}/{selectedCalendarEvent.slots.length}명)
+                            </h4>
+                            {selectedCalendarEvent.slots.length ? (
+                                <ul className="space-y-3">
+                                    {selectedCalendarEvent.slots.map(slot => (
+                                        <SlotCard
+                                            key={slot.id}
+                                            {...actions}
+                                            slot={slot}
+                                            event={selectedCalendarEvent}
+                                            alerts={alertsByEvent.get(selectedCalendarEvent.id) ?? []}
+                                            members={members}
+                                            names={names}
+                                            userId={userId}
+                                            manager={manager}
+                                            allEvents={state.events}
+                                            workloadMap={workloadMap}
+                                        />
+                                    ))}
+                                </ul>
+                            ) : (
+                                <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                                    아직 배정된 역할이 없습니다. 상단 &apos;지난 배정 복사&apos;를 누르면 1초 만에 배정됩니다.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        ) : viewMode === 'matrix' ? (
+            <div className="space-y-4">
+                <MatrixView
+                    events={state.events}
+                    members={members}
+                    names={names}
+                    userId={userId}
+                    manager={manager}
+                    onSelectEvent={(event) => setSelectedCalendarEventId(event.id)}
+                    onOpenMonthlySundaysModal={() => setMonthlySundaysModalOpen(true)}
+                    onCommand={actions.send}
+                    disabled={actions.disabled}
+                />
+
+                {/* 매트릭스에서 일정 클릭 시 하단에 바로 열리는 퀵 상세 & 배정 패널 */}
+                {selectedCalendarEvent && (
+                    <div className="rounded-2xl border-2 border-primary/40 bg-card p-4 sm:p-5 shadow-lg space-y-4 animate-in fade-in">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+                            <div className="space-y-0.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold">
+                                        선택된 일정
+                                    </span>
+                                    <h3 className="font-bold text-lg text-foreground">{selectedCalendarEvent.title}</h3>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    <time dateTime={selectedCalendarEvent.startsAt}>{planningDate(selectedCalendarEvent.startsAt)}</time>
+                                    <span> ~ </span>
+                                    <time dateTime={selectedCalendarEvent.endsAt}>{planningDate(selectedCalendarEvent.endsAt)}</time>
+                                    {selectedCalendarEvent.location ? ` · 장소: ${selectedCalendarEvent.location}` : ''}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setRsvpModalEvent(selectedCalendarEvent)}
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 text-emerald-700 dark:text-emerald-400 font-bold border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 flex items-center gap-1`}
+                                    title="팀원 사역 동의 현황 및 상세 이력 확인"
+                                >
+                                    <Users size={13} />
+                                    <span>동의 현황</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShareModalEvent(selectedCalendarEvent)}
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 text-primary font-bold border-primary/30 flex items-center gap-1`}
+                                >
+                                    <Share2 size={13} />
+                                    <span>공유 & 캘린더</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedCalendarEventId(null)}
+                                    className="rounded-xl p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    title="닫기"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 스마트 빠른 액션 바 (관리자) */}
+                        {manager && !selectedCalendarEvent.cancelled && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-b border-border/60 pb-3">
+                                {(selectedCalendarEvent.slots.length === 0 || selectedCalendarEvent.slots.some(s => s.memberId === null)) && (
+                                    <button
+                                        type="button"
+                                        className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/20`}
+                                        disabled={actions.disabled}
+                                        title="가장 최근 같은 종류(예배/연습) 일정의 파트 및 배정 인원을 그대로 복사해옵니다"
+                                        onClick={() => void actions.send({ type: 'slots.autoFillFromRecent', eventId: selectedCalendarEvent.id })}
+                                    >
+                                        <Copy size={13} />
+                                        <span>지난 배정 복사</span>
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
+                                    disabled={actions.disabled}
+                                    title="파트가 일치하고 최근 사역 횟수가 적은 팀원을 우선하여 빈자리를 스마트하게 배분합니다"
+                                    onClick={() => void actions.send({ type: 'slots.autoAssign', eventId: selectedCalendarEvent.id })}
+                                >
+                                    <Sparkles size={13} />
+                                    <span>스마트 자동 배분</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-primary/40 text-primary hover:bg-primary/10`}
+                                    title="배정되었으나 아직 응답하지 않은 팀원들에게 카카오톡 복사용 개별 멘트를 전송하거나 알림을 발송합니다"
+                                    disabled={actions.disabled}
+                                    onClick={() => void actions.send({ type: 'schedule.sendDutyReminder', eventId: selectedCalendarEvent.id })}
+                                >
+                                    <Bell size={13} />
+                                    <span>출석 리마인드 알람</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1`}
+                                    onClick={() => void handleCopyKakao(selectedCalendarEvent)}
+                                >
+                                    <ClipboardCopy size={12} />
+                                    <span>카톡 복사</span>
+                                </button>
+                            </div>
+                        )}
+
+                        {/* 역할 배정 및 슬롯 목록 */}
+                        <div className="space-y-3">
+                            <h4 className="font-bold text-sm text-foreground">
+                                배정 인원 ({selectedCalendarEvent.slots.filter(s => s.memberId).length}/{selectedCalendarEvent.slots.length}명)
+                            </h4>
+                            {selectedCalendarEvent.slots.length ? (
+                                <ul className="space-y-3">
+                                    {selectedCalendarEvent.slots.map(slot => (
+                                        <SlotCard
+                                            key={slot.id}
+                                            {...actions}
+                                            slot={slot}
+                                            event={selectedCalendarEvent}
+                                            alerts={alertsByEvent.get(selectedCalendarEvent.id) ?? []}
+                                            members={members}
+                                            names={names}
+                                            userId={userId}
+                                            manager={manager}
+                                            allEvents={state.events}
+                                            workloadMap={workloadMap}
+                                        />
+                                    ))}
+                                </ul>
+                            ) : (
+                                <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                                    아직 배정된 역할이 없습니다. 상단 &apos;지난 배정 복사&apos;를 누르면 배정됩니다.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
         ) : (
             <>
                 <p className="text-sm text-muted-foreground">{events.length}개 일정 · {filter === 'past' ? '최근 일정부터' : '시작 시간순'}</p>
-                {events.length === 0 ? <p className={card}>이 조건에 해당하는 일정이 없습니다.</p> : null}
+                {events.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-border/80 bg-card/40 p-8 text-center space-y-3">
+                        <CalendarDays size={32} className="mx-auto text-muted-foreground/50" />
+                        <p className="font-bold text-sm text-foreground">
+                            {searchQuery ? `'${searchQuery}'에 일치하는 일정이 없습니다.` : '이 조건에 해당하는 일정이 없습니다.'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            {searchQuery ? '검색어를 변경하거나 필터를 초기화해 보세요.' : '새 일정을 등록하거나 필터 조건을 변경해 보세요.'}
+                        </p>
+                        {(searchQuery || filter !== 'upcoming' || roleFilter !== 'all') ? (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSearchQuery('');
+                                    setFilter('upcoming');
+                                    setRoleFilter('all');
+                                }}
+                                className={`${button} text-xs py-1.5 px-3 min-h-8 text-primary font-bold border-primary/30 inline-flex items-center gap-1.5`}
+                            >
+                                <RotateCcw size={12} />
+                                <span>검색 및 필터 초기화</span>
+                            </button>
+                        ) : null}
+                    </div>
+                ) : null}
                 <div className="space-y-4">{events.map((event, idx) => {
             const alerts = alertsByEvent.get(event.id) ?? [];
             const assignedCount = event.slots.filter(slot => slot.memberId).length;
@@ -1297,7 +2204,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             const isUserAssigned = event.slots.some(slot => slot.memberId === userId);
             const relDate = getRelativeDateLabel(event.startsAt, now);
 
-            return <article key={event.id} className={card} aria-label={event.title}>
+            return <article key={event.id} className={`${card} card-interactive`} aria-label={event.title}>
                 <header className="space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
@@ -1305,10 +2212,21 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                 {relDate.text}
                             </span>
                             <span>{event.kind === 'rehearsal' ? '연습' : '예배'}</span>
-                            {event.cancelled ? <span className="text-destructive">취소됨</span> : <span className="text-muted-foreground">{Date.parse(event.endsAt) < now ? '종료됨' : Date.parse(event.startsAt) <= now ? '진행 중' : '예정'}</span>}
-                            {isUserAssigned ? <span className="rounded-full bg-secondary/15 text-secondary px-2 py-0.5 text-xs font-bold">내 사역</span> : null}
+                            {event.cancelled ? <span className="text-destructive font-bold">취소됨</span> : <span className="text-muted-foreground">{Date.parse(event.endsAt) < now ? '종료됨' : Date.parse(event.startsAt) <= now ? '진행 중' : '예정'}</span>}
+                            {isUserAssigned ? <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-bold">내 사역</span> : null}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
+                            {totalSlots > 0 && assignedCount > 0 ? (
+                                <button
+                                    type="button"
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 font-bold`}
+                                    title="팀원 사역 동의 현황 및 응답 이력 확인 / 일괄 초대 알림"
+                                    onClick={() => setRsvpModalEvent(event)}
+                                >
+                                    <Users size={13} />
+                                    <span>동의 현황 ({confirmedCount}/{assignedCount}명)</span>
+                                </button>
+                            ) : null}
                             <button
                                 type="button"
                                 className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-bold`}
@@ -1347,7 +2265,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                             빈자리 {vacantCount}
                                         </span>
                                     ) : (
-                                        <span className="rounded-full bg-emerald-500/10 text-emerald-600 px-2 py-0.5 font-bold">
+                                        <span className="rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 font-bold">
                                             완료
                                         </span>
                                     )}
@@ -1355,14 +2273,44 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                             ) : null}
                         </div>
                     </div>
-                    <h3 className="break-words text-lg font-bold">{event.title}</h3>
-                    <p className="text-sm"><time dateTime={event.startsAt}>{planningDate(event.startsAt)}</time><span> ~ </span><time dateTime={event.endsAt}>{planningDate(event.endsAt)}</time> (KST)</p>
-                    <p className="break-words text-sm text-muted-foreground">장소: {event.location || '미정'}</p>
-                    <p className="text-sm text-muted-foreground">배정 {assignedCount}/{totalSlots} · 참석 확정 {confirmedCount} · 불참 {event.slots.filter(s => s.attendance === 'absent').length}</p>
+                    <h3 className="break-words text-lg font-bold text-foreground">{event.title}</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground"><time dateTime={event.startsAt}>{planningDate(event.startsAt)}</time><span> ~ </span><time dateTime={event.endsAt}>{planningDate(event.endsAt)}</time> (KST)</p>
+                    <p className="break-words text-xs text-muted-foreground">장소: {event.location || '미정'}</p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-2 py-0.5 font-medium text-foreground">
+                            배정 <strong className="text-primary">{assignedCount}</strong>/{totalSlots}명
+                        </span>
+                        <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium ${confirmedCount > 0 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-muted/40 text-muted-foreground'}`}>
+                            확정 {confirmedCount}명
+                        </span>
+                        {event.slots.some(s => s.attendance === 'absent') && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 font-medium text-destructive">
+                                불참 {event.slots.filter(s => s.attendance === 'absent').length}명
+                            </span>
+                        )}
+                        {vacantCount > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400">
+                                빈자리 {vacantCount}명
+                            </span>
+                        )}
+                    </div>
 
-                    {/* 스마트 배분 / 리마인드 알람 / 초기화 빠른 바 */}
+                    {/* 스마트 배분 / 지난 배정 복사 / 리마인드 알람 / 초기화 빠른 바 */}
                     {manager && !event.cancelled && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-border/60">
+                            {(event.slots.length === 0 || event.slots.some(s => s.memberId === null)) && (
+                                <button
+                                    type="button"
+                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/20`}
+                                    disabled={actions.disabled}
+                                    title="가장 최근 같은 종류(예배/연습) 일정의 파트 및 배정 인원을 그대로 복사해옵니다"
+                                    onClick={() => void actions.send({ type: 'slots.autoFillFromRecent', eventId: event.id })}
+                                >
+                                    <Copy size={13} />
+                                    <span>지난 배정 복사</span>
+                                </button>
+                            )}
+
                             {event.slots.some(s => s.memberId === null) && (
                                 <button
                                     type="button"
@@ -1531,12 +2479,38 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             />
         )}
 
+        {/* 일정 사역 동의 현황 및 초대 관리 모달 */}
+        {activeRsvpEvent && (
+            <ScheduleRsvpModal
+                event={activeRsvpEvent}
+                members={members}
+                userId={userId}
+                manager={manager}
+                disabled={actions.disabled}
+                onSend={actions.send}
+                onClose={() => setRsvpModalEvent(null)}
+            />
+        )}
+
         {/* 이번 달 주일예배 일괄 생성 모달 */}
         {monthlySundaysModalOpen && (
             <MonthlySundaysModal
                 disabled={actions.disabled}
                 onSend={actions.send}
                 onClose={() => setMonthlySundaysModalOpen(false)}
+            />
+        )}
+
+        {/* 사역 불가일(휴가·시험 등) 관리 모달 */}
+        {blockedDatesModalOpen && (
+            <BlockedDatesModal
+                disabled={actions.disabled}
+                onSend={actions.send}
+                blockedDates={state.blockedDates ?? []}
+                userId={userId}
+                members={members}
+                manager={manager}
+                onClose={() => setBlockedDatesModalOpen(false)}
             />
         )}
     </section>;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     addSessionFeedbackPreset,
@@ -95,6 +95,7 @@ type QuickPresetDraft = {
 const QUICK_PRESET_GROUP_OPTIONS: Array<{ id: SessionFeedbackPresetGroup; label: string }> = [
     { id: 'flow', label: '흐름' },
     { id: 'tempo', label: '템포' },
+    { id: 'sound', label: '음향' },
     { id: 'band', label: '밴드' },
     { id: 'media', label: '미디어' },
 ];
@@ -285,6 +286,7 @@ export default function SessionWorkspace({
     const [autoAdvanceSeconds, setAutoAdvanceSeconds] = useState(12);
     const [wakeLockState, setWakeLockState] = useState<'idle' | 'active' | 'unsupported' | 'released'>('idle');
     const [recentSentPresetId, setRecentSentPresetId] = useState<string | null>(null);
+    const [selectedPresetCategory, setSelectedPresetCategory] = useState<'all' | SessionFeedbackPresetGroup>('all');
     const [feedbackSentSuccess, setFeedbackSentSuccess] = useState(false);
     const recentSentPresetTimeoutRef = useRef<number | null>(null);
     const [isStatePending, startStateTransition] = useTransition();
@@ -329,9 +331,13 @@ export default function SessionWorkspace({
     const feedbackFeed = [...feedbackLog].reverse();
     const latestFeedbackEntry = feedbackFeed[0] ?? null;
     const mobileQuickFeedbackPresets = [
-        ...quickFeedbackPresets.filter((preset) => preset.role === 'instrument'),
-        ...quickFeedbackPresets.filter((preset) => preset.role !== 'instrument'),
-    ].slice(0, 3);
+        ...quickFeedbackPresets.filter((preset) => preset.group === 'tempo' || preset.group === 'sound'),
+        ...quickFeedbackPresets.filter((preset) => preset.group !== 'tempo' && preset.group !== 'sound'),
+    ].slice(0, 10);
+    const filteredQuickFeedbackPresets = useMemo(() => {
+        if (selectedPresetCategory === 'all') return quickFeedbackPresets;
+        return quickFeedbackPresets.filter((preset) => preset.group === selectedPresetCategory);
+    }, [quickFeedbackPresets, selectedPresetCategory]);
     const headerIsPending = isStatePending || isFeedbackPending || isPresetPending;
     const selectedRoleMeta = getFeedbackRoleMeta(selectedFeedbackRole);
     const instrumentMode = selectedFeedbackRole === 'instrument';
@@ -1274,14 +1280,14 @@ export default function SessionWorkspace({
                                                     className="tap-target mt-2 w-full rounded-2xl border border-primary/10 bg-card/80 px-4 py-3 text-sm text-primary"
                                                     disabled={!canManageQuickPresets || isPresetPending}
                                                 >
-                                                    {['전체', '팀', '인도자', '악기', '리듬', '미디어'].map(target => <option key={target} value={target}>{target}</option>)}
-                                                    {!['전체', '팀', '인도자', '악기', '리듬', '미디어'].includes(quickPresetDraft.target) && <option value={quickPresetDraft.target}>{quickPresetDraft.target} (기존 표시)</option>}
+                                                    {['전체', '팀', '인도자', '악기', '리듬', '음향', '미디어'].map(target => <option key={target} value={target}>{target}</option>)}
+                                                    {!['전체', '팀', '인도자', '악기', '리듬', '음향', '미디어'].includes(quickPresetDraft.target) && <option value={quickPresetDraft.target}>{quickPresetDraft.target} (기존 표시)</option>}
                                                 </select>
                                             </label>
                                             <div className="grid gap-3 sm:grid-cols-2">
                                                 <div>
                                                     <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">그룹</span>
-                                                    <div className="mt-2 grid grid-cols-2 gap-2">
+                                                    <div className="mt-2 flex flex-wrap gap-1.5">
                                                         {QUICK_PRESET_GROUP_OPTIONS.map((group) => (
                                                             <button
                                                                 key={group.id}
@@ -1292,7 +1298,7 @@ export default function SessionWorkspace({
                                                                     target: draft.target || getDefaultSessionFeedbackTarget(draft.role, group.id),
                                                                 }))}
                                                                 disabled={!canManageQuickPresets || isPresetPending}
-                                                                className={`tap-target rounded-2xl border px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${quickPresetDraft.group === group.id ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-card/70 text-muted-foreground hover:bg-card'}`}
+                                                                className={`tap-target rounded-xl border px-2.5 py-1.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${quickPresetDraft.group === group.id ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-card/70 text-muted-foreground hover:bg-card'}`}
                                                             >
                                                                 {group.label}
                                                             </button>
@@ -1353,13 +1359,49 @@ export default function SessionWorkspace({
                                     </form>
                                     </details>
 
-                                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                        {quickFeedbackPresets.length === 0 ? (
+                                    {quickFeedbackPresets.length > 0 && (
+                                        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPresetCategory('all')}
+                                                className={`tap-target rounded-full border px-3 py-1 text-xs font-bold transition ${
+                                                    selectedPresetCategory === 'all'
+                                                        ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                                                        : 'border-primary/10 bg-card/70 text-muted-foreground hover:bg-card'
+                                                }`}
+                                            >
+                                                전체 ({quickFeedbackPresets.length})
+                                            </button>
+                                            {QUICK_PRESET_GROUP_OPTIONS.map((grp) => {
+                                                const count = quickFeedbackPresets.filter((p) => p.group === grp.id).length;
+                                                const icon = grp.id === 'tempo' ? '⚡ ' : grp.id === 'sound' ? '🔊 ' : grp.id === 'flow' ? '🎶 ' : grp.id === 'band' ? '🎸 ' : '📺 ';
+                                                return (
+                                                    <button
+                                                        key={`cat-filter-${grp.id}`}
+                                                        type="button"
+                                                        onClick={() => setSelectedPresetCategory(grp.id)}
+                                                        className={`tap-target rounded-full border px-3 py-1 text-xs font-bold transition ${
+                                                            selectedPresetCategory === grp.id
+                                                                ? 'border-primary bg-primary text-primary-foreground shadow-xs'
+                                                                : 'border-primary/10 bg-card/70 text-muted-foreground hover:bg-card'
+                                                        }`}
+                                                    >
+                                                        {icon}{grp.label} ({count})
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        {filteredQuickFeedbackPresets.length === 0 ? (
                                             <div className="sm:col-span-2 rounded-2xl border border-dashed border-primary/10 px-4 py-6 text-center text-sm text-muted-foreground">
-                                                아직 빠른 버튼이 없습니다. 예배 중 자주 반복하는 큐를 추가하면 여기에 표시됩니다.
+                                                {selectedPresetCategory === 'all'
+                                                    ? '아직 빠른 버튼이 없습니다. 예배 중 자주 반복하는 큐를 추가하면 여기에 표시됩니다.'
+                                                    : `'${QUICK_PRESET_GROUP_OPTIONS.find((g) => g.id === selectedPresetCategory)?.label}' 그룹에 등록된 버튼이 없습니다.`}
                                             </div>
                                         ) : (
-                                            quickFeedbackPresets
+                                            filteredQuickFeedbackPresets
                                                 .slice()
                                                 .reverse()
                                                 .map((preset) => {

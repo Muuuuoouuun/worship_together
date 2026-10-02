@@ -110,10 +110,16 @@ export default function EventShareModal({
             role="dialog"
             aria-modal="true"
             aria-labelledby={modalId}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs animate-in fade-in sm:p-4"
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
         >
-            <div className="w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+            <div className="flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl sm:rounded-3xl border border-border bg-card shadow-2xl overflow-hidden pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-0 animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
+                {/* 모바일 바텀시트 핸들 바 */}
+                <div className="mx-auto my-2.5 h-1.5 w-12 rounded-full bg-border sm:hidden shrink-0" />
+
+                <div className="flex items-center justify-between border-b border-border/60 p-4 sm:p-5 bg-muted/30 shrink-0">
                     <div className="flex items-center gap-2">
                         <Share2 className="text-primary" size={20} />
                         <h3 id={modalId} className="text-base sm:text-lg font-bold text-foreground">
@@ -128,6 +134,8 @@ export default function EventShareModal({
                         <X size={18} />
                     </button>
                 </div>
+
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
 
                 {/* 옵션 선택 체크박스 */}
                 <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-foreground bg-muted/40 p-3 rounded-2xl border border-border/60">
@@ -237,6 +245,7 @@ export default function EventShareModal({
                         <Share2 size={14} />
                         <span>카톡 · 공유하기</span>
                     </button>
+                </div>
                 </div>
             </div>
         </div>

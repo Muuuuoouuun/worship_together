@@ -3,6 +3,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import AccountMenu from '@/components/auth/AccountMenu';
 import PlanningInbox from '@/components/planning/PlanningInbox';
+import LiveSessionMiniBar from '@/components/session/LiveSessionMiniBar';
 import MobileNav from './MobileNav';
 import { primaryNavItems, secondaryNavItems } from './navItems';
 import Link from 'next/link';
@@ -124,9 +125,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, currentPath
                 </header>
 
                 {/* 메인 콘텐츠 영역 */}
-                <main className="flex-1 p-3 pb-20 sm:p-5 sm:pb-24 md:p-6 lg:p-8 lg:pb-16 max-w-7xl w-full mx-auto">
+                <main className="flex-1 p-3 pb-32 sm:p-5 sm:pb-36 md:p-6 lg:p-8 lg:pb-24 max-w-7xl w-full mx-auto">
                     {children}
                 </main>
+
+                {/* 무대 모드 플로팅 미니 플레이어 바 (웹·앱 연결) */}
+                <LiveSessionMiniBar />
 
                 {/* 모바일 하단 내비게이션 바 */}
                 <MobileNav currentPath={currentPath} />

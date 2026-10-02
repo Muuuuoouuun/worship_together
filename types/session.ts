@@ -9,11 +9,11 @@ export type TeamRow = Database['public']['Tables']['teams']['Row'];
 export const SESSION_FEEDBACK_ROLES = ['leader', 'instrument', 'broadcast'] as const;
 export type SessionFeedbackRole = (typeof SESSION_FEEDBACK_ROLES)[number];
 export const DEFAULT_SESSION_FEEDBACK_ROLE: SessionFeedbackRole = 'leader';
-export const SESSION_FEEDBACK_PRESET_GROUPS = ['flow', 'tempo', 'band', 'media'] as const;
+export const SESSION_FEEDBACK_PRESET_GROUPS = ['flow', 'tempo', 'sound', 'band', 'media'] as const;
 export type SessionFeedbackPresetGroup = (typeof SESSION_FEEDBACK_PRESET_GROUPS)[number];
 export const DEFAULT_SESSION_FEEDBACK_PRESET_GROUP: SessionFeedbackPresetGroup = 'flow';
-export const MAX_SESSION_FEEDBACK_LOG = 18;
-export const MAX_SESSION_FEEDBACK_PRESETS = 12;
+export const MAX_SESSION_FEEDBACK_LOG = 30;
+export const MAX_SESSION_FEEDBACK_PRESETS = 24;
 
 export function getSessionFeedbackPresetStorageKey(sessionId: string): string {
     return `worship-together:session:${sessionId}:feedback-presets`;
@@ -49,9 +49,11 @@ export interface SessionParticipant {
 
 export function getPresetRecipient(preset: { target: string; group: SessionFeedbackPresetGroup; role: SessionFeedbackRole }): SessionCueRecipient {
     if (preset.target === '전체' || preset.target === '팀') return { kind: 'everyone' };
-    const role = preset.target === '인도자' ? 'leader' : preset.target === '미디어' ? 'broadcast'
+    const role = preset.target === '인도자' ? 'leader'
+        : preset.target === '미디어' || preset.group === 'media' ? 'broadcast'
+        : preset.target === '음향' || preset.group === 'sound' ? 'broadcast'
         : ['악기', '리듬'].includes(preset.target) ? 'instrument'
-        : preset.group === 'media' ? 'broadcast' : preset.group === 'tempo' || preset.group === 'band' ? 'instrument' : preset.role;
+        : preset.group === 'tempo' || preset.group === 'band' ? 'instrument' : preset.role;
     return { kind: 'role', role };
 }
 
@@ -85,8 +87,8 @@ export function isCueForParticipant(entry: SessionFeedbackEntry, clientId: strin
 
 export function getCueDeliveryLabel(delivery: SessionCueDelivery | undefined): string {
     if (!delivery) return '전달 상태 없음';
-    if (delivery.receivedBy.length > 0) return `${delivery.transport === 'local' ? '이 브라우저 · ' : ''}${delivery.receivedBy.length}개 기기 수신 · 읽음 아님`;
-    if (delivery.status === 'sending') return '전송 중';
+    if (delivery.receivedBy.length > 0) return `${delivery.transport === 'local' ? '이 브라우저 · ' : ''}${delivery.receivedBy.length}개 기기 수신 · 확인됨`;
+    if (delivery.status === 'sending') return '전송 중…';
     if (delivery.status === 'failed') return delivery.error ?? '전송 실패';
     return delivery.transport === 'local' ? '이 브라우저 탭에 전송 · 수신 미확인' : '서버 전송 · 수신 미확인';
 }
@@ -103,7 +105,74 @@ export interface SessionFeedbackPreset {
 
 const DEFAULT_SESSION_FEEDBACK_PRESET_CREATED_AT = '1970-01-01T00:00:00.000Z';
 
-const DEFAULT_SESSION_FEEDBACK_PRESET_DEFS = [
+export const DEFAULT_SESSION_FEEDBACK_PRESET_DEFS = [
+    // 1. 템포 & 박자
+    {
+        id: 'cue-slower-tempo',
+        role: 'leader',
+        group: 'tempo',
+        label: '느려요',
+        message: '템포가 빠릅니다. 살짝 늦춰주세요.',
+        target: '리듬',
+    },
+    {
+        id: 'cue-faster-tempo',
+        role: 'leader',
+        group: 'tempo',
+        label: '빨라요',
+        message: '템포가 처집니다. 조금 더 당겨주세요.',
+        target: '리듬',
+    },
+    {
+        id: 'cue-drum-beat',
+        role: 'leader',
+        group: 'tempo',
+        label: '드럼 박자',
+        message: '드럼 4박 카운트 또는 1박 다운비트를 확실히 잡아주세요.',
+        target: '리듬',
+    },
+    {
+        id: 'cue-beat-sync',
+        role: 'leader',
+        group: 'tempo',
+        label: '박자 밀림',
+        message: '악기 간 박자가 밀립니다. 메인 비트에 맞춰주세요.',
+        target: '리듬',
+    },
+    // 2. 음향 & 볼륨
+    {
+        id: 'cue-volume-up',
+        role: 'leader',
+        group: 'sound',
+        label: '볼륨 업',
+        message: '전체 사운드/하우스 볼륨을 살짝 올려주세요.',
+        target: '음향',
+    },
+    {
+        id: 'cue-volume-down',
+        role: 'leader',
+        group: 'sound',
+        label: '볼륨 다운',
+        message: '사운드가 큽니다. 볼륨을 살짝 낮춰주세요.',
+        target: '음향',
+    },
+    {
+        id: 'cue-raise-vocal',
+        role: 'broadcast',
+        group: 'sound',
+        label: '보컬 UP',
+        message: '인도자/싱어 보컬 마이크 볼륨을 올려주세요.',
+        target: '음향',
+    },
+    {
+        id: 'cue-monitor-check',
+        role: 'instrument',
+        group: 'sound',
+        label: '모니터 체크',
+        message: '무대 모니터 밸런스 및 인이어 볼륨 확인 요망!',
+        target: '음향',
+    },
+    // 3. 예배 흐름 & 송폼
     {
         id: 'cue-next-section',
         role: 'leader',
@@ -121,20 +190,29 @@ const DEFAULT_SESSION_FEEDBACK_PRESET_DEFS = [
         target: '전체',
     },
     {
-        id: 'cue-slower-tempo',
+        id: 'cue-prayer-bgm',
         role: 'leader',
-        group: 'tempo',
-        label: '느려요',
-        message: '템포를 살짝 내려주세요.',
-        target: '리듬',
+        group: 'flow',
+        label: '기도 BGM',
+        message: '모든 악기 페이드아웃, 피아노 잔잔한 기도 BGM 유지!',
+        target: '전체',
     },
     {
-        id: 'cue-faster-tempo',
+        id: 'cue-repeat-ending',
         role: 'leader',
-        group: 'tempo',
-        label: '빨라요',
-        message: '템포를 살짝 올려주세요.',
-        target: '리듬',
+        group: 'flow',
+        label: '엔딩 컷',
+        message: '2마디 후 심벌 히트와 함께 엔딩 컷합니다.',
+        target: '전체',
+    },
+    // 4. 밴드 & 미디어
+    {
+        id: 'cue-buildup',
+        role: 'instrument',
+        group: 'band',
+        label: '빌드업',
+        message: '점진적으로 악기를 채우며 빌드업해주세요.',
+        target: '악기',
     },
     {
         id: 'cue-longer-accompaniment',
@@ -145,14 +223,6 @@ const DEFAULT_SESSION_FEEDBACK_PRESET_DEFS = [
         target: '악기',
     },
     {
-        id: 'cue-repeat-ending',
-        role: 'leader',
-        group: 'flow',
-        label: '엔딩',
-        message: '엔딩으로 들어갑니다.',
-        target: '전체',
-    },
-    {
         id: 'cue-next-lyrics',
         role: 'broadcast',
         group: 'media',
@@ -161,12 +231,12 @@ const DEFAULT_SESSION_FEEDBACK_PRESET_DEFS = [
         target: '미디어',
     },
     {
-        id: 'cue-raise-vocal',
-        role: 'broadcast',
-        group: 'media',
-        label: '보컬 올림',
-        message: '보컬 볼륨을 살짝 올려주세요.',
-        target: '미디어',
+        id: 'cue-system-check',
+        role: 'leader',
+        group: 'flow',
+        label: '통신 점검',
+        message: '무대 실시간 상태 점검 신호입니다. 정상 수신 확인.',
+        target: '전체',
     },
 ] as const satisfies ReadonlyArray<{
     id: string;
@@ -415,8 +485,20 @@ export function inferSessionFeedbackPresetGroup(
 ): SessionFeedbackPresetGroup {
     const source = `${label} ${message}`.toLowerCase();
 
-    if (/템포|느려|빨라|bpm|박자/.test(source)) {
+    if (/볼륨|소리|음향|사운드|마이크|하울링|게인|모니터/.test(source)) {
+        return 'sound';
+    }
+
+    if (/템포|느려|빨라|bpm|박자|드럼|비트|싱크/.test(source)) {
         return 'tempo';
+    }
+
+    if (/가사|자막|슬라이드|송출|카메라/.test(source)) {
+        return 'media';
+    }
+
+    if (/반주|악기|건반|기타|베이스|패드|빌드업/.test(source)) {
+        return 'band';
     }
 
     if (role === 'broadcast') {
@@ -435,6 +517,8 @@ export function getDefaultSessionFeedbackTarget(
     group: SessionFeedbackPresetGroup
 ): string {
     switch (group) {
+        case 'sound':
+            return '음향';
         case 'tempo':
             return '리듬';
         case 'band':
@@ -445,6 +529,31 @@ export function getDefaultSessionFeedbackTarget(
         default:
             return role === 'leader' ? '전체' : '팀';
     }
+}
+
+export type SessionCueCategory = 'tempo' | 'sound' | 'flow' | 'band' | 'media' | 'system';
+
+export function getCueCategory(message: string, group?: SessionFeedbackPresetGroup): SessionCueCategory {
+    const source = message.toLowerCase();
+    if (/통신|점검|테스트|핑|ping|상태/.test(source)) {
+        return 'system';
+    }
+    if (group && (group === 'sound' || group === 'tempo' || group === 'flow' || group === 'band' || group === 'media')) {
+        return group;
+    }
+    if (/볼륨|소리|음향|사운드|마이크|하울링|게인|모니터/.test(source)) {
+        return 'sound';
+    }
+    if (/템포|느려|빨라|bpm|박자|드럼|비트|싱크/.test(source)) {
+        return 'tempo';
+    }
+    if (/가사|자막|슬라이드|송출|카메라/.test(source)) {
+        return 'media';
+    }
+    if (/반주|악기|건반|기타|베이스|패드|빌드업/.test(source)) {
+        return 'band';
+    }
+    return 'flow';
 }
 
 function normalizePage(value: Json | undefined): number {

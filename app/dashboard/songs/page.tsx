@@ -51,22 +51,11 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
     return (
         <DashboardLayout currentPath="/dashboard/songs">
             <MeshBackground />
-            <div className="mx-auto flex max-w-7xl flex-col gap-8">
-                <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="space-y-3">
-                        <span className="inline-flex rounded-full bg-secondary/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-secondary">
-                            콘티 워크스페이스
-                        </span>
-                        <div>
-                            <h1 className="text-4xl font-serif font-black tracking-tight text-primary md:text-5xl">
-                                악보, 콘티, 예배 준비
-                            </h1>
-                            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground md:text-base">
-                                라이브 예배 세션의 기반이 되는 곡, BPM, 악보, 콘티를 준비합니다.
-                            </p>
-                        </div>
-                    </div>
-
+            <div className="mx-auto flex max-w-7xl flex-col gap-6">
+                <section>
+                    <h1 className="text-2xl font-serif font-black tracking-tight text-primary sm:text-3xl">
+                        콘티·악보
+                    </h1>
                 </section>
 
                 {createdKey && successMessages[createdKey] && (

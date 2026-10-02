@@ -54,6 +54,8 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('slots.clear'), eventId: id }),
     z.object({ type: z.literal('slots.autoFillFromRecent'), eventId: id }),
     z.object({ type: z.literal('schedule.sendDutyReminder'), eventId: id }),
+    z.object({ type: z.literal('slot.sendInvite'), eventId: id, slotId: id, customNote: z.string().trim().max(200).optional() }),
+    z.object({ type: z.literal('schedule.sendInvites'), eventId: id, target: z.enum(['pending', 'all']).optional(), customNote: z.string().trim().max(200).optional() }),
     z.object({
         type: z.literal('event.createMonthlySundays'),
         year: z.number().int().min(2020).max(2100),
@@ -106,7 +108,7 @@ const stamp = z.string();
 const stateSchema = z.object({
     version: z.literal(1),
     requests: z.array(z.object({ id, setlistId: z.string(), setlistTitle: z.string(), kind: z.enum(['question', 'reminder', 'change']), body: z.string(), authorId: id, leaderId: id, status: z.enum(['open', 'reviewing', 'resolved']), createdAt: stamp, updatedAt: stamp, replies: z.array(z.object({ id, authorId: id, body: z.string(), createdAt: stamp })) })),
-    events: z.array(scheduleInput.extend({ id, cancelled: z.boolean(), slots: z.array(z.object({ id, role, memberId: id.nullable(), attendance: z.enum(['pending', 'confirmed', 'absent']), volunteers: z.array(id) })) })),
+    events: z.array(scheduleInput.extend({ id, cancelled: z.boolean(), slots: z.array(z.object({ id, role, memberId: id.nullable(), attendance: z.enum(['pending', 'confirmed', 'absent']), volunteers: z.array(id), invitedAt: stamp.optional(), respondedAt: stamp.optional(), declineReason: z.string().optional() })) })),
     alerts: z.array(z.object({ id, eventId: id, slotId: id.nullable(), kind: z.enum(['absence', 'substitute', 'notice']), body: z.string(), authorId: id, createdAt: stamp, resolvedAt: stamp.nullable() })),
     notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp })),
     rotations: z.array(rotationGroupSchema).optional().default([]),
@@ -287,8 +289,13 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             const event = eventById(command.eventId); const slot = slotById(event, command.slotId);
             if (slot.memberId !== userId) throw new Error('본인의 참석 여부만 응답할 수 있습니다.');
             if (slot.attendance === command.attendance) break;
-            if (command.attendance === 'confirmed') { available(event, userId, slot.id); closeSlotAlerts(event.id, slot.id); slot.volunteers = []; notify(managers, '참석 응답', `${actor.name} · ${event.title}`, 'schedule', event.id); }
+            slot.respondedAt = new Date().toISOString();
+            if (command.attendance === 'confirmed') {
+                slot.declineReason = undefined;
+                available(event, userId, slot.id); closeSlotAlerts(event.id, slot.id); slot.volunteers = []; notify(managers, '참석 응답', `${actor.name} · ${event.title}`, 'schedule', event.id);
+            }
             else {
+                slot.declineReason = command.reason || undefined;
                 closeSlotAlerts(event.id, slot.id);
                 urgent(event, slot.id, 'absence', `${actor.name} · ${worshipRoles[slot.role]} 결석${command.reason ? `: ${command.reason}` : ''}`);
                 if (command.autoRequestSubstitute !== false) {
@@ -313,6 +320,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         }
         case 'attendance.batchConfirm': {
             let confirmedCount = 0;
+            const nowIso = new Date().toISOString();
             for (const item of command.items) {
                 const event = eventById(item.eventId);
                 const slot = slotById(event, item.slotId);
@@ -322,6 +330,8 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                 closeSlotAlerts(event.id, slot.id);
                 slot.volunteers = [];
                 slot.attendance = 'confirmed';
+                slot.respondedAt = nowIso;
+                slot.declineReason = undefined;
                 confirmedCount++;
             }
             if (confirmedCount > 0) {
@@ -536,6 +546,9 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                     slot.memberId = null;
                     slot.attendance = 'pending';
                     slot.volunteers = [];
+                    delete slot.invitedAt;
+                    delete slot.respondedAt;
+                    delete slot.declineReason;
                     closeSlotAlerts(event.id, slot.id);
                     clearedCount++;
                 }
@@ -583,12 +596,61 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             const event = eventById(command.eventId);
             const pendingSlots = event.slots.filter(s => s.memberId && s.attendance === 'pending');
             if (pendingSlots.length === 0) throw new Error('참석 응답 대기 중인 팀원이 없습니다.');
+            const nowIso = new Date().toISOString();
+            for (const s of pendingSlots) {
+                s.invitedAt = nowIso;
+            }
             const pendingMemberIds = [...new Set(pendingSlots.map(s => s.memberId!))];
             const eventDate = planningDate(event.startsAt);
             notify(
                 pendingMemberIds,
                 '섬김 참석 여부를 확정해주세요',
                 `${event.title} (${eventDate}) 섬김 참석 여부를 확인해주세요.`,
+                'schedule',
+                event.id,
+                true
+            );
+            break;
+        }
+        case 'slot.sendInvite': {
+            manage();
+            const event = eventById(command.eventId);
+            const slot = slotById(event, command.slotId);
+            if (!slot.memberId) throw new Error('초대할 대상 팀원이 배정되어 있지 않습니다.');
+            slot.invitedAt = new Date().toISOString();
+            const eventDate = planningDate(event.startsAt);
+            const customNoteText = command.customNote ? `\n안내: ${command.customNote}` : '';
+            notify(
+                [slot.memberId],
+                '사역 초대 알림',
+                `${event.title} (${eventDate}) · ${worshipRoles[slot.role]} 섬김에 초대되었습니다.${customNoteText}\n참석 여부를 확인해주세요.`,
+                'schedule',
+                event.id,
+                true
+            );
+            break;
+        }
+        case 'schedule.sendInvites': {
+            manage();
+            const event = eventById(command.eventId);
+            const target = command.target ?? 'pending';
+            const targetSlots = target === 'all'
+                ? event.slots.filter(s => s.memberId !== null)
+                : event.slots.filter(s => s.memberId !== null && s.attendance === 'pending');
+            if (targetSlots.length === 0) {
+                throw new Error(target === 'all' ? '배정된 팀원이 없습니다.' : '참석 응답 대기 중인 팀원이 없습니다.');
+            }
+            const nowIso = new Date().toISOString();
+            for (const s of targetSlots) {
+                s.invitedAt = nowIso;
+            }
+            const uniqueMemberIds = [...new Set(targetSlots.map(s => s.memberId!))];
+            const eventDate = planningDate(event.startsAt);
+            const customNoteText = command.customNote ? `\n안내: ${command.customNote}` : '';
+            notify(
+                uniqueMemberIds,
+                '사역 초대 알림',
+                `${event.title} (${eventDate}) 섬김에 초대되었습니다.${customNoteText}\n참석 여부를 확정해주세요.`,
                 'schedule',
                 event.id,
                 true

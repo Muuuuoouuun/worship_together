@@ -16,14 +16,24 @@ export function usePageTurner({
     onNext,
     onPrev,
     enabled = true,
-    throttleMs = 200,
+    throttleMs = 80,
 }: PageTurnerOptions) {
     const lastTriggerRef = useRef<number>(0);
+    const onNextRef = useRef(onNext);
+    const onPrevRef = useRef(onPrev);
+
+    useEffect(() => {
+        onNextRef.current = onNext;
+        onPrevRef.current = onPrev;
+    });
 
     useEffect(() => {
         if (!enabled) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            // 페달을 길게 밟을 때 발생하는 연속 키 반복 이벤트 차단
+            if (e.repeat) return;
+
             // 텍스트 입력 중일 때는 악보 넘김 방지
             const activeElement = document.activeElement;
             if (
@@ -48,7 +58,7 @@ export function usePageTurner({
                 case ' ': // 스페이스바 (일부 페달의 기본 모드)
                     e.preventDefault();
                     lastTriggerRef.current = now;
-                    onNext();
+                    onNextRef.current();
                     break;
 
                 case 'PageUp':
@@ -57,7 +67,7 @@ export function usePageTurner({
                 case 'Backspace':
                     e.preventDefault();
                     lastTriggerRef.current = now;
-                    onPrev();
+                    onPrevRef.current();
                     break;
 
                 default:
@@ -67,5 +77,5 @@ export function usePageTurner({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [enabled, onNext, onPrev, throttleMs]);
+    }, [enabled, throttleMs]);
 }

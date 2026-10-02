@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import SessionCueToasts from '@/components/session/SessionCueToasts';
 import SoundEngineerWorkspace from '@/components/session/SoundEngineerWorkspace';
+import LiveStageScoreViewer from '@/components/session/LiveStageScoreViewer';
 import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
 import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRealtimeSession';
 import { isPrototypeSessionId } from '@/lib/constants';
@@ -30,6 +31,7 @@ import { usePageTurner } from '@/hooks/usePageTurner';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import {
+    Activity,
     ArrowLeft,
     Check,
     ChevronLeft,
@@ -41,12 +43,15 @@ import {
     Minimize2,
     Pause,
     Radio,
+    RotateCcw,
     Send,
     ShieldAlert,
     Sun,
     SunDim,
     Timer,
     Unlock,
+    Volume2,
+    X,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -98,10 +103,16 @@ const ACTION_GROUP_META: Record<SessionFeedbackPresetGroup, {
         cooldown: true,
     },
     tempo: {
-        label: '템포',
+        label: '템포·박자',
         tone: 'border-amber-300/25 bg-amber-300/12 text-amber-50',
         accent: '252 211 77',
         Icon: ChevronsUp,
+    },
+    sound: {
+        label: '음향·볼륨',
+        tone: 'border-rose-300/25 bg-rose-300/12 text-rose-50',
+        accent: '244 63 94',
+        Icon: Volume2,
     },
     band: {
         label: '반주',
@@ -119,7 +130,8 @@ const ACTION_GROUP_META: Record<SessionFeedbackPresetGroup, {
 
 const ACTION_GROUPS: Array<{ id: SessionFeedbackPresetGroup; label: string }> = [
     { id: 'flow', label: '흐름' },
-    { id: 'tempo', label: '템포' },
+    { id: 'tempo', label: '템포·박자' },
+    { id: 'sound', label: '음향·볼륨' },
     { id: 'band', label: '반주' },
     { id: 'media', label: '미디어' },
 ];
@@ -212,8 +224,10 @@ export default function WorshipTeamMode({
     const cueDeliveries = useSessionStore((state) => state.cueDeliveries);
     const [recipientChoice, setRecipientChoice] = useState('preset');
     const [lastSentEntryId, setLastSentEntryId] = useState<string | null>(null);
+    const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
     const [clientId] = useState(createClientId);
-    const [modeView, setModeView] = useState<'stage' | 'sound'>('stage');
+    const [modeView, setModeView] = useState<'score' | 'stage' | 'sound'>('score');
+    const [showScoreCuePanel, setShowScoreCuePanel] = useState(false);
     const [stageLocked, setStageLocked] = useState(false);
     const [recentActionId, setRecentActionId] = useState<string | null>(null);
     const [pendingActionId, setPendingActionId] = useState<string | null>(null);
@@ -221,6 +235,13 @@ export default function WorshipTeamMode({
     const [cooldownActionIds, setCooldownActionIds] = useState<string[]>([]);
     const [stageFlash, setStageFlash] = useState<StageFlash | null>(null);
     const [isPending, startTransition] = useTransition();
+
+    const retryLastCue = () => {
+        if (!lastSentEntryId) return;
+        const entry = feedbackLog.find((e) => e.id === lastSentEntryId);
+        if (!entry) return;
+        void sendFeedback(entry);
+    };
     const flashTimeoutRef = useRef<number | null>(null);
     const cooldownTimeoutRefs = useRef<Record<string, number>>({});
     const appliedSessionStateRef = useRef(JSON.stringify(session.current_state) ?? '');
@@ -557,6 +578,15 @@ export default function WorshipTeamMode({
                         >
                             ⌨️ 페달 지원
                         </span>
+                        <button
+                            type="button"
+                            onClick={() => setShowDiagnosticsModal(true)}
+                            className="tap-target inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 text-xs font-bold text-white/90 hover:bg-white/10 transition"
+                            title="실시간 상태 점검 및 진단 (클릭)"
+                        >
+                            <Activity size={13} className={realtimeStatus === 'connected' ? 'text-emerald-400 animate-pulse' : 'text-amber-400'} />
+                            <span>상태 점검</span>
+                        </button>
                         <span
                             className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold ${realtimeMeta.tone}`}
                             data-testid="team-mode-sync"
@@ -567,30 +597,59 @@ export default function WorshipTeamMode({
                     </div>
                 </header>
 
-                {/* 뷰 모드 전환 (무대 세션 뷰 ↔ 음향·미디어 큐시트) */}
-                <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1">
-                    <button
-                        type="button"
-                        onClick={() => setModeView('stage')}
-                        className={`tap-target flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
-                            modeView === 'stage'
-                                ? 'bg-[#ffe0b8] text-black shadow-xs'
-                                : 'text-white/60 hover:text-white'
-                        }`}
-                    >
-                        🎤 무대 세션 뷰 (BPM/큐)
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setModeView('sound')}
-                        className={`tap-target flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
-                            modeView === 'sound'
-                                ? 'bg-emerald-400 text-black shadow-xs'
-                                : 'text-white/60 hover:text-white'
-                        }`}
-                    >
-                        🎚️ 음향·미디어 큐시트
-                    </button>
+                {/* 뷰 모드 전환 (악보 무대 뷰 ↔ 무대 BPM 콘솔 ↔ 음향·미디어 큐시트) */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1 min-w-[20rem]">
+                        <button
+                            type="button"
+                            onClick={() => setModeView('score')}
+                            className={`tap-target flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
+                                modeView === 'score'
+                                    ? 'bg-[#ffe0b8] text-black shadow-xs'
+                                    : 'text-white/60 hover:text-white'
+                            }`}
+                        >
+                            🎼 악보 무대 뷰
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setModeView('stage')}
+                            className={`tap-target flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
+                                modeView === 'stage'
+                                    ? 'bg-[#ffe0b8] text-black shadow-xs'
+                                    : 'text-white/60 hover:text-white'
+                            }`}
+                        >
+                            ⏱️ BPM 콘솔 뷰
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setModeView('sound')}
+                            className={`tap-target flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
+                                modeView === 'sound'
+                                    ? 'bg-emerald-400 text-black shadow-xs'
+                                    : 'text-white/60 hover:text-white'
+                            }`}
+                        >
+                            🎚️ 음향·미디어 큐시트
+                        </button>
+                    </div>
+
+                    {modeView === 'score' && (
+                        <button
+                            type="button"
+                            onClick={() => setShowScoreCuePanel((p) => !p)}
+                            className={`tap-target inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                                showScoreCuePanel
+                                    ? 'border-amber-400 bg-amber-400/20 text-amber-200'
+                                    : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                            }`}
+                            title="악보 옆에 큐 전송 패널 함께 보기"
+                        >
+                            <Send size={13} />
+                            <span>즉시 큐 패널 {showScoreCuePanel ? '접기' : '열기'}</span>
+                        </button>
+                    )}
                 </div>
 
                 <div className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-3 sm:grid-cols-2">
@@ -608,7 +667,20 @@ export default function WorshipTeamMode({
                         </select>
                     </label>
                     <p className="text-xs text-white/75 sm:col-span-2">{realtimeStatus === 'connected' ? '서버 연결됨' : localTransportAvailable ? '같은 브라우저의 열린 탭끼리만 연결됩니다.' : '전송 연결 없음'} · 다른 접속 기기 {participants.length}개 · 역할/기기 큐는 실시간 알림만 제공</p>
-                    {lastSentEntryId ? <p role="status" className="text-sm font-bold text-[#ffe0b8] sm:col-span-2">{getCueDeliveryLabel(cueDeliveries[lastSentEntryId])}{cueDeliveries[lastSentEntryId]?.error && cueDeliveries[lastSentEntryId]?.status !== 'failed' ? ` · ${cueDeliveries[lastSentEntryId].error}` : ''}</p> : null}
+                    {lastSentEntryId ? (
+                        <div className="flex items-center justify-between gap-2 text-sm font-bold text-[#ffe0b8] sm:col-span-2 rounded-lg bg-white/5 px-3 py-2 border border-white/10">
+                            <span>{getCueDeliveryLabel(cueDeliveries[lastSentEntryId])}{cueDeliveries[lastSentEntryId]?.error && cueDeliveries[lastSentEntryId]?.status !== 'failed' ? ` · ${cueDeliveries[lastSentEntryId].error}` : ''}</span>
+                            {cueDeliveries[lastSentEntryId]?.status === 'failed' && (
+                                <button
+                                    type="button"
+                                    onClick={retryLastCue}
+                                    className="tap-target inline-flex items-center gap-1 text-xs text-rose-300 underline font-black hover:text-rose-200"
+                                >
+                                    <RotateCcw size={12} /> 재전송
+                                </button>
+                            )}
+                        </div>
+                    ) : null}
                 </div>
 
                 {!isActive ? (
@@ -649,7 +721,72 @@ export default function WorshipTeamMode({
                         }}
                     />
                 ) : (
-                <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[minmax(0,1fr)_auto]">
+                <section
+                    className={`grid min-h-0 flex-1 gap-4 ${
+                        modeView === 'score' && !showScoreCuePanel
+                            ? 'lg:grid-cols-1'
+                            : 'lg:grid-cols-[minmax(0,1fr)_22rem]'
+                    } lg:grid-rows-[minmax(0,1fr)_auto]`}
+                >
+                    {modeView === 'score' ? (
+                        <div className="order-1 lg:order-none lg:col-start-1 lg:row-start-1 min-h-[32rem] flex flex-col">
+                            {currentSong ? (
+                                <LiveStageScoreViewer
+                                    teamId={teamId}
+                                    songId={currentSong.id}
+                                    title={currentSong.title}
+                                    originalKey={currentSong.original_key}
+                                    currentBpm={currentBpm}
+                                    bpmEnabled={bpmEnabled}
+                                    isActive={isActive}
+                                    currentSection={displayedSection}
+                                    nextSection={nextSection}
+                                    page={currentPage}
+                                    onPageChange={(page) => updateState({ page })}
+                                    canTurnPage={true}
+                                    latestCueMessage={latestCue?.message}
+                                    latestCueRole={latestCue ? ROLE_LABELS[latestCue.role] : null}
+                                    latestCueAccent={stageFlash?.accent}
+                                    stageLocked={stageLocked}
+                                    onToggleStageLock={() => setStageLocked((p) => !p)}
+                                    onSwitchToBpmMode={() => setModeView('stage')}
+                                    onPrevSong={handlePrevSong}
+                                    onNextSong={handleNextSong}
+                                    hasPrevSong={currentSongIndex > 0}
+                                    hasNextSong={currentSongIndex < songs.length - 1}
+                                    nextSongTitle={nextSong?.title}
+                                    prevSongTitle={currentSongIndex > 0 ? songs[currentSongIndex - 1]?.title : null}
+                                    songs={songs}
+                                    onSelectSong={(songId) => updateState({ songId, page: 1, section: null })}
+                                    leaderSongId={currentSongId}
+                                    leaderPage={currentPage}
+                                    onBpmChange={(newBpm) => updateState({ bpmValue: newBpm })}
+                                    onSelectSection={(sec) => updateState({ section: sec })}
+                                    participantCount={participants.length}
+                                    realtimeStatus={realtimeStatus}
+                                    lastSentDeliveryLabel={lastSentEntryId ? getCueDeliveryLabel(cueDeliveries[lastSentEntryId]) : undefined}
+                                    onSendCue={(msg, targetRole) => {
+                                        sendStageAction({
+                                            id: `cue_${Date.now()}`,
+                                            label: '무대 큐',
+                                            message: msg,
+                                            role: (targetRole as SessionFeedbackRole) || 'leader',
+                                            group: 'flow',
+                                            target: '전체',
+                                            tone: 'border-amber-300/25 bg-amber-300/12 text-amber-50',
+                                            accent: '252 211 77',
+                                            Icon: Radio,
+                                            cooldown: false,
+                                        });
+                                    }}
+                                />
+                            ) : (
+                                <div className="flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-white/60">
+                                    곡이 선택되지 않았습니다. 콘티에서 곡을 선택해주세요.
+                                </div>
+                            )}
+                        </div>
+                    ) : (
                     <section
                         className={`stage-bpm-panel order-1 relative overflow-hidden rounded-lg border border-[#f0b56b]/20 bg-[#f0b56b]/[0.075] p-3 sm:p-5 lg:order-none lg:col-start-1 lg:row-start-1 ${blinkActive ? 'stage-bpm-panel--beat' : ''} ${blinkActive && activeBeat === 1 ? 'stage-bpm-panel--downbeat' : ''}`}
                         style={beatDurationStyle}
@@ -746,6 +883,7 @@ export default function WorshipTeamMode({
                             </div>
                         </div>
                     </section>
+                    )}
 
                     <aside
                         className={`order-2 rounded-lg border border-white/10 bg-white/[0.052] px-3 py-2.5 lg:hidden ${recentActionId ? 'stage-latest-cue-active' : ''}`}
@@ -763,7 +901,11 @@ export default function WorshipTeamMode({
                         </div>
                     </aside>
 
-                    <aside className="order-3 rounded-lg border border-white/10 bg-white/[0.052] p-3 sm:p-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1">
+                    <aside
+                        className={`order-3 rounded-lg border border-white/10 bg-white/[0.052] p-3 sm:p-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1 ${
+                            modeView === 'score' && !showScoreCuePanel ? 'hidden' : ''
+                        }`}
+                    >
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-xl font-black text-white sm:text-2xl">즉시 큐</h2>
                             <Send size={20} className="text-[#ffe0b8]/70" />
@@ -868,6 +1010,113 @@ export default function WorshipTeamMode({
                 </section>
                 )}
             </div>
+
+            {/* 실시간 상태 점검 및 진단 모달 */}
+            {showDiagnosticsModal && (
+                <>
+                    <div
+                        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md animate-in fade-in"
+                        onClick={() => setShowDiagnosticsModal(false)}
+                    />
+                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-md rounded-3xl border border-white/20 bg-[#0a0f0e] p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-4 text-white">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <div className="flex items-center gap-2.5">
+                                <div className="flex size-9 items-center justify-center rounded-xl bg-amber-400/20 text-amber-300">
+                                    <Activity size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-white">
+                                        무대 실시간 상태 점검 및 진단
+                                    </h3>
+                                    <p className="text-[11px] text-white/60">
+                                        네트워크 품질, 기기 수신, 큐 전송 상태
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowDiagnosticsModal(false)}
+                                className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* Status Grid */}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block">실시간 연결 상태</span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`size-2.5 rounded-full ${realtimeStatus === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                                    <span className="font-black text-white">
+                                        {realtimeStatus === 'connected' ? '정상 연결됨' : '대기 / 로컬 연결'}
+                                    </span>
+                                </div>
+                                <p className="text-[10px] text-white/60">
+                                    {realtimeStatus === 'connected' ? '초저지연 Web Broadcast' : '브라우저 간 통신 대기'}
+                                </p>
+                            </div>
+
+                            <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block">접속 기기 수</span>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-lg font-black text-amber-300">{participants.length}</span>
+                                    <span className="text-xs text-white/70">대 온라인</span>
+                                </div>
+                                <p className="text-[10px] text-white/60">인도자, 악기, 미디어</p>
+                            </div>
+                        </div>
+
+                        {/* Recent Delivery Status */}
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block">최근 큐 전달 확인 (ACK)</span>
+                                {lastSentEntryId && cueDeliveries[lastSentEntryId]?.status === 'failed' && (
+                                    <button
+                                        type="button"
+                                        onClick={retryLastCue}
+                                        className="text-[11px] font-bold text-amber-300 hover:underline"
+                                    >
+                                        재전송 시도
+                                    </button>
+                                )}
+                            </div>
+                            <p className="text-xs font-black text-emerald-300">
+                                {lastSentEntryId ? getCueDeliveryLabel(cueDeliveries[lastSentEntryId]) : '아직 전송된 큐가 없습니다.'}
+                            </p>
+                            <p className="text-[10px] text-white/60">
+                                큐 전송 시 각 팀원 기기에서 수신 확인 신호가 실시간 반환됩니다.
+                            </p>
+                        </div>
+
+                        {/* Quick Test Ping Button */}
+                        <div className="pt-1 space-y-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    sendStageAction({
+                                        id: `ping_${Date.now()}`,
+                                        label: '통신 점검',
+                                        message: '📶 [통신 점검] 무대 실시간 상태 점검 핑 신호 수신 확인!',
+                                        role: 'broadcast',
+                                        group: 'media',
+                                        target: '전체',
+                                        tone: 'border-sky-300/25 bg-sky-300/12 text-sky-50',
+                                        accent: '56 189 248',
+                                        Icon: Radio,
+                                        cooldown: false,
+                                    });
+                                    setShowDiagnosticsModal(false);
+                                }}
+                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500/25 to-emerald-500/25 hover:from-amber-500/35 hover:to-emerald-500/35 border border-amber-400/40 py-2.5 text-xs font-black text-amber-200 transition active:scale-95 shadow"
+                            >
+                                <Radio size={14} />
+                                <span>전체 기기에 통신 점검 신호 보내기</span>
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
         </main>
     );
 }

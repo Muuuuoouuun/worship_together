@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorshipTogether - 초고도화 모바일 인터랙티브 목업</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+      margin: 0;
+      background-color: #060911;
+      color: #e2e8f0;
+    }
+    /* Custom scrollbar for mobile screens */
+    .mobile-scroll::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .mobile-scroll::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 9999px;
+    }
+    .mobile-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    /* Metronome pulse keyframe */
+    @keyframes metro-pulse {
+      0%, 100% { transform: scale(1); opacity: 0.7; }
+      50% { transform: scale(1.35); opacity: 1; filter: drop-shadow(0 0 10px #6366f1); }
+    }
+    .pulse-metronome {
+      animation: metro-pulse 0.468s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    /* Inverted sheet music filter */
+    .sheet-invert {
+      filter: invert(0.94) hue-rotate(180deg) contrast(1.1) brightness(0.92);
+    }
+    /* Dynamic Island spring physics */
+    .dynamic-island {
+      transition: all 0.38s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    /* Equalizer Waveform animation */
+    @keyframes eq-wave {
+      0%, 100% { height: 4px; }
+      50% { height: 16px; }
+    }
+    .eq-bar-1 { animation: eq-wave 0.6s infinite ease-in-out; }
+    .eq-bar-2 { animation: eq-wave 0.8s infinite 0.2s ease-in-out; }
+    .eq-bar-3 { animation: eq-wave 0.5s infinite 0.4s ease-in-out; }
+    .eq-bar-4 { animation: eq-wave 0.7s infinite 0.1s ease-in-out; }
+    
+    /* Hardware button depress animations */
+    .hw-btn:active {
+      transform: scaleX(0.7);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-3 sm:p-6 select-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#060911] to-[#04060b]">
+
+  <!-- Top Global Floating Control Bar -->
+  <header class="w-full max-w-5xl mb-5 flex flex-wrap items-center justify-between gap-3 border border-slate-800/80 bg-slate-900/60 backdrop-blur-xl px-4 py-3 rounded-2xl shadow-2xl">
+    <div class="flex items-center gap-3">
+      <div class="relative">
+        <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white font-black text-sm shadow-lg shadow-indigo-500/25 ring-1 ring-white/20">W</span>
+        <span class="absolute -top-1 -right-1 flex h-3 w-3">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+        </span>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-base sm:text-lg font-black text-white tracking-tight">WorshipTogether</h1>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30">PRO V2.5</span>
+        </div>
+        <p class="text-[11px] text-slate-400">실시간 다이내믹스 · Web Audio 메트로놈 · 키 전조 엔진 · 무대 최적화</p>
+      </div>
+    </div>
+
+    <!-- Interactive Tools: Device Selector, Orientation, Audio Metronome Sound, Theme -->
+    <div class="flex flex-wrap items-center gap-2">
+      <!-- Device Selector -->
+      <div class="inline-flex rounded-xl bg-slate-950/80 p-1 border border-slate-800 shadow-inner">
+        <button id="btn-iphone" onclick="setDevice('iphone')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-md transition-all">iPhone 16 Pro</button>
+        <button id="btn-galaxy" onclick="setDevice('galaxy')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all">Galaxy S24 (360px)</button>
+        <button id="btn-tablet" onclick="setDevice('tablet')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all">무대 거치대 태블릿</button>
+      </div>
+
+      <!-- Real Web Audio Metronome Mute / Sound Toggle -->
+      <button id="btn-audio-toggle" onclick="toggleAudioMetronome()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-xs font-bold text-slate-300 flex items-center gap-1.5 shadow transition-all">
+        <span id="audio-icon">🔇</span>
+        <span id="audio-label">오디오 OFF</span>
+      </button>
+
+      <!-- App Theme Toggle inside mockup -->
+      <button onclick="toggleMockupTheme()" class="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700/80 text-xs font-bold text-slate-300 flex items-center gap-1.5 shadow">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-text">다크</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Interactive Device Mockup Stage -->
+  <main class="w-full flex flex-col items-center justify-center my-auto">
+
+    <!-- Device Frame Container (with realistic hardware buttons) -->
+    <div id="device-container" class="relative transition-all duration-500 ease-out select-none" style="width: 402px; height: 852px;">
+      
+      <!-- Hardware Physical Buttons on Chassis -->
+      <!-- Left side: Action Button, Volume Up, Volume Down -->
+      <div class="hw-btn absolute -left-[7px] top-[115px] w-[5px] h-[26px] bg-slate-600 rounded-l-[3px] border-l border-slate-400/30 cursor-pointer shadow-md" title="Action Button (음향 큐)" onclick="triggerNotification('Action Button: FOH 큐시트로 즉시 전환')"></div>
+      <div class="hw-btn absolute -left-[7px] top-[160px] w-[5px] h-[50px] bg-slate-600 rounded-l-[3px] border-l border-slate-400/30 cursor-pointer shadow-md" title="Volume Up (템포 +5)" onclick="adjustBpm(5)"></div>
+      <div class="hw-btn absolute -left-[7px] top-[225px] w-[5px] h-[50px] bg-slate-600 rounded-l-[3px] border-l border-slate-400/30 cursor-pointer shadow-md" title="Volume Down (템포 -5)" onclick="adjustBpm(-5)"></div>
+      
+      <!-- Right side: Power / Lock Button -->
+      <div class="hw-btn absolute -right-[7px] top-[175px] w-[5px] h-[75px] bg-slate-600 rounded-r-[3px] border-r border-slate-400/30 cursor-pointer shadow-md" title="Power Button" onclick="triggerNotification('화면 잠금 / 잠금해제')"></div>
+
+      <!-- Outer Hardware Bezel (Grade-5 Titanium Polish Finish) -->
+      <div id="device-hardware" class="w-full h-full rounded-[54px] p-[11px] bg-gradient-to-tr from-slate-700 via-slate-800 to-slate-900 shadow-[0_30px_70px_-10px_rgba(0,0,0,0.9),0_0_0_2px_rgba(255,255,255,0.12),inset_0_1px_3px_rgba(255,255,255,0.3)] flex flex-col relative overflow-hidden ring-1 ring-black">
+        
+        <!-- Screen Edge & Glass Bezel -->
+        <div id="mockup-viewport" class="w-full h-full rounded-[44px] bg-[#090d16] text-slate-100 flex flex-col overflow-hidden relative shadow-[inset_0_0_20px_rgba(0,0,0,0.8)] select-none transition-colors duration-200">
+          
+          <!-- Status Bar & Interactive Dynamic Island -->
+          <div class="w-full h-12 pt-1.5 px-6 flex items-center justify-between text-[11px] font-semibold tracking-tight z-40 shrink-0 select-none">
+            <span id="status-time" class="w-12 text-center font-bold tracking-tight text-white drop-shadow">11:05</span>
+            
+            <!-- Dynamic Island (Interactive Expandable Live Activity) -->
+            <div id="dynamic-island" onclick="toggleDynamicIsland()" class="dynamic-island px-3 py-1 bg-black rounded-full flex items-center gap-2 border border-slate-800/80 shadow-[0_4px_12px_rgba(0,0,0,0.8)] cursor-pointer hover:border-indigo-500/50">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <div id="island-collapsed-content" class="flex items-center gap-1.5">
+                <span class="text-[10px] text-slate-300 font-medium tracking-tight">1. 꽃들도</span>
+                <span class="text-[9px] text-indigo-400 font-bold">♩72</span>
+                <!-- Equalizer mini animation -->
+                <div class="flex items-end gap-0.5 h-3">
+                  <span class="w-[2px] bg-indigo-400 rounded-full eq-bar-1"></span>
+                  <span class="w-[2px] bg-indigo-400 rounded-full eq-bar-2"></span>
+                  <span class="w-[2px] bg-indigo-400 rounded-full eq-bar-3"></span>
+                </div>
+              </div>
+
+              <!-- Expanded Live Activity Container (Hidden by default) -->
+              <div id="island-expanded-content" class="hidden flex-col items-center w-full py-1 text-left space-y-2">
+                <div class="flex items-center justify-between w-full">
+                  <div class="flex items-center gap-2">
+                    <span class="p-1 rounded-lg bg-indigo-600/30 text-indigo-300 text-xs">🎵</span>
+                    <div>
+                      <div class="text-xs font-black text-white">꽃들도 (Flowers)</div>
+                      <div class="text-[9px] text-slate-400">E Key · 4/4 박자 · 1절 진행중</div>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <span id="live-timer" class="font-mono text-xs text-emerald-400 font-bold">03:42</span>
+                    <div class="text-[8px] text-slate-400">경과 시간</div>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between w-full pt-1.5 border-t border-slate-800 text-[10px]">
+                  <button onclick="event.stopPropagation(); switchTab('stage')" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-500">악보 열기</button>
+                  <button onclick="event.stopPropagation(); triggerNotification('📡 싱어 인이어에 다음 송폼 [Chorus] 큐가 송출되었습니다.')" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 font-bold hover:bg-slate-700">후렴 큐</button>
+                  <button onclick="event.stopPropagation(); toggleDynamicIsland()" class="text-slate-400 hover:text-white">접기 ✕</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Icons (5G, Wifi, Battery) -->
+            <div class="w-12 flex items-center justify-end gap-1.5 text-slate-300">
+              <span class="text-[10px] font-bold">5G</span>
+              <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L12 22l7.03-4.39C20.26 16.07 21 14.12 21 12c0-4.97-4.03-9-9-9zm0 14.5c-3.04 0-5.5-2.46-5.5-5.5s2.46-5.5 5.5-5.5 5.5 2.46 5.5 5.5-2.46 5.5-5.5 5.5z"/></svg>
+              <div class="w-5 h-2.5 rounded-sm border border-slate-300 p-0.5 flex items-center">
+                <div class="h-full w-4/5 bg-slate-200 rounded-[1px]"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- App Top Header in Mobile -->
+          <div class="px-4 py-2.5 border-b border-slate-800/80 flex items-center justify-between shrink-0 z-20 backdrop-blur-md bg-slate-950/75">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-black text-xs flex items-center justify-center shadow-md shadow-indigo-600/20 ring-1 ring-white/10">W</div>
+              <div>
+                <div class="text-xs font-bold leading-none text-white" id="app-title">주일 2부 찬양팀</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">2026.09.28 (주일) 본당</div>
+              </div>
+            </div>
+            
+            <div class="flex items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">D-2</span>
+              <button onclick="triggerNotification('📢 공지: 이번 주 콘티 순서와 디렉팅 메모가 최종 승인되었습니다.')" class="w-7 h-7 rounded-xl bg-slate-800/80 hover:bg-slate-700 flex items-center justify-center text-xs text-slate-300 border border-slate-700/60 shadow">🔔</button>
+            </div>
+          </div>
+
+          <!-- Toast Notification Container inside Mockup -->
+          <div id="mockup-toast" class="absolute top-14 left-4 right-4 z-50 transform -translate-y-24 opacity-0 pointer-events-none transition-all duration-300 p-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold shadow-2xl flex items-center gap-2.5 border border-white/20">
+            <span class="text-base">📢</span>
+            <span id="mockup-toast-msg" class="flex-1 leading-snug">알림 메시지</span>
+          </div>
+
+          <!-- Main Scrollable App Content Container -->
+          <div id="mockup-content" class="flex-1 overflow-y-auto mobile-scroll p-3.5 space-y-4 pb-20">
+            
+            <!-- ================= VIEW 1: HOME (대시보드) ================= -->
+            <div id="view-home" class="space-y-4">
+              <!-- Banner Card: Today's Worship / My Duty -->
+              <div class="rounded-3xl p-4 bg-gradient-to-br from-indigo-950/70 via-slate-900 to-slate-900 border border-indigo-500/30 shadow-xl relative overflow-hidden backdrop-blur-md">
+                <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span> MY DUTY · 내 사역
+                  </span>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">참석 확정 ●</span>
+                </div>
+                <div class="mt-2.5">
+                  <div class="text-lg font-black text-white tracking-tight">찬양 인도자 · 보컬 A팀</div>
+                  <div class="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
+                    <span>리허설: 08:30</span>
+                    <span>•</span>
+                    <span>본예배: 11:00</span>
+                  </div>
+                </div>
+
+                <!-- Persona Quick Action Links -->
+                <div class="mt-4 pt-3.5 border-t border-slate-800/80 grid grid-cols-2 gap-2">
+                  <button onclick="switchTab('setlist')" class="p-2.5 rounded-2xl bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/60 text-left transition-all group shadow-sm">
+                    <div class="text-xs font-bold text-slate-200 group-hover:text-indigo-400 flex items-center justify-between">
+                      <span>📝 콘티 편성/수정</span>
+                      <span class="text-slate-400 text-[10px] group-hover:translate-x-0.5 transition-transform">➔</span>
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">Key·순서·디렉팅</div>
+                  </button>
+                  <button onclick="switchTab('stage')" class="p-2.5 rounded-2xl bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/60 text-left transition-all group shadow-sm">
+                    <div class="text-xs font-bold text-slate-200 group-hover:text-indigo-400 flex items-center justify-between">
+                      <span>🎸 무대 악보 모드</span>
+                      <span class="text-slate-400 text-[10px] group-hover:translate-x-0.5 transition-transform">➔</span>
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">다크반전·양면뷰</div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Quick Status: Setlist Preview -->
+              <div class="rounded-3xl p-4 bg-slate-900/90 border border-slate-800/80 shadow-lg">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold text-white">이번 주 예배 콘티</span>
+                    <span class="text-[11px] text-indigo-400 font-bold">(3곡)</span>
+                  </div>
+                  <button onclick="switchTab('sound')" class="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors">
+                    음향 큐시트 보기 ➔
+                  </button>
+                </div>
+
+                <!-- Song List Items -->
+                <div class="space-y-2">
+                  <div onclick="selectSongForStage('flowers', 'E')" class="cursor-pointer flex items-center justify-between p-2.5 rounded-2xl bg-slate-800/50 hover:bg-slate-800 border border-slate-800 transition-all">
+                    <div class="flex items-center gap-2.5">
+                      <span class="w-6 h-6 rounded-xl bg-indigo-600/30 text-indigo-400 text-xs font-black flex items-center justify-center">1</span>
+                      <div>
+                        <div class="text-xs font-bold text-white">꽃들도 (Flowers)</div>
+                        <div class="text-[10px] text-slate-400">JWorship · 잔잔한 피아노 시작</div>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <span class="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-500/20 text-amber-400 border border-amber-500/30">E Key</span>
+                      <div class="text-[10px] text-slate-400 mt-0.5">♩ 72</div>
+                    </div>
+                  </div>
+
+                  <div onclick="selectSongForStage('liftname', 'G')" class="cursor-pointer flex items-center justify-between p-2.5 rounded-2xl bg-slate-800/50 hover:bg-slate-800 border border-slate-800 transition-all">
+                    <div class="flex items-center gap-2.5">
+                      <span class="w-6 h-6 rounded-xl bg-indigo-600/30 text-indigo-400 text-xs font-black flex items-center justify-center">2</span>
+                      <div>
+                        <div class="text-xs font-bold text-white">주의 이름 높이며</div>
+                        <div class="text-[10px] text-slate-400">Lord I Lift Your Name on High</div>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <span class="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">G Key</span>
+                      <div class="text-[10px] text-slate-400 mt-0.5">♩ 124</div>
+                    </div>
+                  </div>
+
+                  <div onclick="selectSongForStage('grace', 'A')" class="cursor-pointer flex items-center justify-between p-2.5 rounded-2xl bg-slate-800/50 hover:bg-slate-800 border border-slate-800 transition-all">
+                    <div class="flex items-center gap-2.5">
+                      <span class="w-6 h-6 rounded-xl bg-indigo-600/30 text-indigo-400 text-xs font-black flex items-center justify-center">3</span>
+                      <div>
+                        <div class="text-xs font-bold text-white">은혜 아래 있네</div>
+                        <div class="text-[10px] text-slate-400">마커스워십 · 브릿지 풀밴드</div>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <span class="px-2 py-0.5 rounded-lg text-[10px] font-black bg-purple-500/20 text-purple-400 border border-purple-500/30">A Key</span>
+                      <div class="text-[10px] text-slate-400 mt-0.5">♩ 68</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Team Member Presence & Rotations -->
+              <div class="rounded-3xl p-4 bg-slate-900/90 border border-slate-800/80 shadow-lg">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="text-xs font-bold text-white">사역팀 출석 현황</span>
+                  <span class="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 6명 전원 확정 (100%)
+                  </span>
+                </div>
+                <div class="grid grid-cols-6 gap-2 text-center">
+                  <div class="flex flex-col items-center">
+                    <div class="w-9 h-9 rounded-2xl bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-md">김</div>
+                    <span class="text-[10px] text-slate-400 mt-1">인도자</span>
+                  </div>
+                  <div class="flex flex-col items-center">
+                    <div class="w-9 h-9 rounded-2xl bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shadow-md">이</div>
+                    <span class="text-[10px] text-slate-400 mt-1">피아노</span>
+                  </div>
+                  <div class="flex flex-col items-center">
+                    <div class="w-9 h-9 rounded-2xl bg-amber-600 text-white font-bold text-xs flex items-center justify-center shadow-md">박</div>
+                    <span class="text-[10px] text-slate-400 mt-1">기타</span>
+                  </div>
+                  <div class="flex flex-col items-center">
+                    <div class="w-9 h-9 rounded-2xl bg-rose-600 text-white font-bold text-xs flex items-center justify-center shadow-md">최</div>
+                    <span class="text-[10px] text-slate-400 mt-1">드럼</span>
+                  </div>
+                  <div class="flex flex-col items-center">
+                    <div class="w-9 h-9 rounded-2xl bg-cyan-600 text-white font-bold text-xs flex items-center justify-center shadow-md">정</div>
+                    <span class="text-[10px] text-slate-400 mt-1">베이스</span>
+                  </div>
+                  <div class="flex flex-col items-center">
+                    <div class="w-9 h-9 rounded-2xl bg-violet-600 text-white font-bold text-xs flex items-center justify-center shadow-md">강</div>
+                    <span class="text-[10px] text-slate-400 mt-1">음향</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ================= VIEW 2: SETLIST COMPOSER (인도자) ================= -->
+            <div id="view-setlist" class="space-y-3.5 hidden">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h2 class="text-sm font-extrabold text-white">예배 콘티 편성</h2>
+                  <p class="text-[10px] text-slate-400">키 전조 실시간 연동 · 타겟 BPM · 디렉팅 메모</p>
+                </div>
+                <button onclick="saveSetlistMock()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold shadow-lg flex items-center gap-1 active:scale-95 transition-all">
+                  <span>💾</span> 저장
+                </button>
+              </div>
+
+              <!-- Song 1 (Interactive Transpose) -->
+              <div class="rounded-3xl p-3.5 bg-slate-900 border border-slate-800/80 shadow-md space-y-2.5">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-xl bg-indigo-600/30 text-indigo-400 text-xs font-black flex items-center justify-center">1</span>
+                    <div>
+                      <div class="text-xs font-bold text-white">꽃들도 (Flowers)</div>
+                      <div class="text-[10px] text-slate-400">원곡 G Key · 8분의 6박자</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1 text-slate-400">
+                    <button class="p-1 hover:text-white" title="위로">▲</button>
+                    <button class="p-1 hover:text-white" title="아래로">▼</button>
+                  </div>
+                </div>
+
+                <!-- Overrides: Key, BPM, Directing Note (Mobile Responsive Grid) -->
+                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+                  <label class="text-[10px] font-semibold text-slate-400">
+                    이번 주 타겟 Key
+                    <select id="composer-key-select" onchange="onKeySelectChanged(this.value)" class="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-800/90 px-2.5 py-1.5 text-xs font-extrabold text-amber-300 focus:outline-none focus:border-indigo-500">
+                      <option value="C">C Key (-7반음)</option>
+                      <option value="D">D Key (-5반음)</option>
+                      <option value="E" selected>E Key (-3반음, 추천)</option>
+                      <option value="F">F Key (-2반음)</option>
+                      <option value="G">G Key (원곡)</option>
+                      <option value="A">A Key (+2반음)</option>
+                    </select>
+                  </label>
+                  <label class="text-[10px] font-semibold text-slate-400">
+                    템포 BPM
+                    <input type="number" id="composer-bpm-input" value="72" onchange="onBpmInputChanged(this.value)" class="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-800/90 px-2.5 py-1.5 text-xs font-extrabold text-white focus:outline-none focus:border-indigo-500" />
+                  </label>
+                  <label class="col-span-2 text-[10px] font-semibold text-slate-400">
+                    인도자 디렉팅 메모
+                    <input type="text" value="잔잔하게 피아노+보컬 시작, 후렴2부터 어쿠스틱 스트로크 진입" class="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-800/90 px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+                  </label>
+                </div>
+              </div>
+
+              <!-- Song 2 (Interactive) -->
+              <div class="rounded-3xl p-3.5 bg-slate-900 border border-slate-800/80 shadow-md space-y-2.5">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-xl bg-indigo-600/30 text-indigo-400 text-xs font-black flex items-center justify-center">2</span>
+                    <div>
+                      <div class="text-xs font-bold text-white">주의 이름 높이며</div>
+                      <div class="text-[10px] text-slate-400">원곡 G Key · 4/4 Fast</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1 text-slate-400">
+                    <button class="p-1 hover:text-white">▲</button>
+                    <button class="p-1 hover:text-white">▼</button>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+                  <label class="text-[10px] font-semibold text-slate-400">
+                    이번 주 Key
+                    <select class="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-800/90 px-2.5 py-1.5 text-xs font-extrabold text-white">
+                      <option value="G" selected>G Key (원곡 유지)</option>
+                      <option value="A">A Key (+2반음)</option>
+                    </select>
+                  </label>
+                  <label class="text-[10px] font-semibold text-slate-400">
+                    템포 BPM
+                    <input type="number" value="124" class="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-800/90 px-2.5 py-1.5 text-xs font-extrabold text-white" />
+                  </label>
+                  <label class="col-span-2 text-[10px] font-semibold text-slate-400">
+                    인도자 디렉팅 메모
+                    <input type="text" value="곡간 쉼 없이 베이스 워킹으로 연결, 드럼 4비트 킥 시작" class="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-800/90 px-2.5 py-1.5 text-xs text-white" />
+                  </label>
+                </div>
+              </div>
+
+              <!-- Add Song Button (Opens Search Drawer) -->
+              <button onclick="openSongSearchModal()" class="w-full py-3 rounded-2xl border-2 border-dashed border-slate-700 hover:border-indigo-500 text-xs font-extrabold text-slate-300 hover:text-indigo-400 transition-all flex items-center justify-center gap-1.5 active:scale-[0.98]">
+                <span>➕</span> 새 찬양 곡 검색 및 추가하기
+              </button>
+            </div>
+
+            <!-- ================= VIEW 3: STAGE & SHEET (악기/세션팀) ================= -->
+            <div id="view-stage" class="space-y-3.5 hidden">
+              <!-- Stage Header: Song Title & Quick Controls -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span id="stage-song-title" class="text-sm font-black text-white">1. 꽃들도</span>
+                    <span id="stage-key-badge" class="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-500/20 text-amber-400 border border-amber-500/30">E Key</span>
+                  </div>
+                  <div class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+                    <span id="stage-bpm-label">BPM 72</span>
+                    <span>•</span>
+                    <span>페이지 1/2</span>
+                  </div>
+                </div>
+
+                <!-- Stage HUD Toggles -->
+                <div class="flex items-center gap-1.5">
+                  <button id="btn-invert-sheet" onclick="toggleSheetInvert()" class="px-2.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-extrabold shadow flex items-center gap-1 active:scale-95 transition-all">
+                    <span>🌙</span> <span id="invert-btn-text">다크반전</span>
+                  </button>
+                  <button id="btn-dual-page" onclick="toggleDualPage()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-extrabold border border-slate-700 flex items-center gap-1 active:scale-95 transition-all">
+                    <span>📖</span> 양면보기
+                  </button>
+                </div>
+              </div>
+
+              <!-- Metronome & BPM Controls Bar -->
+              <div class="p-3 rounded-2xl bg-slate-900 border border-slate-800 shadow-md space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2 cursor-pointer" onclick="toggleAudioMetronome()" title="소리 켜기/끄기">
+                    <div id="metro-indicator" class="w-3 h-3 rounded-full bg-indigo-500 pulse-metronome"></div>
+                    <span id="metro-tempo-text" class="text-xs font-black text-indigo-300">♩= 72 (4/4)</span>
+                  </div>
+                  <!-- Quick +/- BPM -->
+                  <div class="flex items-center gap-1">
+                    <button onclick="adjustBpm(-5)" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-black text-white">-5</button>
+                    <button onclick="adjustBpm(-1)" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-black text-white">-1</button>
+                    <input type="number" id="stage-bpm-input" value="72" onchange="onBpmInputChanged(this.value)" class="w-12 text-center rounded-lg bg-slate-950 border border-indigo-500/50 text-xs font-black text-amber-300 py-0.5" />
+                    <button onclick="adjustBpm(1)" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-black text-white">+1</button>
+                    <button onclick="adjustBpm(5)" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-black text-white">+5</button>
+                    <button onclick="handleMockTapTempo()" class="px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[10px] font-black text-amber-300 active:scale-95 transition">TAP</button>
+                  </div>
+                </div>
+
+                <!-- Pulse Mode Selector: 4 Modes -->
+                <div class="pt-2 border-t border-slate-800 flex items-center justify-between gap-1 text-[9px] font-bold">
+                  <span class="text-slate-400 shrink-0">펄스 크기:</span>
+                  <div class="grid grid-cols-4 gap-1 w-full">
+                    <button id="p-mode-dot" onclick="setMockPulseMode('dot')" class="px-1.5 py-1 rounded-lg bg-indigo-600 text-white text-center font-extrabold shadow">🔘 점</button>
+                    <button id="p-mode-edge" onclick="setMockPulseMode('edge')" class="px-1.5 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-center font-bold">🔲 테두리</button>
+                    <button id="p-mode-fullscreen" onclick="setMockPulseMode('fullscreen')" class="px-1.5 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-center font-bold">💡 전체플래시</button>
+                    <button id="p-mode-giant" onclick="setMockPulseMode('giant')" class="px-1.5 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-center font-bold">📊 대형바</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sheet Music Canvas Area (with live transposed chords & pulse overlay) -->
+              <div id="sheet-wrapper" class="relative rounded-3xl bg-white overflow-hidden shadow-2xl transition-all border border-slate-700/60 flex flex-col items-center justify-start p-3 min-h-[350px]">
+                
+                <!-- Giant 4-Beat Bar HUD (Visible when 'giant' pulse mode is selected) -->
+                <div id="mockup-giant-bar" class="w-full grid grid-cols-4 gap-1 p-1 bg-black/90 border-b border-slate-700/80 mb-2 rounded-xl hidden">
+                  <div id="giant-beat-1" class="h-5 rounded-lg bg-amber-400/20 text-amber-300/40 font-mono font-black text-xs flex items-center justify-center transition-all duration-75">1 ●</div>
+                  <div id="giant-beat-2" class="h-5 rounded-lg bg-white/10 text-white/30 font-mono font-black text-xs flex items-center justify-center transition-all duration-75">2</div>
+                  <div id="giant-beat-3" class="h-5 rounded-lg bg-white/10 text-white/30 font-mono font-black text-xs flex items-center justify-center transition-all duration-75">3</div>
+                  <div id="giant-beat-4" class="h-5 rounded-lg bg-white/10 text-white/30 font-mono font-black text-xs flex items-center justify-center transition-all duration-75">4</div>
+                </div>
+
+                <!-- BPM Pulse Overlay (Edge Strobe or Fullscreen Flash) -->
+                <div id="mockup-pulse-overlay" class="pointer-events-none absolute inset-0 z-30 transition-all duration-75"></div>
+                
+                <!-- Mock Sheet SVG (representing actual musical score) -->
+                <div id="sheet-render" class="w-full flex flex-col items-center justify-start space-y-3.5 py-1 text-slate-900 transition-all">
+                  <div class="text-center">
+                    <div id="sheet-title" class="text-sm font-black tracking-wider text-slate-900">꽃 들 도 (Flowers)</div>
+                    <div id="sheet-meta" class="text-[9px] text-slate-600 font-semibold mt-0.5">E Key · Moderato · 8분의 6박자</div>
+                  </div>
+
+                  <!-- Stave 1 -->
+                  <div class="w-full px-2 relative">
+                    <span class="absolute -top-3.5 left-2 px-1.5 py-0.5 rounded text-[8px] font-black bg-rose-500 text-white shadow">[Intro]</span>
+                    <svg class="w-full h-11 text-slate-800" viewBox="0 0 300 40">
+                      <!-- 5 staff lines -->
+                      <line x1="0" y1="8" x2="300" y2="8" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="14" x2="300" y2="14" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="20" x2="300" y2="20" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="26" x2="300" y2="26" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="32" x2="300" y2="32" stroke="currentColor" stroke-width="1"/>
+                      <!-- Clef -->
+                      <text x="5" y="27" font-size="20" font-family="serif">𝄞</text>
+                      
+                      <!-- Dynamic Transposed Chords -->
+                      <text id="chord-1" x="45" y="5" font-size="9" font-weight="900" fill="#4f46e5">E</text>
+                      <circle cx="50" cy="20" r="3" fill="currentColor"/>
+                      <line x1="53" y1="20" x2="53" y2="5" stroke="currentColor" stroke-width="1.5"/>
+
+                      <text id="chord-2" x="115" y="5" font-size="9" font-weight="900" fill="#4f46e5">B/D#</text>
+                      <circle cx="125" cy="23" r="3" fill="currentColor"/>
+                      <line x1="128" y1="23" x2="128" y2="8" stroke="currentColor" stroke-width="1.5"/>
+
+                      <text id="chord-3" x="185" y="5" font-size="9" font-weight="900" fill="#4f46e5">C#m7</text>
+                      <circle cx="195" cy="18" r="3" fill="currentColor"/>
+                      <line x1="198" y1="18" x2="198" y2="6" stroke="currentColor" stroke-width="1.5"/>
+
+                      <text id="chord-4" x="250" y="5" font-size="9" font-weight="900" fill="#4f46e5">G#m7</text>
+                      <circle cx="255" cy="26" r="3" fill="currentColor"/>
+                      <line x1="258" y1="26" x2="258" y2="10" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                  </div>
+
+                  <!-- Stave 2 -->
+                  <div class="w-full px-2 relative pt-1">
+                    <span class="absolute -top-3 left-2 px-1.5 py-0.5 rounded text-[8px] font-black bg-indigo-600 text-white shadow">[Verse 1]</span>
+                    <svg class="w-full h-11 text-slate-800" viewBox="0 0 300 40">
+                      <line x1="0" y1="8" x2="300" y2="8" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="14" x2="300" y2="14" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="20" x2="300" y2="20" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="26" x2="300" y2="26" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="32" x2="300" y2="32" stroke="currentColor" stroke-width="1"/>
+                      
+                      <text id="chord-5" x="38" y="5" font-size="9" font-weight="900" fill="#4f46e5">A</text>
+                      <text x="38" y="38" font-size="7.5" font-family="sans-serif" font-weight="600">이곳에 생명 샘</text>
+                      <circle cx="48" cy="20" r="3" fill="currentColor"/>
+                      
+                      <text id="chord-6" x="118" y="5" font-size="9" font-weight="900" fill="#4f46e5">E/G#</text>
+                      <text x="118" y="38" font-size="7.5" font-family="sans-serif" font-weight="600">솟아나 눈물 골</text>
+                      <circle cx="128" cy="18" r="3" fill="currentColor"/>
+
+                      <text id="chord-7" x="208" y="5" font-size="9" font-weight="900" fill="#4f46e5">F#m7</text>
+                      <text x="208" y="38" font-size="7.5" font-family="sans-serif" font-weight="600">짝 지나갈 때에</text>
+                      <circle cx="218" cy="23" r="3" fill="currentColor"/>
+                    </svg>
+                  </div>
+
+                  <!-- Stave 3 -->
+                  <div class="w-full px-2 relative pt-1">
+                    <span class="absolute -top-3 left-2 px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-500 text-white shadow">[Chorus]</span>
+                    <svg class="w-full h-11 text-slate-800" viewBox="0 0 300 40">
+                      <line x1="0" y1="8" x2="300" y2="8" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="14" x2="300" y2="14" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="20" x2="300" y2="20" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="26" x2="300" y2="26" stroke="currentColor" stroke-width="1"/>
+                      <line x1="0" y1="32" x2="300" y2="32" stroke="currentColor" stroke-width="1"/>
+                      
+                      <text id="chord-8" x="40" y="5" font-size="9" font-weight="900" fill="#4f46e5">A</text>
+                      <text x="40" y="38" font-size="7.5" font-weight="600">꽃들도 구름도</text>
+                      <circle cx="50" cy="20" r="3" fill="currentColor"/>
+
+                      <text id="chord-9" x="140" y="5" font-size="9" font-weight="900" fill="#4f46e5">B</text>
+                      <text x="140" y="38" font-size="7.5" font-weight="600">바람도 넓은 바다도</text>
+                      <circle cx="150" cy="23" r="3" fill="currentColor"/>
+                    </svg>
+                  </div>
+                </div>
+
+                <!-- Live Stage Beacon Banner (Spontaneous Form & Tempo Alert) -->
+                <div id="stage-beacon-banner" class="w-full p-2.5 rounded-2xl bg-gradient-to-r from-rose-600 to-amber-600 text-white text-xs font-black shadow-xl hidden flex items-center justify-between animate-bounce z-40 my-1">
+                  <span id="stage-beacon-text">🚨 [인도자 큐] 후렴 한 번 더 반복합니다!</span>
+                  <button onclick="dismissStageBeacon()" class="px-2 py-0.5 rounded-lg bg-black/40 hover:bg-black/60 text-[10px] text-white">확인 ✕</button>
+                </div>
+
+                <!-- Page navigation floating overlay -->
+                <div class="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 z-20">
+                  <button onclick="triggerNotification('1페이지 (처음) 입니다.')" class="w-8 h-8 rounded-full bg-slate-900/80 text-white text-xs flex items-center justify-center shadow-lg backdrop-blur hover:bg-slate-900 active:scale-95 transition-all">◀</button>
+                  <button onclick="triggerNotification('2페이지로 이동했습니다.')" class="w-8 h-8 rounded-full bg-slate-900/80 text-white text-xs flex items-center justify-center shadow-lg backdrop-blur hover:bg-slate-900 active:scale-95 transition-all">▶</button>
+                </div>
+              </div>
+
+              <!-- Leader's Sermon & Speech Note HUD (Collapsible) -->
+              <div id="leader-speech-notes" class="w-full p-3.5 rounded-2xl bg-slate-900/95 border border-indigo-500/40 text-xs shadow-2xl space-y-2 hidden backdrop-blur-xl">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                  <span class="font-extrabold text-indigo-300">📖 인도자 곡간 멘트 & 말씀 메모</span>
+                  <button onclick="toggleLeaderSpeechNotes()" class="text-slate-400 hover:text-white">닫기 ✕</button>
+                </div>
+                <div class="space-y-1.5 text-slate-300 text-[11px] leading-relaxed">
+                  <p><strong class="text-amber-300">말씀 본문:</strong> 시편 100편 1-5절 ("온 땅이여 여호와께 즐거운 찬송을 부를지어다")</p>
+                  <p><strong class="text-emerald-300">곡간 멘트 (1곡 ➔ 2곡):</strong> "오늘 이곳에 임재하신 주님을 바라봅니다. 잔잔한 마음으로 주님의 이름을 높여 찬양하겠습니다." (멘트 끝날 때 드럼 킥 진입)</p>
+                  <p><strong class="text-rose-300">합심 기도 제목:</strong> 3번 곡 마친 뒤 환우들과 청년부 수련회를 위한 3분 통성 기도 (건반 E key 패드 유지)</p>
+                </div>
+              </div>
+
+              <!-- 실전 무대 무음 큐 & 템포 피드백 바 (Stage Feedback Hub) -->
+              <div class="p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/60 border border-indigo-500/30 shadow-lg space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-black text-amber-300 flex items-center gap-1.5">
+                    <span>📡</span> 실시간 무대 무음 큐 (비언어적 소통)
+                  </span>
+                  <button onclick="toggleLeaderSpeechNotes()" class="px-2 py-0.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-[10px] font-bold text-indigo-300 border border-indigo-500/40">
+                    📖 멘트/말씀 메모
+                  </button>
+                </div>
+
+                <!-- 1-Tap 템포 및 연주 피드백 칩 -->
+                <div class="grid grid-cols-3 gap-1.5">
+                  <button onclick="broadcastStageCue('tempo_slow', '🐢 [템포 주의] 드럼/세션: 템포가 처지고 있습니다. 살짝만 밀어주세요!')" class="p-2 rounded-xl bg-slate-800/90 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-400 text-center transition-all active:scale-95 shadow">
+                    <div class="text-xs font-bold text-amber-300">🐢 느려요</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">템포 푸시 요청</div>
+                  </button>
+                  <button onclick="broadcastStageCue('tempo_fast', '🐇 [템포 주의] 드럼/세션: 빨라지고 있습니다. 차분하게 가라앉혀요!')" class="p-2 rounded-xl bg-slate-800/90 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-400 text-center transition-all active:scale-95 shadow">
+                    <div class="text-xs font-bold text-amber-300">🐇 빨라요</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">템포 홀드 요청</div>
+                  </button>
+                  <button onclick="broadcastStageCue('tempo_clash', '⚠️ [박자 싱크 경고] 악기 간 박자가 어긋났습니다! 1박자 다운비트 확인!')" class="p-2 rounded-xl bg-slate-800/90 hover:bg-rose-500/20 border border-slate-700 hover:border-rose-400 text-center transition-all active:scale-95 shadow">
+                    <div class="text-xs font-bold text-rose-300">⚠️ 박자 밀림</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">1박자 다운비트</div>
+                  </button>
+                </div>
+
+                <!-- 1-Tap 송폼 즉흥 전환 칩 -->
+                <div class="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-800/80">
+                  <button onclick="broadcastStageCue('form_repeat', '🔁 [인도자 큐] 엔딩 없이 후렴(Chorus) 한 번 더 반복합니다!')" class="p-2 rounded-xl bg-slate-800/90 hover:bg-indigo-500/20 border border-slate-700 hover:border-indigo-400 text-center transition-all active:scale-95 shadow">
+                    <div class="text-xs font-bold text-indigo-300">🔁 한 번 더</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">후렴 즉시 반복</div>
+                  </button>
+                  <button onclick="broadcastStageCue('form_bgm', '🎹 [송폼 전환] 모든 악기 FADE OUT, 건반 단독 잔잔한 기도 BGM 진입!')" class="p-2 rounded-xl bg-slate-800/90 hover:bg-emerald-500/20 border border-slate-700 hover:border-emerald-400 text-center transition-all active:scale-95 shadow">
+                    <div class="text-xs font-bold text-emerald-300">🎹 기도 BGM</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">피아노 단독 유지</div>
+                  </button>
+                  <button onclick="broadcastStageCue('form_ending', '🛑 [엔딩 신호] 2마디 후 정박 심벌 치고 일제히 컷! (Big Hit)')" class="p-2 rounded-xl bg-slate-800/90 hover:bg-rose-500/20 border border-slate-700 hover:border-rose-400 text-center transition-all active:scale-95 shadow">
+                    <div class="text-xs font-bold text-rose-300">🛑 엔딩 컷</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">심벌 히트 후 스톱</div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Quick Song Jump Bar -->
+              <div class="flex items-center gap-1.5 overflow-x-auto pb-1">
+                <button onclick="selectSongForStage('flowers', 'E')" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold whitespace-nowrap shadow-md">1. 꽃들도</button>
+                <button onclick="selectSongForStage('liftname', 'G')" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold whitespace-nowrap hover:bg-slate-700">2. 주의 이름 높이며</button>
+                <button onclick="selectSongForStage('grace', 'A')" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold whitespace-nowrap hover:bg-slate-700">3. 은혜 아래 있네</button>
+              </div>
+            </div>
+
+            <!-- ================= VIEW 4: SOUND ENGINEER (음향 엔지니어) ================= -->
+            <div id="view-sound" class="space-y-3.5 hidden">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h2 class="text-sm font-extrabold text-white">음향 엔지니어 큐시트</h2>
+                  <p class="text-[10px] text-slate-400">송폼 다이내믹스 추적 · 입력 채널 게인 점검</p>
+                </div>
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> FOH LIVE
+                </span>
+              </div>
+
+              <!-- Dynamics Curve Timeline (pp ~ ff) -->
+              <div class="p-3.5 rounded-3xl bg-slate-900 border border-slate-800/80 shadow-md space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-slate-200">송폼별 다이내믹스 그래프</span>
+                  <span class="text-[10px] text-indigo-400 font-extrabold">1. 꽃들도 (E Key)</span>
+                </div>
+
+                <!-- Interactive SVG Dynamics Chart -->
+                <div class="w-full bg-slate-950 rounded-2xl p-2.5 border border-slate-800/80 relative">
+                  <svg class="w-full h-20" viewBox="0 0 280 80">
+                    <line x1="0" y1="20" x2="280" y2="20" stroke="#334155" stroke-dasharray="2,2" stroke-width="0.7"/>
+                    <line x1="0" y1="40" x2="280" y2="40" stroke="#334155" stroke-dasharray="2,2" stroke-width="0.7"/>
+                    <line x1="0" y1="60" x2="280" y2="60" stroke="#334155" stroke-dasharray="2,2" stroke-width="0.7"/>
+                    
+                    <text x="5" y="16" font-size="8" fill="#f43f5e" font-weight="900">ff (Full Band)</text>
+                    <text x="5" y="38" font-size="8" fill="#fbbf24" font-weight="700">mf (Build-up)</text>
+                    <text x="5" y="58" font-size="8" fill="#38bdf8" font-weight="700">pp (Piano Solo)</text>
+
+                    <!-- Dynamics Area Fill -->
+                    <path d="M 10 65 Q 40 65 70 55 T 140 30 T 210 15 T 270 50 L 270 75 L 10 75 Z" fill="url(#grad2)" opacity="0.35"/>
+                    <path d="M 10 65 Q 40 65 70 55 T 140 30 T 210 15 T 270 50" fill="none" stroke="#6366f1" stroke-width="2.5"/>
+
+                    <circle cx="10" cy="65" r="3.5" fill="#38bdf8"/>
+                    <circle cx="70" cy="55" r="3.5" fill="#38bdf8"/>
+                    <circle cx="140" cy="30" r="3.5" fill="#fbbf24"/>
+                    <circle cx="210" cy="15" r="5" fill="#f43f5e" stroke="#fff" stroke-width="1.5"/>
+                    <circle cx="270" cy="50" r="3.5" fill="#818cf8"/>
+
+                    <defs>
+                      <linearGradient id="grad2" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#6366f1"/>
+                        <stop offset="100%" stop-color="#020617"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div class="flex items-center justify-between text-[9px] text-slate-400 px-1 mt-1 font-semibold">
+                    <span>Intro (pp)</span>
+                    <span>Verse (p)</span>
+                    <span>Chorus (mf)</span>
+                    <span class="text-rose-400 font-extrabold">Bridge (ff)</span>
+                    <span>Outro (mp)</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 1-Tap Talkback & Cue Buttons (with Audio Ping) -->
+              <div class="p-3.5 rounded-3xl bg-slate-900 border border-slate-800/80 shadow-md space-y-2">
+                <span class="text-xs font-bold text-slate-200">인이어 1-Tap 토크백 큐</span>
+                <div class="grid grid-cols-3 gap-2">
+                  <button onclick="sendCueWithAudio('🎤 인도자 인이어: 보컬 레벨 +2dB 보정 큐 전달', 600)" class="p-2.5 rounded-2xl bg-slate-800 hover:bg-indigo-600/30 border border-slate-700 text-center transition-all active:scale-95">
+                    <div class="text-[11px] font-bold text-white">🎤 보컬 UP</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">인이어 +2dB</div>
+                  </button>
+                  <button onclick="sendCueWithAudio('🥁 전체 인이어: 드럼 필인 2마디 전 카운트 송출', 800)" class="p-2.5 rounded-2xl bg-slate-800 hover:bg-indigo-600/30 border border-slate-700 text-center transition-all active:scale-95">
+                    <div class="text-[11px] font-bold text-white">🥁 드럼 큐</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">빌드업 카운트</div>
+                  </button>
+                  <button onclick="sendCueWithAudio('📺 방송실: 자막 싱크 송출 타이밍 확인 요청', 500)" class="p-2.5 rounded-2xl bg-slate-800 hover:bg-indigo-600/30 border border-slate-700 text-center transition-all active:scale-95">
+                    <div class="text-[11px] font-bold text-white">📺 자막 싱크</div>
+                    <div class="text-[9px] text-slate-400 mt-0.5">방송실 알림</div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Interactive Pro Channel Faders & Peak Meters -->
+              <div class="p-3.5 rounded-3xl bg-slate-900 border border-slate-800/80 shadow-md space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-slate-200">디지털 콘솔 실시간 페이더 & 레벨 미터</span>
+                  <span class="text-[10px] text-slate-400">Main Out: 0.0 dB</span>
+                </div>
+
+                <div class="grid grid-cols-4 gap-2 text-center pt-1">
+                  <!-- Channel 1 -->
+                  <div class="bg-slate-950 p-2 rounded-2xl border border-slate-800 flex flex-col items-center">
+                    <span class="text-[10px] font-extrabold text-amber-300">인도자</span>
+                    <div class="my-2 flex items-center gap-1 h-24">
+                      <!-- Slider Fader -->
+                      <input type="range" min="0" max="100" value="78" class="w-1.5 h-20 accent-indigo-500 -rotate-90 cursor-pointer">
+                      <!-- VU LED Bar -->
+                      <div class="flex flex-col-reverse justify-between h-20 w-1.5 bg-slate-800 rounded-[1px] p-[1px]">
+                        <span class="h-2 w-full bg-emerald-500 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-emerald-500 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-emerald-400 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-amber-400 animate-pulse rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-rose-500/20 rounded-[1px]"></span>
+                      </div>
+                    </div>
+                    <span class="text-[9px] font-mono text-slate-400">-12dB</span>
+                  </div>
+
+                  <!-- Channel 2 -->
+                  <div class="bg-slate-950 p-2 rounded-2xl border border-slate-800 flex flex-col items-center">
+                    <span class="text-[10px] font-extrabold text-emerald-300">건반</span>
+                    <div class="my-2 flex items-center gap-1 h-24">
+                      <input type="range" min="0" max="100" value="70" class="w-1.5 h-20 accent-emerald-500 -rotate-90 cursor-pointer">
+                      <div class="flex flex-col-reverse justify-between h-20 w-1.5 bg-slate-800 rounded-[1px] p-[1px]">
+                        <span class="h-2 w-full bg-emerald-500 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-emerald-500 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-emerald-400/40 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-amber-400/20 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-rose-500/20 rounded-[1px]"></span>
+                      </div>
+                    </div>
+                    <span class="text-[9px] font-mono text-slate-400">-16dB</span>
+                  </div>
+
+                  <!-- Channel 3 -->
+                  <div class="bg-slate-950 p-2 rounded-2xl border border-slate-800 flex flex-col items-center">
+                    <span class="text-[10px] font-extrabold text-sky-300">어쿠스틱</span>
+                    <div class="my-2 flex items-center gap-1 h-24">
+                      <input type="range" min="0" max="100" value="65" class="w-1.5 h-20 accent-sky-500 -rotate-90 cursor-pointer">
+                      <div class="flex flex-col-reverse justify-between h-20 w-1.5 bg-slate-800 rounded-[1px] p-[1px]">
+                        <span class="h-2 w-full bg-emerald-500 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-emerald-500/60 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-emerald-400/20 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-amber-400/20 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-rose-500/20 rounded-[1px]"></span>
+                      </div>
+                    </div>
+                    <span class="text-[9px] font-mono text-slate-400">-19dB</span>
+                  </div>
+
+                  <!-- Channel 4 (Master) -->
+                  <div class="bg-slate-950 p-2 rounded-2xl border border-indigo-500/40 flex flex-col items-center">
+                    <span class="text-[10px] font-black text-rose-400">드럼/마스터</span>
+                    <div class="my-2 flex items-center gap-1 h-24">
+                      <input type="range" min="0" max="100" value="84" class="w-1.5 h-20 accent-rose-500 -rotate-90 cursor-pointer">
+                      <div class="flex flex-col-reverse justify-between h-20 w-1.5 bg-slate-800 rounded-[1px] p-[1px]">
+                        <span class="h-2 w-full bg-emerald-500 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-emerald-500 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-emerald-400 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-amber-400 rounded-[1px]"></span>
+                        <span class="h-2 w-full bg-rose-500 animate-pulse rounded-[1px]"></span>
+                      </div>
+                    </div>
+                    <span class="text-[9px] font-mono text-rose-400 font-bold">-3dB</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom Navigation Bar (Fixed 4 Tabs with tactile feedback) -->
+          <div class="w-full h-16 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around px-2 z-30 shrink-0">
+            <button id="tab-btn-home" onclick="switchTab('home')" class="flex flex-col items-center gap-1 text-indigo-400 transition-all active:scale-90">
+              <span class="text-base drop-shadow">🏠</span>
+              <span class="text-[10px] font-black">홈</span>
+            </button>
+            <button id="tab-btn-setlist" onclick="switchTab('setlist')" class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200 transition-all active:scale-90">
+              <span class="text-base drop-shadow">📋</span>
+              <span class="text-[10px] font-medium">콘티편성</span>
+            </button>
+            <button id="tab-btn-stage" onclick="switchTab('stage')" class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200 transition-all active:scale-90">
+              <span class="text-base drop-shadow">🎸</span>
+              <span class="text-[10px] font-medium">무대악보</span>
+            </button>
+            <button id="tab-btn-sound" onclick="switchTab('sound')" class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200 transition-all active:scale-90">
+              <span class="text-base drop-shadow">🎛️</span>
+              <span class="text-[10px] font-medium">음향큐시트</span>
+            </button>
+          </div>
+
+          <!-- iPhone Home Indicator / Bottom Bar -->
+          <div class="w-full h-4 bg-slate-900/95 flex items-center justify-center pb-1 shrink-0">
+            <div id="home-indicator" class="w-32 h-1 bg-slate-500/50 rounded-full"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Song Search Modal Drawer inside Mockup View (Simulated iOS Bottom Sheet) -->
+    <div id="song-search-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex-col items-center justify-end p-2 sm:p-4">
+      <div class="w-full max-w-sm rounded-t-3xl bg-slate-900 border border-slate-700/80 p-4 space-y-3 shadow-2xl">
+        <div class="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-1"></div>
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-extrabold text-white">새 찬양곡 검색</span>
+          <button onclick="closeSongSearchModal()" class="text-xs text-slate-400 hover:text-white">닫기 ✕</button>
+        </div>
+        <input type="text" placeholder="곡 제목, 가사, 아티스트 검색..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+        <div class="space-y-1.5 max-h-48 overflow-y-auto mobile-scroll">
+          <div onclick="addSongMock('주를 위한 이곳에', 'D', 74)" class="p-2.5 rounded-xl bg-slate-800/60 hover:bg-indigo-600/30 cursor-pointer flex items-center justify-between text-xs">
+            <div>
+              <div class="font-bold text-white">주를 위한 이곳에</div>
+              <div class="text-[10px] text-slate-400">마커스 · D Key · 느린 경배</div>
+            </div>
+            <span class="text-indigo-400 font-extrabold">➕ 추가</span>
+          </div>
+          <div onclick="addSongMock('원하고 바라고 기도합니다', 'G', 68)" class="p-2.5 rounded-xl bg-slate-800/60 hover:bg-indigo-600/30 cursor-pointer flex items-center justify-between text-xs">
+            <div>
+              <div class="font-bold text-white">원하고 바라고 기도합니다</div>
+              <div class="text-[10px] text-slate-400">찬미워십 · G Key · 결단/기도</div>
+            </div>
+            <span class="text-indigo-400 font-extrabold">➕ 추가</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Explanatory Legend / Guide below mockup -->
+    <div class="max-w-md w-full mt-6 bg-slate-900/90 rounded-3xl p-4 sm:p-5 border border-slate-800 text-xs space-y-2.5 shadow-xl">
+      <div class="flex items-center justify-between text-slate-200 font-black">
+        <span class="flex items-center gap-1.5">
+          <span class="text-base">🚀</span> 고도화된 인터랙티브 체험 가이드
+        </span>
+        <span class="text-[10px] text-indigo-400 px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30">실제 오디오/전조 내장</span>
+      </div>
+      <ul class="text-slate-400 space-y-2 text-[11px] list-disc pl-4 leading-relaxed">
+        <li><strong>Dynamic Island 클릭</strong>: 상단 검은색 아일랜드를 클릭하면 <span class="text-indigo-300 font-bold">Live Activity 배너</span>가 튀어나오며 진행 시간, 송폼 큐를 즉시 조작할 수 있습니다.</li>
+        <li><strong>🔊 실제 Web Audio 메트로놈</strong>: 상단 <em>[오디오 OFF]</em> 버튼을 누르면 브라우저 사운드로 실제 우드블록 메트로놈 틱 소리(1박자 액센트)가 연주됩니다.</li>
+        <li><strong>실시간 코드 전조 (Key Transpose)</strong>: <em>[콘티편성]</em> 탭에서 Key를 C, D, E, F, G, A로 바꾸면 <em>[무대악보]</em>의 오선지 위 악보 코드들이 <strong>실시간으로 즉시 전조</strong>되어 바뀝니다!</li>
+        <li><strong>음향팀 페이더 & 토크백</strong>: <em>[음향큐시트]</em> 탭에서 슬라이더를 올려보거나 1-Tap 큐 버튼을 누르면 실제 핑 사운드와 함께 인이어 신호가 전달됩니다.</li>
+      </ul>
+    </div>
+
+  </main>
+
+  <script>
+    let currentTab = 'home';
+    let isDarkInverted = false;
+    let isDualPage = false;
+    let isAppDark = true;
+    let currentDevice = 'iphone';
+    let isIslandExpanded = false;
+    let audioContext = null;
+    let isAudioEnabled = false;
+    let metroTimerId = null;
+    let currentBpm = 72;
+    let currentBeat = 0;
+    let selectedKey = 'E';
+
+    // Chord Maps for Key Transposition
+    const CHORD_TRANSPOSITION_MAP = {
+      'C': ['C', 'G/B', 'Am7', 'Em7', 'F', 'C/E', 'Dm7', 'F', 'G'],
+      'D': ['D', 'A/C#', 'Bm7', 'F#m7', 'G', 'D/F#', 'Em7', 'G', 'A'],
+      'E': ['E', 'B/D#', 'C#m7', 'G#m7', 'A', 'E/G#', 'F#m7', 'A', 'B'],
+      'F': ['F', 'C/E', 'Dm7', 'Am7', 'Bb', 'F/A', 'Gm7', 'Bb', 'C'],
+      'G': ['G', 'D/F#', 'Em7', 'Bm7', 'C', 'G/B', 'Am7', 'C', 'D'],
+      'A': ['A', 'E/G#', 'F#m7', 'C#m7', 'D', 'A/C#', 'Bm7', 'D', 'E']
+    };
+
+    // Web Audio Click Generator
+    function initAudio() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+    }
+
+    function playTick(isDownbeat = false) {
+      if (!isAudioEnabled || !audioContext) return;
+      try {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+
+        const now = audioContext.currentTime;
+        osc.frequency.setValueAtTime(isDownbeat ? 1200 : 800, now);
+        gain.gain.setValueAtTime(isDownbeat ? 0.35 : 0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+        osc.start(now);
+        osc.stop(now + 0.05);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function playPing(freq = 600) {
+      if (!audioContext) initAudio();
+      try {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+
+        const now = audioContext.currentTime;
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+        osc.start(now);
+        osc.stop(now + 0.38);
+      } catch (e) {}
+    }
+
+    function toggleAudioMetronome() {
+      initAudio();
+      isAudioEnabled = !isAudioEnabled;
+      const btn = document.getElementById('btn-audio-toggle');
+      const icon = document.getElementById('audio-icon');
+      const label = document.getElementById('audio-label');
+
+      if (isAudioEnabled) {
+        btn.classList.add('bg-indigo-600', 'text-white');
+        btn.classList.remove('bg-slate-800', 'text-slate-300');
+        icon.innerText = '🔊';
+        label.innerText = '오디오 ON';
+        startMetronomeLoop();
+        triggerNotification('🔊 메트로놈 사운드가 켜졌습니다 (BPM ' + currentBpm + ')');
+      } else {
+        btn.classList.remove('bg-indigo-600', 'text-white');
+        btn.classList.add('bg-slate-800', 'text-slate-300');
+        icon.innerText = '🔇';
+        label.innerText = '오디오 OFF';
+        stopMetronomeLoop();
+        triggerNotification('🔇 메트로놈 사운드가 음소거되었습니다.');
+      }
+    }
+
+    let mockPulseMode = 'dot';
+    let mockTapTimes = [];
+
+    function setMockPulseMode(mode) {
+      mockPulseMode = mode;
+      const modes = ['dot', 'edge', 'fullscreen', 'giant'];
+      modes.forEach(m => {
+        const btn = document.getElementById('p-mode-' + m);
+        if (btn) {
+          if (m === mode) {
+            btn.className = 'px-1.5 py-1 rounded-lg bg-indigo-600 text-white text-center font-extrabold shadow';
+          } else {
+            btn.className = 'px-1.5 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-center font-bold';
+          }
+        }
+      });
+
+      const giantBar = document.getElementById('mockup-giant-bar');
+      if (giantBar) {
+        if (mode === 'giant') giantBar.classList.remove('hidden');
+        else giantBar.classList.add('hidden');
+      }
+
+      const overlay = document.getElementById('mockup-pulse-overlay');
+      if (overlay) {
+        overlay.className = 'pointer-events-none absolute inset-0 z-30 transition-all duration-75';
+      }
+
+      const modeNames = {
+        'dot': '🔘 미니 점 (기본)',
+        'edge': '🔲 테두리 플래시 (Edge Strobe)',
+        'fullscreen': '💡 전체 화면 플래시 (Full Strobe)',
+        'giant': '📊 대형 4박자 상단 바'
+      };
+      triggerNotification(`BPM 펄스 모드: [${modeNames[mode]}]로 변경되었습니다.`);
+    }
+
+    function handleMockTapTempo() {
+      const now = Date.now();
+      mockTapTimes = mockTapTimes.filter(t => now - t < 3000);
+      mockTapTimes.push(now);
+      if (mockTapTimes.length >= 2) {
+        const intervals = [];
+        for (let i = 1; i < mockTapTimes.length; i++) {
+          intervals.push(mockTapTimes[i] - mockTapTimes[i - 1]);
+        }
+        const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        const bpm = Math.round(60000 / avg);
+        if (bpm >= 40 && bpm <= 240) {
+          currentBpm = bpm;
+          updateBpmDisplays();
+          if (isAudioEnabled) startMetronomeLoop();
+          triggerNotification(`👆 탭 템포 측정 완료: [♩ ${bpm} BPM]`);
+        }
+      } else {
+        triggerNotification('👆 2회 이상 연속으로 탭해주세요');
+      }
+    }
+
+    function updateBpmDisplays() {
+      const stageInput = document.getElementById('stage-bpm-input');
+      const composerInput = document.getElementById('composer-bpm-input');
+      const stageBpmLabel = document.getElementById('stage-bpm-label');
+      const metroTempoText = document.getElementById('metro-tempo-text');
+      if (stageInput) stageInput.value = currentBpm;
+      if (composerInput) composerInput.value = currentBpm;
+      if (stageBpmLabel) stageBpmLabel.textContent = `BPM ${currentBpm}`;
+      if (metroTempoText) metroTempoText.textContent = `♩= ${currentBpm} (4/4)`;
+    }
+
+    function startMetronomeLoop() {
+      stopMetronomeLoop();
+      const intervalMs = (60 / currentBpm) * 1000;
+      metroTimerId = setInterval(() => {
+        currentBeat = (currentBeat + 1) % 4;
+        const beatNum = currentBeat === 0 ? 4 : currentBeat;
+        const isDownbeat = beatNum === 1;
+        playTick(isDownbeat);
+
+        // Dot indicator
+        const metroDot = document.getElementById('metro-indicator');
+        if (metroDot) {
+          metroDot.style.backgroundColor = isDownbeat ? '#f43f5e' : '#6366f1';
+        }
+
+        // Pulse overlay (Edge or Fullscreen)
+        const overlay = document.getElementById('mockup-pulse-overlay');
+        if (overlay) {
+          if (mockPulseMode === 'edge') {
+            overlay.className = isDownbeat
+              ? 'pointer-events-none absolute inset-0 z-30 transition-all duration-75 border-4 border-amber-300 shadow-[inset_0_0_50px_rgba(251,191,36,0.8)]'
+              : 'pointer-events-none absolute inset-0 z-30 transition-all duration-75 border-2 border-emerald-400 shadow-[inset_0_0_25px_rgba(52,211,153,0.4)]';
+          } else if (mockPulseMode === 'fullscreen') {
+            overlay.className = isDownbeat
+              ? 'pointer-events-none absolute inset-0 z-30 transition-all duration-75 bg-amber-400/25'
+              : 'pointer-events-none absolute inset-0 z-30 transition-all duration-75 bg-emerald-400/15';
+          }
+
+          // Clear flash after 120ms
+          setTimeout(() => {
+            if (overlay && (mockPulseMode === 'edge' || mockPulseMode === 'fullscreen')) {
+              overlay.className = 'pointer-events-none absolute inset-0 z-30 transition-all duration-75 border-transparent bg-transparent';
+            }
+          }, 130);
+        }
+
+        // Giant 4-Beat Bar HUD
+        if (mockPulseMode === 'giant') {
+          for (let i = 1; i <= 4; i++) {
+            const beatEl = document.getElementById('giant-beat-' + i);
+            if (beatEl) {
+              if (i === beatNum) {
+                beatEl.className = i === 1
+                  ? 'h-5 rounded-lg bg-amber-400 text-black font-mono font-black text-xs flex items-center justify-center transition-all duration-75 shadow-[0_0_15px_#fbbf24] scale-105'
+                  : 'h-5 rounded-lg bg-emerald-400 text-black font-mono font-black text-xs flex items-center justify-center transition-all duration-75 shadow-[0_0_10px_#34d399] scale-105';
+              } else {
+                beatEl.className = i === 1
+                  ? 'h-5 rounded-lg bg-amber-400/20 text-amber-300/40 font-mono font-black text-xs flex items-center justify-center transition-all duration-75'
+                  : 'h-5 rounded-lg bg-white/10 text-white/30 font-mono font-black text-xs flex items-center justify-center transition-all duration-75';
+              }
+            }
+          }
+        }
+      }, intervalMs);
+    }
+
+    function stopMetronomeLoop() {
+      if (metroTimerId) {
+        clearInterval(metroTimerId);
+        metroTimerId = null;
+      }
+    }
+
+    // Switch Tab in Mobile Mockup
+    function switchTab(tabId) {
+      currentTab = tabId;
+      const views = ['home', 'setlist', 'stage', 'sound'];
+      views.forEach(v => {
+        const el = document.getElementById('view-' + v);
+        const btn = document.getElementById('tab-btn-' + v);
+        if (v === tabId) {
+          el.classList.remove('hidden');
+          btn.className = 'flex flex-col items-center gap-1 text-indigo-400 transition-all font-black';
+        } else {
+          el.classList.add('hidden');
+          btn.className = 'flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200 transition-all font-medium';
+        }
+      });
+
+      const appTitle = document.getElementById('app-title');
+      if (tabId === 'home') appTitle.innerText = '주일 2부 찬양팀';
+      if (tabId === 'setlist') appTitle.innerText = '콘티 편집기';
+      if (tabId === 'stage') appTitle.innerText = '무대 연주 모드';
+      if (tabId === 'sound') appTitle.innerText = '음향 엔지니어 큐';
+
+      document.getElementById('mockup-content').scrollTop = 0;
+    }
+
+    // Toggle Dynamic Island expansion
+    function toggleDynamicIsland() {
+      isIslandExpanded = !isIslandExpanded;
+      const island = document.getElementById('dynamic-island');
+      const collapsed = document.getElementById('island-collapsed-content');
+      const expanded = document.getElementById('island-expanded-content');
+
+      if (isIslandExpanded) {
+        island.classList.remove('px-3', 'py-1', 'rounded-full');
+        island.classList.add('px-4', 'py-3', 'rounded-3xl', 'w-[90%]', 'absolute', 'top-2', 'left-[5%]', 'right-[5%]', 'z-50');
+        collapsed.classList.add('hidden');
+        expanded.classList.remove('hidden');
+      } else {
+        island.classList.add('px-3', 'py-1', 'rounded-full');
+        island.classList.remove('px-4', 'py-3', 'rounded-3xl', 'w-[90%]', 'absolute', 'top-2', 'left-[5%]', 'right-[5%]', 'z-50');
+        collapsed.classList.remove('hidden');
+        expanded.classList.add('hidden');
+      }
+    }
+
+    // Transpose chords in real time
+    function onKeySelectChanged(key) {
+      selectedKey = key;
+      const chords = CHORD_TRANSPOSITION_MAP[key] || CHORD_TRANSPOSITION_MAP['E'];
+      for (let i = 1; i <= 9; i++) {
+        const chordEl = document.getElementById('chord-' + i);
+        if (chordEl && chords[i - 1]) {
+          chordEl.textContent = chords[i - 1];
+        }
+      }
+
+      // Update stage badge
+      const stageBadge = document.getElementById('stage-key-badge');
+      if (stageBadge) stageBadge.textContent = key + ' Key';
+
+      const meta = document.getElementById('sheet-meta');
+      if (meta) meta.textContent = `${key} Key · Moderato · 8분의 6박자`;
+
+      triggerNotification(`🎵 악보 코드가 [${key} Key]로 실시간 전조되었습니다!`);
+    }
+
+    function onBpmInputChanged(val) {
+      const bpm = parseInt(val, 10);
+      if (bpm && bpm >= 40 && bpm <= 240) {
+        currentBpm = bpm;
+        const bpmLabel = document.getElementById('stage-bpm-label');
+        const tempoText = document.getElementById('metro-tempo-text');
+        if (bpmLabel) bpmLabel.textContent = `BPM ${bpm}`;
+        if (tempoText) tempoText.textContent = `♩= ${bpm} (4/4)`;
+        if (isAudioEnabled) startMetronomeLoop();
+      }
+    }
+
+    function adjustBpm(delta) {
+      currentBpm = Math.max(40, Math.min(240, currentBpm + delta));
+      const input = document.getElementById('composer-bpm-input');
+      if (input) input.value = currentBpm;
+      onBpmInputChanged(currentBpm);
+      triggerNotification(`템포 조절: ♩ ${currentBpm} BPM`);
+    }
+
+    // Toggle Sheet Dark Inversion (Stage Mode)
+    function toggleSheetInvert() {
+      isDarkInverted = !isDarkInverted;
+      const sheet = document.getElementById('sheet-wrapper');
+      const btn = document.getElementById('btn-invert-sheet');
+      const text = document.getElementById('invert-btn-text');
+      if (isDarkInverted) {
+        sheet.classList.add('sheet-invert');
+        text.innerText = '원본보기';
+        btn.classList.replace('bg-indigo-600', 'bg-amber-600');
+        triggerNotification('🌙 악보가 무대용 다크 반전 모드로 전환되었습니다.');
+      } else {
+        sheet.classList.remove('sheet-invert');
+        text.innerText = '다크반전';
+        btn.classList.replace('bg-amber-600', 'bg-indigo-600');
+        triggerNotification('☀️ 악보가 화이트 원본 모드로 복원되었습니다.');
+      }
+    }
+
+    // Toggle Dual Page Spread
+    function toggleDualPage() {
+      isDualPage = !isDualPage;
+      const btn = document.getElementById('btn-dual-page');
+      if (isDualPage) {
+        btn.classList.add('bg-indigo-600', 'text-white');
+        btn.classList.remove('bg-slate-800', 'text-slate-300');
+        triggerNotification('📖 양면 보기(2-Page Spread) 모드가 활성화되었습니다.');
+      } else {
+        btn.classList.remove('bg-indigo-600', 'text-white');
+        btn.classList.add('bg-slate-800', 'text-slate-300');
+      }
+    }
+
+    // Set Device Form Factor
+    function setDevice(device) {
+      currentDevice = device;
+      const container = document.getElementById('device-container');
+      const hardware = document.getElementById('device-hardware');
+      const viewport = document.getElementById('mockup-viewport');
+      const island = document.getElementById('dynamic-island');
+      
+      const btnIphone = document.getElementById('btn-iphone');
+      const btnGalaxy = document.getElementById('btn-galaxy');
+      const btnTablet = document.getElementById('btn-tablet');
+
+      [btnIphone, btnGalaxy, btnTablet].forEach(b => {
+        b.className = 'px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all';
+      });
+
+      if (device === 'iphone') {
+        btnIphone.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-md transition-all';
+        container.style.width = '402px';
+        container.style.height = '852px';
+        hardware.style.borderRadius = '54px';
+        viewport.style.borderRadius = '44px';
+        island.style.display = 'flex';
+      } else if (device === 'galaxy') {
+        btnGalaxy.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-md transition-all';
+        container.style.width = '360px';
+        container.style.height = '780px';
+        hardware.style.borderRadius = '40px';
+        viewport.style.borderRadius = '30px';
+        island.style.display = 'none';
+      } else if (device === 'tablet') {
+        btnTablet.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-md transition-all';
+        container.style.width = '680px';
+        container.style.height = '820px';
+        hardware.style.borderRadius = '36px';
+        viewport.style.borderRadius = '26px';
+        island.style.display = 'flex';
+      }
+    }
+
+    // Toggle Light / Dark Mode inside mockup
+    function toggleMockupTheme() {
+      isAppDark = !isAppDark;
+      const viewport = document.getElementById('mockup-viewport');
+      const icon = document.getElementById('theme-icon');
+      const text = document.getElementById('theme-text');
+      if (isAppDark) {
+        viewport.classList.remove('bg-slate-50', 'text-slate-900');
+        viewport.classList.add('bg-[#090d16]', 'text-slate-100');
+        icon.innerText = '🌙';
+        text.innerText = '다크';
+      } else {
+        viewport.classList.remove('bg-[#090d16]', 'text-slate-100');
+        viewport.classList.add('bg-slate-50', 'text-slate-900');
+        icon.innerText = '☀️';
+        text.innerText = '라이트';
+      }
+    }
+
+    // Trigger In-Mockup Toast Notification
+    function triggerNotification(msg) {
+      const toast = document.getElementById('mockup-toast');
+      const toastMsg = document.getElementById('mockup-toast-msg');
+      toastMsg.innerText = msg;
+      toast.classList.remove('-translate-y-24', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.add('-translate-y-24', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 3200);
+    }
+
+    function sendCueWithAudio(msg, freq = 700) {
+      playPing(freq);
+      triggerNotification(msg);
+    }
+
+    function selectSongForStage(songKey, targetKey) {
+      switchTab('stage');
+      const sel = document.getElementById('composer-key-select');
+      if (sel) sel.value = targetKey;
+      onKeySelectChanged(targetKey);
+    }
+
+    function openSongSearchModal() {
+      document.getElementById('song-search-modal').classList.remove('hidden');
+      document.getElementById('song-search-modal').classList.add('flex');
+    }
+
+    function closeSongSearchModal() {
+      document.getElementById('song-search-modal').classList.add('hidden');
+      document.getElementById('song-search-modal').classList.remove('flex');
+    }
+
+    function addSongMock(title, key, bpm) {
+      closeSongSearchModal();
+      triggerNotification(`✅ [${title} (${key} Key)] 곡이 콘티 4번에 추가되었습니다!`);
+    }
+
+    let stageBeaconTimer = null;
+    function broadcastStageCue(type, msg) {
+      if (type.startsWith('tempo')) {
+        playPing(920);
+      } else if (type === 'form_repeat') {
+        playPing(800);
+      } else if (type === 'form_bgm') {
+        playPing(550);
+      } else if (type === 'form_ending') {
+        playPing(440);
+      } else {
+        playPing(700);
+      }
+
+      const banner = document.getElementById('stage-beacon-banner');
+      const text = document.getElementById('stage-beacon-text');
+      if (banner && text) {
+        text.innerText = msg;
+        banner.classList.remove('hidden');
+        if (stageBeaconTimer) clearTimeout(stageBeaconTimer);
+        stageBeaconTimer = setTimeout(() => {
+          banner.classList.add('hidden');
+        }, 6000);
+      }
+      triggerNotification(msg);
+    }
+
+    function dismissStageBeacon() {
+      const banner = document.getElementById('stage-beacon-banner');
+      if (banner) banner.classList.add('hidden');
+      if (stageBeaconTimer) clearTimeout(stageBeaconTimer);
+    }
+
+    function toggleLeaderSpeechNotes() {
+      const notes = document.getElementById('leader-speech-notes');
+      if (notes) {
+        notes.classList.toggle('hidden');
+      }
+    }
+
+    function saveSetlistMock() {
+      playPing(880);
+      triggerNotification('✅ 변경된 콘티(Key, BPM, 디렉팅 메모)가 전체 사역팀에 공유되었습니다!');
+    }
+
+    // Live clock update
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('status-time').innerText = `${hours}:${minutes}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
+</body>
+</html>

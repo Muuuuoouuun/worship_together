@@ -11,6 +11,9 @@ export type SetlistRequest = {
 export type ScheduleSlot = {
     id: string; role: WorshipRole; memberId: string | null;
     attendance: 'pending' | 'confirmed' | 'absent'; volunteers: string[];
+    invitedAt?: string;
+    respondedAt?: string;
+    declineReason?: string;
 };
 export type TeamSchedule = {
     id: string; title: string; kind: 'rehearsal' | 'worship'; startsAt: string; endsAt: string;
@@ -76,6 +79,8 @@ export type PlanningCommand =
     | { type: 'slots.clear'; eventId: string }
     | { type: 'slots.autoFillFromRecent'; eventId: string }
     | { type: 'schedule.sendDutyReminder'; eventId: string }
+    | { type: 'slot.sendInvite'; eventId: string; slotId: string; customNote?: string }
+    | { type: 'schedule.sendInvites'; eventId: string; target?: 'pending' | 'all'; customNote?: string }
     | { type: 'event.createMonthlySundays'; year: number; month: number; startHour: number; startMinute: number; endHour: number; endMinute: number; title: string; location?: string; templateKey?: ScheduleTemplateKey }
     | { type: 'attendance.set'; eventId: string; slotId: string; attendance: 'confirmed' | 'absent'; reason: string; autoRequestSubstitute?: boolean }
     | { type: 'attendance.batchConfirm'; items: Array<{ eventId: string; slotId: string }> }

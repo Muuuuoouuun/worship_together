@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useDeferredValue } from 'react';
 import Link from 'next/link';
 import { createClientId } from '@/lib/clientId';
 import { DEMO_SESSION_ID } from '@/lib/constants';
@@ -230,9 +230,14 @@ export default function LibraryWorkspace({
 
     const songs = hasBackend ? initialSongs : library.songs;
     const setlists = hasBackend ? initialSetlists : library.setlists;
-    const filtered = songs.filter((song) =>
-        `${song.title} ${song.artist ?? ''}`.toLowerCase().includes(search.toLowerCase())
-    );
+    const deferredSearch = useDeferredValue(search);
+    const filtered = useMemo(() => {
+        if (!deferredSearch.trim()) return songs;
+        const q = deferredSearch.toLowerCase();
+        return songs.filter((song) =>
+            `${song.title} ${song.artist ?? ''}`.toLowerCase().includes(q)
+        );
+    }, [songs, deferredSearch]);
 
     const setlistsWithSongs: SetlistWithSongs[] = useMemo(() => {
         return setlists.map((s) => ({

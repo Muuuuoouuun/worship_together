@@ -175,32 +175,71 @@ export default function SoundEngineerWorkspace({
                     보컬 & 마이크 채널 라인업
                 </span>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
-                    <div className="flex items-center gap-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-2">
-                        <Mic size={15} className="text-amber-400 shrink-0" />
-                        <div className="min-w-0">
-                            <p className="font-bold text-amber-200">CH 1: 인도자</p>
-                            <p className="text-[10px] text-white/50 truncate">메인 보컬 / 멘트</p>
+                    <div className="flex items-center justify-between rounded-lg border border-amber-400/30 bg-amber-400/5 p-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Mic size={15} className="text-amber-400 shrink-0" />
+                            <div className="min-w-0">
+                                <p className="font-bold text-amber-200 text-xs">CH 1: 인도자</p>
+                                <p className="text-[10px] text-white/50 truncate">메인 보컬 / 멘트</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0" title="CH 1 Signal Level">
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-500"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-500"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-400"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-amber-400 animate-pulse"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-rose-500/20"></span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
-                        <Mic2 size={15} className="text-emerald-400 shrink-0" />
-                        <div className="min-w-0">
-                            <p className="font-bold text-white">CH 2: 싱어 1</p>
-                            <p className="text-[10px] text-white/50 truncate">소프라노</p>
+
+                    <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Mic2 size={15} className="text-emerald-400 shrink-0" />
+                            <div className="min-w-0">
+                                <p className="font-bold text-white text-xs">CH 2: 싱어 1</p>
+                                <p className="text-[10px] text-white/50 truncate">소프라노</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0" title="CH 2 Signal Level">
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-500"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-500"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-400/40"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-amber-400/20"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-rose-500/20"></span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
-                        <Mic2 size={15} className="text-sky-400 shrink-0" />
-                        <div className="min-w-0">
-                            <p className="font-bold text-white">CH 3: 싱어 2</p>
-                            <p className="text-[10px] text-white/50 truncate">알토 / 코러스</p>
+
+                    <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Mic2 size={15} className="text-sky-400 shrink-0" />
+                            <div className="min-w-0">
+                                <p className="font-bold text-white text-xs">CH 3: 싱어 2</p>
+                                <p className="text-[10px] text-white/50 truncate">알토 / 코러스</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0" title="CH 3 Signal Level">
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-500"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-500"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-400"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-amber-400/20"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-rose-500/20"></span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
-                        <Mic size={15} className="text-purple-400 shrink-0" />
-                        <div className="min-w-0">
-                            <p className="font-bold text-white">CH 4: 싱어 3</p>
-                            <p className="text-[10px] text-white/50 truncate">테너</p>
+
+                    <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Mic size={15} className="text-purple-400 shrink-0" />
+                            <div className="min-w-0">
+                                <p className="font-bold text-white text-xs">CH 4: 싱어 3</p>
+                                <p className="text-[10px] text-white/50 truncate">테너</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0" title="CH 4 Signal Level">
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-500"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-500/40"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-emerald-400/20"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-amber-400/20"></span>
+                            <span className="w-1 h-3 rounded-[1px] bg-rose-500/20"></span>
                         </div>
                     </div>
                 </div>

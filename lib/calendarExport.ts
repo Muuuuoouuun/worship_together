@@ -146,3 +146,53 @@ export function getGoogleCalendarUrl(
 
     return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
+
+export function getMyGoogleCalendarUrl(
+    event: TeamSchedule,
+    slotRole: WorshipRole,
+    teamName = '예배팀'
+): string {
+    const startStr = formatToIcsDate(event.startsAt);
+    const endStr = formatToIcsDate(event.endsAt);
+    const roleName = worshipRoles[slotRole] ?? slotRole;
+    const title = `[${teamName}] ${event.title} (${roleName})`;
+
+    const descParts: string[] = [
+        `내 담당 사역: ${roleName}`,
+        `일시: ${planningDate(event.startsAt)}`,
+    ];
+    if (event.location) descParts.push(`장소: ${event.location}`);
+    if (event.setlistTitle) {
+        descParts.push(`콘티: ${event.setlistTitle}${event.setlistSongs?.length ? ` (${event.setlistSongs.join(', ')})` : ''}`);
+    }
+    if (event.notes) descParts.push(`메모: ${event.notes}`);
+
+    const params = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: title,
+        dates: `${startStr}/${endStr}`,
+        details: descParts.join('\n'),
+        location: event.location || '',
+    });
+
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+export function generateMyScheduleShareText(
+    items: Array<{ event: TeamSchedule; role: WorshipRole }>,
+    memberName: string
+): string {
+    if (items.length === 0) return `[⛪ ${memberName}님의 사역 일정]\n예정된 사역 일정이 없습니다.`;
+    const lines = [`[⛪ ${memberName}님의 사역 일정 안내]\n`];
+    for (const { event, role } of items) {
+        const dateStr = planningDate(event.startsAt);
+        const roleName = worshipRoles[role] ?? role;
+        const setlist = event.setlistTitle ? `\n  - 콘티: ${event.setlistTitle}${event.setlistSongs?.length ? ` (${event.setlistSongs.length}곡)` : ''}` : '';
+        lines.push(`■ ${event.title} [${roleName}]`);
+        lines.push(`  - 일시: ${dateStr}`);
+        if (event.location) lines.push(`  - 장소: ${event.location}`);
+        if (setlist) lines.push(`  ${setlist}`);
+    }
+    lines.push(`\n총 ${items.length}회 사역 예정입니다.`);
+    return lines.join('\n');
+}

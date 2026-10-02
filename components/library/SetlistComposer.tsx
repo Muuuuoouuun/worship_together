@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useDeferredValue } from 'react';
 import { createSetlist } from '@/actions/libraryActions';
 import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/button';
@@ -32,15 +32,16 @@ export default function SetlistComposer({
 }: SetlistComposerProps) {
     const [order, setOrder] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const deferredSearch = useDeferredValue(searchQuery);
     const [overrides, setOverrides] = useState<Record<string, SongSetlistOverride>>({});
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-    // 검색 필터링된 곡 목록
+    // 검색 필터링된 곡 목록 (useDeferredValue로 타이핑 지연 해소)
     const filteredSongs = useMemo(() => {
-        if (!searchQuery.trim()) return songs;
-        const q = searchQuery.toLowerCase();
+        if (!deferredSearch.trim()) return songs;
+        const q = deferredSearch.toLowerCase();
         return songs.filter(s => s.title.toLowerCase().includes(q) || (s.artist && s.artist.toLowerCase().includes(q)));
-    }, [songs, searchQuery]);
+    }, [songs, deferredSearch]);
 
     const move = (index: number, offset: number) => {
         const targetIndex = index + offset;
@@ -311,13 +312,13 @@ export default function SetlistComposer({
                                             </div>
 
                                             {/* 하단: 인도자 전용 세부 설정 (타겟 Key, 커스텀 BPM, 디렉팅 메모) */}
-                                            <div className="mt-2.5 grid gap-2 sm:grid-cols-[6rem_5.5rem_minmax(0,1fr)] pt-2 border-t border-border/50">
+                                            <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-[6rem_5.5rem_minmax(0,1fr)] gap-2 pt-2 border-t border-border/50">
                                                 <label className="text-[11px] font-semibold text-muted-foreground">
                                                     이번 주 Key
                                                     <select
                                                         value={override.targetKey ?? song.original_key ?? ''}
                                                         onChange={(e) => updateOverride(id, { targetKey: e.target.value })}
-                                                        className="mt-1 block w-full rounded-lg border border-border bg-background px-2 py-1 text-xs font-bold text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                                                        className="mt-1 block w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-bold text-foreground focus-visible:outline-2 focus-visible:outline-ring"
                                                     >
                                                         <option value="">원곡 ({song.original_key ?? '-'})</option>
                                                         {COMMON_KEYS.map((k) => (
@@ -335,11 +336,11 @@ export default function SetlistComposer({
                                                         value={override.customBpm ?? song.bpm ?? ''}
                                                         onChange={(e) => updateOverride(id, { customBpm: e.target.value ? Number(e.target.value) : null })}
                                                         placeholder={song.bpm ? String(song.bpm) : '기본'}
-                                                        className="mt-1 block w-full rounded-lg border border-border bg-background px-2 py-1 text-xs font-bold text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                                                        className="mt-1 block w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-bold text-foreground focus-visible:outline-2 focus-visible:outline-ring"
                                                     />
                                                 </label>
 
-                                                <label className="text-[11px] font-semibold text-muted-foreground">
+                                                <label className="col-span-2 sm:col-span-1 text-[11px] font-semibold text-muted-foreground">
                                                     인도자 디렉팅 메모
                                                     <input
                                                         type="text"
@@ -347,7 +348,7 @@ export default function SetlistComposer({
                                                         value={override.leaderNotes ?? ''}
                                                         onChange={(e) => updateOverride(id, { leaderNotes: e.target.value })}
                                                         placeholder="예: 잔잔하게 피아노만 시작, 2절 후렴 빌드업 후 드럼 진입"
-                                                        className="mt-1 block w-full rounded-lg border border-border bg-background px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-2 focus-visible:outline-ring"
+                                                        className="mt-1 block w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-2 focus-visible:outline-ring"
                                                     />
                                                 </label>
                                             </div>

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionFeedbackEntry, SessionFeedbackRole } from '@/types/session';
-import { isCueForParticipant } from '@/types/session';
+import { getCueCategory, isCueForParticipant } from '@/types/session';
 import { useSessionStore } from '@/store/sessionStore';
-import { Mic2, Radio, Waves, X } from 'lucide-react';
+import { playStageCueSound } from '@/lib/stageAudioCue';
+import { Check, CheckCircle2, Mic2, Music2, Radio, Timer, Volume2, Waves, X } from 'lucide-react';
 
 interface SessionCueToastsProps {
     currentClientId: string | null;
@@ -13,7 +14,7 @@ interface SessionCueToastsProps {
 }
 
 const MAX_VISIBLE_TOASTS = 3;
-const TOAST_TTL_MS = 5200;
+const TOAST_TTL_MS = 5500;
 
 export default function SessionCueToasts({ currentClientId, entries, isActive }: SessionCueToastsProps) {
     const selectedFeedbackRole = useSessionStore((state) => state.selectedFeedbackRole);
@@ -54,9 +55,23 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
             return;
         }
 
+        // Auditory In-Ear Chime for musicians
+        try {
+            const cueCat = getCueCategory(toastEntries[0].message);
+            playStageCueSound(cueCat);
+        } catch {}
+
+        // Context-aware tactile haptic feedback
         if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
             try {
-                navigator.vibrate?.([40, 60, 40]);
+                const hasUrgentCue = toastEntries.some(
+                    (e) => getCueCategory(e.message) === 'tempo' || getCueCategory(e.message) === 'sound'
+                );
+                if (hasUrgentCue) {
+                    navigator.vibrate?.([60, 40, 60, 40, 100]);
+                } else {
+                    navigator.vibrate?.([40, 60, 40]);
+                }
             } catch {
                 // Ignore vibration errors on non-supporting devices
             }
@@ -102,46 +117,67 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
             className="fixed left-1/2 top-4 z-[80] flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col gap-3 sm:left-auto sm:right-6 sm:top-6 sm:w-96 sm:translate-x-0"
         >
             {visibleToasts.map((entry) => {
-                const meta = getToastRoleMeta(entry.role);
+                const meta = getToastMeta(entry.message, entry.role);
                 const Icon = meta.icon;
 
                 return (
                     <div
                         key={entry.id}
-                        className={`animate-toast-in relative overflow-hidden rounded-xl border px-4 py-4 shadow-2xl backdrop-blur-xl transition ${meta.containerClassName}`}
+                        className={`animate-toast-in relative overflow-hidden rounded-2xl border px-4 py-3.5 shadow-2xl backdrop-blur-2xl transition ${meta.containerClassName}`}
                     >
                         {/* Toast Lifetime Progress Bar */}
                         <div
-                            className="animate-toast-progress absolute inset-x-0 top-0 h-1 bg-current/25 origin-left"
+                            className="animate-toast-progress absolute inset-x-0 top-0 h-1 bg-current/30 origin-left"
                             style={{ '--toast-duration': `${TOAST_TTL_MS}ms` } as React.CSSProperties}
                         />
 
                         <div className="flex items-start gap-3 pt-0.5">
-                            <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${meta.iconClassName}`}>
-                                <span className="absolute inset-0 rounded-lg bg-current/20 animate-pulse-ring" />
-                                <Icon size={17} className="relative z-10" />
+                            <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.iconClassName}`}>
+                                <span className="absolute inset-0 rounded-xl bg-current/20 animate-pulse-ring" />
+                                <Icon size={18} className="relative z-10" />
                             </div>
                             <div className="min-w-0 flex-1">
-                                <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start justify-between gap-2">
                                     <div>
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] opacity-80">
-                                            Live cue | {meta.label}
-                                        </p>
-                                        <p className="mt-1.5 text-sm font-semibold leading-relaxed">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="rounded-md bg-current/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em]">
+                                                {meta.categoryLabel}
+                                            </span>
+                                            <span className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-75">
+                                                {meta.roleLabel}
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-sm font-black leading-snug">
                                             {entry.message}
                                         </p>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => dismissToast(entry.id)}
-                                        className="tap-bounce flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-card/70 text-muted-foreground transition hover:bg-card hover:text-primary active:scale-90"
-                                        aria-label="라이브 큐 닫기"
-                                    >
-                                        <X size={14} />
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                                                    navigator.vibrate?.(20);
+                                                }
+                                                dismissToast(entry.id);
+                                            }}
+                                            className="tap-target inline-flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[11px] font-black text-current hover:bg-white/25 active:scale-95 transition"
+                                            title="수신 확인 (ACK) 및 닫기"
+                                        >
+                                            <Check size={12} />
+                                            <span>확인</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => dismissToast(entry.id)}
+                                            className="tap-bounce flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-current transition hover:bg-white/20 active:scale-90"
+                                            aria-label="라이브 큐 닫기"
+                                        >
+                                            <X size={13} />
+                                        </button>
+                                    </div>
                                 </div>
-                                <p className="mt-2.5 truncate text-xs opacity-75">
-                                    {[entry.songTitle ?? 'General cue', entry.section, `Page ${entry.page}`]
+                                <p className="mt-2 truncate text-[11px] opacity-75">
+                                    {[entry.songTitle ?? '전체 큐', entry.section, `${entry.page}p`]
                                         .filter(Boolean)
                                         .join(' | ')}
                                 </p>
@@ -154,29 +190,58 @@ export default function SessionCueToasts({ currentClientId, entries, isActive }:
     );
 }
 
-function getToastRoleMeta(role: SessionFeedbackRole) {
-    switch (role) {
-        case 'instrument':
+function getToastMeta(message: string, role: SessionFeedbackRole) {
+    const category = getCueCategory(message);
+
+    switch (category) {
+        case 'tempo':
             return {
-                containerClassName: 'border-primary/15 bg-card/95 text-primary',
+                containerClassName: 'border-amber-400/50 bg-[#1f1609]/95 text-amber-200 shadow-[0_0_30px_rgba(251,191,36,0.25)]',
+                icon: Timer,
+                iconClassName: 'bg-amber-400/20 text-amber-300',
+                categoryLabel: '템포 / 박자',
+                roleLabel: role === 'leader' ? '인도자' : role === 'instrument' ? '악기장' : '미디어',
+            };
+        case 'sound':
+            return {
+                containerClassName: 'border-rose-400/50 bg-[#210913]/95 text-rose-200 shadow-[0_0_30px_rgba(244,63,94,0.25)]',
+                icon: Volume2,
+                iconClassName: 'bg-rose-400/20 text-rose-300',
+                categoryLabel: '음향 / 볼륨',
+                roleLabel: role === 'broadcast' ? '음향' : role === 'leader' ? '인도자' : '악기',
+            };
+        case 'system':
+            return {
+                containerClassName: 'border-sky-400/50 bg-[#091b26]/95 text-sky-200 shadow-[0_0_30px_rgba(56,189,248,0.25)]',
+                icon: CheckCircle2,
+                iconClassName: 'bg-sky-400/20 text-sky-300',
+                categoryLabel: '상태 점검',
+                roleLabel: '시스템',
+            };
+        case 'band':
+            return {
+                containerClassName: 'border-teal-400/50 bg-[#081f1b]/95 text-teal-200 shadow-[0_0_30px_rgba(45,212,191,0.25)]',
                 icon: Waves,
-                iconClassName: 'bg-primary/8 text-primary',
-                label: 'Band',
+                iconClassName: 'bg-teal-400/20 text-teal-300',
+                categoryLabel: '밴드 / 편곡',
+                roleLabel: '악기',
             };
-        case 'broadcast':
+        case 'media':
             return {
-                containerClassName: 'border-emerald-500/25 bg-emerald-50/95 text-emerald-800',
+                containerClassName: 'border-violet-400/50 bg-[#160b24]/95 text-violet-200 shadow-[0_0_30px_rgba(167,139,250,0.25)]',
                 icon: Radio,
-                iconClassName: 'bg-emerald-500/12 text-emerald-700',
-                label: 'Broadcast',
+                iconClassName: 'bg-violet-400/20 text-violet-300',
+                categoryLabel: '방송 / 자막',
+                roleLabel: '미디어',
             };
-        case 'leader':
+        case 'flow':
         default:
             return {
-                containerClassName: 'border-secondary bg-card text-foreground',
-                icon: Mic2,
-                iconClassName: 'bg-secondary/15 text-secondary',
-                label: 'Leader',
+                containerClassName: 'border-emerald-400/50 bg-[#091f14]/95 text-emerald-200 shadow-[0_0_30px_rgba(52,211,153,0.25)]',
+                icon: role === 'leader' ? Mic2 : Music2,
+                iconClassName: 'bg-emerald-400/20 text-emerald-300',
+                categoryLabel: '예배 흐름',
+                roleLabel: role === 'leader' ? '인도자' : role === 'instrument' ? '악기' : '미디어',
             };
     }
 }

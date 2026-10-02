@@ -229,3 +229,135 @@ test('generateIcsContent produces RFC 5545 valid calendar string', (t) => {
     assert.ok(ics.includes('날 구원하신 주 감사'));
     assert.ok(ics.endsWith('END:VCALENDAR'));
 });
+
+test('slots.autoFillFromRecent copies roster from most recent event of same kind', (t) => {
+    const { read, send } = setup(t);
+
+    // 1. Create first worship event with assigned slots
+    send(owner.id, {
+        type: 'event.save',
+        input: {
+            title: '10월 1주차 주일예배',
+            kind: 'worship',
+            startsAt: '2026-10-04T11:00:00+09:00',
+            endsAt: '2026-10-04T12:30:00+09:00',
+            location: '대예배실',
+            notes: '',
+        },
+    });
+    let state = read();
+    const event1 = state.events[0];
+
+    send(owner.id, { type: 'slot.save', eventId: event1.id, role: 'keyboard', memberId: member1.id });
+    send(owner.id, { type: 'slot.save', eventId: event1.id, role: 'drums', memberId: member2.id });
+
+    // 2. Create second worship event without slots
+    send(owner.id, {
+        type: 'event.save',
+        input: {
+            title: '10월 2주차 주일예배',
+            kind: 'worship',
+            startsAt: '2026-10-11T11:00:00+09:00',
+            endsAt: '2026-10-11T12:30:00+09:00',
+            location: '대예배실',
+            notes: '',
+        },
+    });
+    state = read();
+    const event2 = state.events[0]; // unshifted
+    assert.equal(event2.slots.length, 0);
+
+    // 3. Auto-fill from recent event
+    send(owner.id, { type: 'slots.autoFillFromRecent', eventId: event2.id });
+    state = read();
+    const updatedEvent2 = state.events.find((e) => e.id === event2.id)!;
+    assert.equal(updatedEvent2.slots.length, 2);
+
+    const kSlot = updatedEvent2.slots.find((s) => s.role === 'keyboard')!;
+    const dSlot = updatedEvent2.slots.find((s) => s.role === 'drums')!;
+    assert.equal(kSlot.memberId, member1.id);
+    assert.equal(dSlot.memberId, member2.id);
+    assert.equal(kSlot.attendance, 'pending');
+});
+
+test('member.blockDate and unblockDate prevent autoAssign on unavailable dates', (t) => {
+    const { read, send } = setup(t);
+
+    // 1. member1 blocks 2026-10-18 (exam/vacation)
+    send(member1.id, { type: 'member.blockDate', date: '2026-10-18', reason: '가족 여행' });
+    let state = read(owner.id);
+    assert.equal(state.blockedDates?.length, 1);
+    assert.equal(state.blockedDates![0].memberId, member1.id);
+    assert.equal(state.blockedDates![0].date, '2026-10-18');
+    assert.equal(state.blockedDates![0].reason, '가족 여행');
+
+    // 2. Create event on 2026-10-18 with empty keyboard slot
+    send(owner.id, {
+        type: 'event.save',
+        input: {
+            title: '10월 3주차 주일예배',
+            kind: 'worship',
+            startsAt: '2026-10-18T11:00:00+09:00',
+            endsAt: '2026-10-18T12:30:00+09:00',
+            location: '대예배실',
+            notes: '',
+        },
+    });
+    state = read();
+    const event = state.events[0];
+    send(owner.id, { type: 'slot.save', eventId: event.id, role: 'keyboard', memberId: null });
+
+    // 3. autoAssign should fail to assign member1 because date is blocked
+    assert.throws(
+        () => send(owner.id, { type: 'slots.autoAssign', eventId: event.id }),
+        /배정 가능한 적합한 팀원이 없습니다/
+    );
+
+    // 4. member1 unblocks the date
+    send(member1.id, { type: 'member.unblockDate', date: '2026-10-18' });
+    state = read(owner.id);
+    assert.equal(state.blockedDates?.length, 0);
+
+    // 5. Now autoAssign should succeed!
+    send(owner.id, { type: 'slots.autoAssign', eventId: event.id });
+    state = read();
+    const updatedSlot = state.events[0].slots[0];
+    assert.equal(updatedSlot.memberId, member1.id);
+});
+
+test('attendance.set with autoRequestSubstitute sends substitute recommendation notification', (t) => {
+    const { read, send } = setup(t);
+
+    send(owner.id, {
+        type: 'event.save',
+        input: {
+            title: '10월 4주차 주일예배',
+            kind: 'worship',
+            startsAt: '2026-10-25T11:00:00+09:00',
+            endsAt: '2026-10-25T12:30:00+09:00',
+            location: '대예배실',
+            notes: '',
+        },
+    });
+    let state = read();
+    const event = state.events[0];
+    send(owner.id, { type: 'slot.save', eventId: event.id, role: 'drums', memberId: member2.id });
+    state = read();
+    const slot = state.events[0].slots[0];
+
+    // member2 reports absent with autoRequestSubstitute
+    send(member2.id, {
+        type: 'attendance.set',
+        eventId: event.id,
+        slotId: slot.id,
+        attendance: 'absent',
+        reason: '출장',
+        autoRequestSubstitute: true,
+    });
+
+    // Check from owner (manager) perspective
+    const ownerState = read(owner.id);
+    const absenceNotif = ownerState.notifications.find((n) => n.title.includes('결석'));
+    assert.ok(absenceNotif);
+    assert.ok(absenceNotif.body.includes('출장'));
+});

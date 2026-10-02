@@ -14,8 +14,8 @@ import RequestsPanel from './RequestsPanel';
 import SchedulePanel from './SchedulePanel';
 import RotationPanel from './RotationPanel';
 
-const field = 'mt-2 min-h-12 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-base text-foreground';
-const button = 'inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
+const field = 'mt-2 min-h-11 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring';
+const button = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98] disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
 type Props = { teams: OnlineTeam[]; userId?: string; initialTeamId?: string; initialTab?: string; initialSetlist?: { id: string; title: string } };
 const demoMembers: TeamMember[] = [
     { userId: 'demo-leader', name: '예시 인도자', role: 'leader', permission: 'owner' },
@@ -95,7 +95,7 @@ function Board({ teamId, members, userId, online, initialTab, initialSetlist }: 
         window.addEventListener('worship-planning-changed', visibleRefresh);
         return () => { clearInterval(timer); window.removeEventListener('focus', visibleRefresh); document.removeEventListener('visibilitychange', visibleRefresh); window.removeEventListener('storage', storage); window.removeEventListener('worship-planning-changed', visibleRefresh); };
     }, [key, online, refresh]);
-    async function onCommand(command: PlanningCommand): Promise<boolean> {
+    const onCommand = useCallback(async (command: PlanningCommand): Promise<boolean> => {
         if (inFlight.current || !loaded) return false;
         inFlight.current = true; revision.current++; setBusy(true); setError(''); setMessage('');
         try {
@@ -105,58 +105,75 @@ function Board({ teamId, members, userId, online, initialTab, initialSetlist }: 
                 const full = applyPlanningCommand(parsePlanningState(JSON.parse(localStorage.getItem(key) ?? 'null')), roster, userId, command);
                 localStorage.setItem(key, JSON.stringify(full));
                 next = planningForViewer(full, roster, userId);
-                window.dispatchEvent(new Event('worship-planning-changed'));
             }
-            receive(next); window.dispatchEvent(new Event('worship-planning-changed')); setMessage(command.type === 'notification.read' || command.type === 'notification.readAll' ? '확인 상태를 저장했습니다.' : online ? '팀에 저장했습니다.' : '이 브라우저에 저장했습니다.');
+            receive(next);
+            window.dispatchEvent(new Event('worship-planning-changed'));
+            setMessage(command.type === 'notification.read' || command.type === 'notification.readAll' ? '확인 상태를 저장했습니다.' : online ? '팀에 저장했습니다.' : '이 브라우저에 저장했습니다.');
             return true;
         } catch (cause) { setError(cause instanceof Error ? cause.message : '저장하지 못했습니다. 다시 시도해주세요.'); return false; }
         finally { inFlight.current = false; setBusy(false); }
-    }
-    const unread = state.notifications.filter(item => !item.readBy.includes(userId));
-    const panelProps = { state, members: roster, userId, busy: busy || !loaded, onCommand };
+    }, [key, loaded, online, receive, roster, teamId, userId]);
+
+    const unread = useMemo(() => state.notifications.filter(item => !item.readBy.includes(userId)), [state.notifications, userId]);
+    const panelProps = useMemo(() => ({ state, members: roster, userId, busy: busy || !loaded, onCommand }), [state, roster, userId, busy, loaded, onCommand]);
     return <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm leading-6 text-muted-foreground">{online ? '팀에 함께 저장 · 새 알림 자동 확인' : '기기 저장 · 체험 중'}<br />앱을 닫은 상태의 푸시 알림은 지원하지 않습니다.</p><button className={button} onClick={() => void refresh()} disabled={busy}><RefreshCw size={16} /> 새로고침</button></div>
         {toast && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-secondary bg-card p-4"><p className="min-w-0 flex-1 break-words font-bold text-foreground">{toast}</p><button className={button} onClick={() => { setTab('schedule'); setToast(''); }}>긴급 요청 보기</button><button aria-label="새 알림 닫기" className={button} onClick={() => setToast('')}>닫기</button></div>}
-        <details open={inboxOpen} onToggle={event => setInboxOpen(event.currentTarget.open)} className="rounded-2xl border border-border bg-card p-4">
-            <summary className="flex min-h-12 cursor-pointer items-center justify-between font-bold">
-                <div className="flex items-center gap-2">
-                    <Bell size={19} /> 내 알림 <span className="rounded-full bg-primary px-2.5 py-1 text-xs text-primary-foreground">미확인 {unread.length}</span>{unread.some(item => item.urgent) && <span className="text-sm text-secondary">긴급 확인 필요</span>}
+        <details open={inboxOpen} onToggle={event => setInboxOpen(event.currentTarget.open)} className="rounded-2xl border border-border/70 bg-card p-4 shadow-xs">
+            <summary className="flex min-h-10 cursor-pointer items-center justify-between font-bold">
+                <div className="flex items-center gap-2.5">
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Bell size={16} />
+                    </div>
+                    <span className="text-sm font-bold">내 알림</span>
+                    <span className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold text-primary-foreground">
+                        미확인 {unread.length}
+                    </span>
+                    {unread.some(item => item.urgent) && <span className="rounded-full bg-destructive/15 text-destructive px-2 py-0.5 text-xs font-bold">긴급 확인 필요</span>}
                 </div>
             </summary>
             <div className="mt-2 mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs leading-5 text-muted-foreground">‘확인했어요’를 눌렀을 때만 확인 상태로 기록합니다.</p>
+                <p className="text-xs leading-5 text-muted-foreground">‘확인’을 누르면 읽음으로 처리됩니다.</p>
                 {unread.length > 0 && (
                     <button
                         type="button"
-                        className="text-xs font-bold text-primary hover:underline px-2 py-1 rounded bg-primary/10 transition-colors"
+                        className="text-xs font-bold text-primary hover:underline px-2.5 py-1 rounded-lg bg-primary/10 transition-colors"
                         disabled={busy}
                         onClick={() => void onCommand({ type: 'notification.readAll' })}
                     >
-                        ✓ 모두 확인 (전체 읽음)
+                        모두 읽음
                     </button>
                 )}
             </div>
-            <div className="space-y-3">{[...state.notifications].sort((a,b) => Number(a.readBy.includes(userId)) - Number(b.readBy.includes(userId))).map(item => <article key={item.id} className="rounded-xl border border-border p-4"><p className="font-bold">{item.urgent ? '긴급 · ' : ''}{item.title}</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{item.body}</p><p className="mt-2 text-xs text-muted-foreground">{planningDate(item.createdAt)} · {item.readBy.includes(userId) ? '확인함' : '미확인'}</p><div className="mt-3 flex flex-wrap gap-2"><button className={button} onClick={() => setTab(item.target)}>내용 보기</button>{!item.readBy.includes(userId) && <button className={button} disabled={busy} onClick={() => void onCommand({ type: 'notification.read', notificationId: item.id })}>확인했어요</button>}</div></article>)}{!state.notifications.length && <p className="py-3 text-sm text-muted-foreground">아직 받은 알림이 없습니다.</p>}</div>
+            <div className="space-y-3">{[...state.notifications].sort((a,b) => Number(a.readBy.includes(userId)) - Number(b.readBy.includes(userId))).map(item => <article key={item.id} className="rounded-xl border border-border/60 bg-muted/20 p-4 transition-colors hover:bg-muted/40"><p className="font-bold">{item.urgent ? '긴급 · ' : ''}{item.title}</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground/90">{item.body}</p><p className="mt-2 text-xs text-muted-foreground">{planningDate(item.createdAt)} · {item.readBy.includes(userId) ? '확인함' : '미확인'}</p><div className="mt-3 flex flex-wrap gap-2"><button className={button} onClick={() => setTab(item.target)}>내용 보기</button>{!item.readBy.includes(userId) && <button className={button} disabled={busy} onClick={() => void onCommand({ type: 'notification.read', notificationId: item.id })}>확인</button>}</div></article>)}{!state.notifications.length && <p className="py-3 text-sm text-muted-foreground">아직 받은 알림이 없습니다.</p>}</div>
         </details>
-        <div role="tablist" aria-label="예배 준비 메뉴" className="grid grid-cols-3 gap-2">
+        <div role="tablist" aria-label="예배 준비 메뉴" className="grid grid-cols-3 gap-1 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-2xs">
             {[
-                { id: 'schedule', title: '일정 · 인원 배치', icon: CalendarDays },
-                { id: 'rotation', title: '담당 & 로테이션', icon: ArrowLeftRight },
-                { id: 'requests', title: '인도자에게 요청', icon: MessageSquare }
-            ].map(item => (
-                <button
-                    key={item.id}
-                    id={`tab-${item.id}`}
-                    aria-controls={`panel-${item.id}`}
-                    role="tab"
-                    aria-selected={tab === item.id}
-                    className={`${button} min-w-0 flex-col px-2! text-xs! sm:flex-row sm:px-4! sm:text-sm! ${tab === item.id ? 'bg-primary! text-primary-foreground!' : ''}`}
-                    onClick={() => setTab(item.id)}
-                >
-                    <item.icon size={17} className="shrink-0" />
-                    <span className="break-keep text-center">{item.title}</span>
-                </button>
-            ))}
+                { id: 'schedule', title: '일정 · 인원 배치', shortTitle: '일정·배치', icon: CalendarDays },
+                { id: 'rotation', title: '담당 & 로테이션', shortTitle: '로테이션', icon: ArrowLeftRight },
+                { id: 'requests', title: '인도자에게 요청', shortTitle: '요청함', icon: MessageSquare }
+            ].map(item => {
+                const active = tab === item.id;
+                return (
+                    <button
+                        key={item.id}
+                        id={`tab-${item.id}`}
+                        aria-controls={`panel-${item.id}`}
+                        role="tab"
+                        aria-selected={active}
+                        className={`flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition-all sm:px-4 sm:text-sm active:scale-[0.98] ${
+                            active
+                                ? 'bg-card text-foreground font-bold shadow-xs border border-border/60'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                        }`}
+                        onClick={() => setTab(item.id)}
+                    >
+                        <item.icon size={16} className={`shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <span className="hidden sm:inline truncate">{item.title}</span>
+                        <span className="sm:hidden truncate">{item.shortTitle}</span>
+                    </button>
+                );
+            })}
         </div>
         {error && <p role="alert" className="rounded-xl border border-destructive bg-card p-4 text-sm font-semibold text-destructive">{error}</p>}
         <p role="status" className="text-sm font-semibold">{busy ? '저장 중…' : !loaded ? '준비 자료를 불러오는 중…' : message}</p>

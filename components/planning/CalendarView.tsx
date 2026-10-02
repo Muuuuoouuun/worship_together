@@ -129,7 +129,7 @@ export default function CalendarView({
     return (
         <div className="space-y-4 animate-in fade-in duration-200">
             {/* 캘린더 네비게이션 헤더 */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border/70 shadow-2xs">
                 <div className="flex items-center gap-2">
                     <CalendarDays size={20} className="text-primary" />
                     <h3 className="text-lg font-bold text-foreground">
@@ -138,7 +138,7 @@ export default function CalendarView({
                     <button
                         type="button"
                         onClick={handleToday}
-                        className={`${button} ml-2 text-xs py-1 h-7`}
+                        className={`${button} ml-2 text-xs py-1 h-7 rounded-lg`}
                     >
                         오늘
                     </button>
@@ -178,9 +178,9 @@ export default function CalendarView({
             </div>
 
             {/* 캘린더 그리드 */}
-            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+            <div className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-xs">
                 {/* 요일 헤더 */}
-                <div className="grid grid-cols-7 border-b border-border bg-muted/50 text-center text-xs font-bold py-2.5">
+                <div className="grid grid-cols-7 border-b border-border/50 bg-muted/30 text-center text-xs font-bold py-2.5">
                     <span className="text-red-500">일</span>
                     <span>월</span>
                     <span>화</span>
@@ -191,14 +191,21 @@ export default function CalendarView({
                 </div>
 
                 {/* 날짜 셀 그리드 */}
-                <div className="grid grid-cols-7 divide-x divide-y divide-border/60">
-                    {calendarDays.map((day, idx) => {
+                <div className="grid grid-cols-7 divide-x divide-y divide-border/40">
+                    {calendarDays.map((day) => {
                         const dayEvents = eventsByDate.get(day.dateStr) ?? [];
 
                         return (
                             <div
-                                key={idx}
-                                className={`min-h-[110px] sm:min-h-[130px] p-1.5 sm:p-2 flex flex-col justify-between transition-colors ${
+                                key={day.dateStr}
+                                onClick={() => {
+                                    if (dayEvents.length > 0) {
+                                        onSelectEvent(dayEvents[0]);
+                                    } else if (manager && day.isCurrentMonth) {
+                                        onAddEventOnDate(day.dateStr);
+                                    }
+                                }}
+                                className={`group min-h-[75px] sm:min-h-[130px] p-1.5 sm:p-2 flex flex-col justify-between transition-colors cursor-pointer ${
                                     day.isCurrentMonth
                                         ? 'bg-card hover:bg-muted/20'
                                         : 'bg-muted/10 opacity-40'
@@ -206,9 +213,9 @@ export default function CalendarView({
                             >
                                 <div className="flex items-center justify-between">
                                     <span
-                                        className={`inline-flex items-center justify-center size-6 text-xs rounded-full font-bold ${
+                                        className={`inline-flex items-center justify-center size-6 text-xs rounded-full font-bold transition-transform ${
                                             day.isToday
-                                                ? 'bg-primary text-primary-foreground'
+                                                ? 'bg-primary text-primary-foreground shadow-xs ring-2 ring-primary/25 ring-offset-1'
                                                 : day.isSunday
                                                 ? 'text-red-500'
                                                 : day.isSaturday
@@ -223,16 +230,52 @@ export default function CalendarView({
                                         <button
                                             type="button"
                                             title={`${day.dateStr} 새 일정 등록`}
-                                            onClick={() => onAddEventOnDate(day.dateStr)}
-                                            className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onAddEventOnDate(day.dateStr);
+                                            }}
+                                            className="opacity-40 sm:opacity-0 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted"
                                         >
                                             <Plus size={13} />
                                         </button>
                                     )}
                                 </div>
 
-                                {/* 일정 칩 목록 */}
-                                <div className="mt-1 space-y-1 flex-1 overflow-y-auto max-h-[85px]">
+                                {/* 모바일 닷 인디케이터 (sm:hidden) */}
+                                <div className="mt-1 flex flex-wrap gap-1 sm:hidden">
+                                    {dayEvents.map((ev) => {
+                                        const isMyDuty = ev.slots.some((s) => s.memberId === userId);
+                                        const vacantCount = ev.slots.filter(
+                                            (s) => !s.memberId || s.attendance === 'absent'
+                                        ).length;
+
+                                        return (
+                                            <button
+                                                key={ev.id}
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onSelectEvent(ev);
+                                                }}
+                                                className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-bold border transition-transform active:scale-95 ${
+                                                    isMyDuty
+                                                        ? 'border-primary bg-primary text-primary-foreground'
+                                                        : ev.kind === 'worship'
+                                                        ? 'border-primary/30 bg-primary/10 text-primary'
+                                                        : 'border-border bg-muted/60 text-foreground'
+                                                }`}
+                                                title={`${ev.title} (${ev.startsAt.slice(11, 16)})`}
+                                            >
+                                                <span className="size-1.5 rounded-full bg-current shrink-0" />
+                                                <span className="truncate max-w-[28px]">{ev.kind === 'worship' ? '예배' : '연습'}</span>
+                                                {vacantCount > 0 && <span className="text-destructive font-black">!</span>}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* 데스크톱 상세 칩 (hidden sm:block) */}
+                                <div className="hidden sm:block mt-1 space-y-1 flex-1 overflow-y-auto max-h-[85px]">
                                     {dayEvents.map((ev) => {
                                         const isMyDuty = ev.slots.some((s) => s.memberId === userId);
                                         const assignedCount = ev.slots.filter((s) => s.memberId).length;
@@ -246,10 +289,13 @@ export default function CalendarView({
                                             <button
                                                 key={ev.id}
                                                 type="button"
-                                                onClick={() => onSelectEvent(ev)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onSelectEvent(ev);
+                                                }}
                                                 className={`w-full text-left rounded-lg p-1 text-[11px] border transition-all ${
                                                     isMyDuty
-                                                        ? 'border-secondary/40 bg-secondary/10 text-secondary hover:bg-secondary/20'
+                                                        ? 'border-primary/40 bg-primary/10 text-primary font-bold hover:bg-primary/15'
                                                         : ev.kind === 'worship'
                                                         ? 'border-primary/30 bg-primary/5 text-foreground hover:bg-primary/10'
                                                         : 'border-border bg-background/80 text-foreground hover:bg-muted'
@@ -264,7 +310,7 @@ export default function CalendarView({
 
                                                 <div className="flex items-center gap-1 mt-0.5 text-[10px]">
                                                     {isMyDuty && (
-                                                        <span className="font-bold text-secondary">
+                                                        <span className="font-bold text-primary">
                                                             [내 사역]
                                                         </span>
                                                     )}
