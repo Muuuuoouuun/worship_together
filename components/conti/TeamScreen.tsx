@@ -21,7 +21,7 @@ import {
     type AssignStatus,
     type Assignment,
     type PartId,
-} from './draftData';
+} from './mockData';
 import { AddButton, Avatar, AvatarStack, Eyebrow, ScreenTitle, SectionTitle, TONE_BLOCK, chip, ink, line, selected, sub } from './ui';
 
 const PART_ICON: Record<PartId, LucideIcon> = {

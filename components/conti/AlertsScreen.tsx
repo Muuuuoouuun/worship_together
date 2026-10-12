@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ArrowLeft, CheckCheck, CircleCheck, Clock, Inbox, MessageCircle, PencilLine, Upload, UserCheck, UserX, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NOTICE_KIND, member, type Notice, type NoticeCategory, type NoticeKind } from './draftData';
+import { NOTICE_KIND, member, type Notice, type NoticeCategory, type NoticeKind } from './mockData';
 import { Avatar, Eyebrow, RoundIconButton, TONE_BLOCK, TONE_ICON, body, chip, ink, line, sub } from './ui';
 
 export const NOTICE_ICON: Record<NoticeKind, LucideIcon> = {

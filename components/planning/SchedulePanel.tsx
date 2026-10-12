@@ -1467,7 +1467,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                 {myUpcomingSlots[0].event.setlistId && (
                                     <div className="pt-1">
                                         <a
-                                            href={`/dashboard/songs?team=${myUpcomingSlots[0].event.setlistId}`}
+                                            href={`/dashboard/songs/library?team=${myUpcomingSlots[0].event.setlistId}`}
                                             className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
                                         >
                                             <span>악보 보관함에서 열기</span>

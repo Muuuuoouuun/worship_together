@@ -17,7 +17,7 @@ import {
     shortWeekLabel,
     songsOf,
     weekday,
-} from './draftData';
+} from './mockData';
 import { AddButton, Avatar, Eyebrow, RoundIconButton, ScreenTitle, SectionTitle, TONE_BLOCK, body, ink, line, selected, sub, today } from './ui';
 
 const WEEK_HEAD = ['일', '월', '화', '수', '목', '금', '토'];
@@ -40,7 +40,7 @@ export default function ContiScreen({ openOrder }: { openOrder: (id: string) => 
                         <RoundIconButton label="콘티 검색">
                             <Search size={17} />
                         </RoundIconButton>
-                        <AddButton label="새 콘티" />
+                        <AddButton label="새 콘티 만들기 (곡 보관함)" href="/dashboard/songs/library" />
                     </>
                 }
             />

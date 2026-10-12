@@ -17,7 +17,7 @@ import {
     weekLabel,
     type LinkKind,
     type Song,
-} from './draftData';
+} from './mockData';
 import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, TONE_BLOCK, TONE_ICON, body, chip, ink, line, selected, sub } from './ui';
 
 const LINK_ICON: Record<LinkKind, LucideIcon> = {

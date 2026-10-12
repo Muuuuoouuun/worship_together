@@ -23,7 +23,7 @@ import {
     type Notice,
     type ScreenId,
     type TeamRequest,
-} from './draftData';
+} from './mockData';
 import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_DOT, TONE_ICON, body, ink, line, selected, sub, today } from './ui';
 import { NoticeAvatar } from './AlertsScreen';
 

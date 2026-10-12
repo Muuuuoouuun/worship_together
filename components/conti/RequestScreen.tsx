@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ArrowUp, Check, ListFilter } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { REQUEST_KIND, member, type TeamRequest } from './draftData';
+import { REQUEST_KIND, member, type TeamRequest } from './mockData';
 import { Avatar, Eyebrow, RoundIconButton, ScreenTitle, body, chip, ink, line, selected, sub } from './ui';
 
 type Filter = 'all' | 'open' | 'done';

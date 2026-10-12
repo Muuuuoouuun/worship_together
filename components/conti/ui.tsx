@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { ChevronDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { member, type Tone } from './draftData';
+import { member, type Tone } from './mockData';
 
 /** 시안 공통 색: 흰 바탕 + 중립 회색 + 브랜드 primary 한 가지 강조색. */
 export const ink = 'text-neutral-900 dark:text-neutral-50';
@@ -94,14 +95,17 @@ export function Eyebrow({ children, className }: { children: ReactNode; classNam
     return <p className={cn('text-[11px] font-medium', sub, className)}>{children}</p>;
 }
 
-export function AddButton({ label, onClick }: { label: string; onClick?: () => void }) {
+export function AddButton({ label, onClick, href }: { label: string; onClick?: () => void; href?: string }) {
+    const className = 'inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition active:scale-95';
+    if (href) {
+        return (
+            <Link href={href} aria-label={label} title={label} className={className}>
+                <Plus size={18} strokeWidth={2.25} />
+            </Link>
+        );
+    }
     return (
-        <button
-            type="button"
-            aria-label={label}
-            onClick={onClick}
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition active:scale-95"
-        >
+        <button type="button" aria-label={label} title={label} onClick={onClick} className={className}>
             <Plus size={18} strokeWidth={2.25} />
         </button>
     );
