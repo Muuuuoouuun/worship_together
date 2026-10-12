@@ -1,4 +1,5 @@
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
+import Link from 'next/link';
 import MeshBackground from '@/components/ui/MeshBackground';
 import GlassCard from '@/components/ui/GlassCard';
 import { DEMO_TEAM_ID } from '@/lib/constants';
@@ -52,10 +53,16 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
         <DashboardLayout currentPath="/dashboard/songs">
             <MeshBackground />
             <div className="mx-auto flex max-w-7xl flex-col gap-6">
-                <section>
+                <section className="flex flex-wrap items-end justify-between gap-2">
                     <h1 className="text-2xl font-serif font-black tracking-tight text-primary sm:text-3xl">
                         콘티·악보
                     </h1>
+                    <Link
+                        href="/dashboard/songs/drafts"
+                        className="inline-flex min-h-10 items-center rounded-full border border-border bg-card px-3.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
+                    >
+                        콘티·순서 디자인 시안 A·B·C
+                    </Link>
                 </section>
 
                 {createdKey && successMessages[createdKey] && (
