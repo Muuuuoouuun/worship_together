@@ -2,7 +2,7 @@
 
 import { createClientId } from '@/lib/clientId';
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
-import { BookOpen, Download, Eraser, FileUp, Hand, Highlighter, Maximize2, Minimize2, Moon, Pencil, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2 } from 'lucide-react';
+import { BookOpen, ChevronRight, Delete, Download, Eraser, FileUp, Hand, Highlighter, ListMusic, Maximize2, Minimize2, Moon, Pencil, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
@@ -22,7 +22,22 @@ import {
     type SheetDocument,
     type SheetMark,
 } from '@/lib/sheetAnnotations';
+import {
+    abbreviateSectionLabel,
+    layoutSongFormMarkup,
+    songFormChipColor,
+    splitRepeat,
+    toggleRepeat,
+    SONG_FORM_CHIPS,
+    SONG_FORM_DEFAULT_ANCHOR,
+    SONG_FORM_MAX_ANCHOR_X,
+    SONG_FORM_MAX_SECTIONS,
+    SONG_FORM_PRESETS,
+    SONG_FORM_ROW_HEIGHT,
+} from '@/lib/songFormMarkup';
+import { readSongForm } from '@/lib/songFormStorage';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
+import SongFormMarkup, { SongFormMarkupPlaceholder } from './SongFormMarkup';
 
 type Props = {
     teamId: string;
@@ -33,6 +48,8 @@ type Props = {
     canTurnPage: boolean;
     onPageCountChange?: (count: number) => void;
 };
+
+type SongFormDrag = { id: string; offset: [number, number]; anchor: [number, number] };
 
 const button =
     'tap-target inline-flex items-center justify-center gap-2 rounded-xl border border-primary/15 px-3 py-2 text-sm font-semibold disabled:opacity-40';
@@ -49,7 +66,7 @@ export default function SheetAnnotationWorkspace({
     const [draft, setDraft] = useState<SheetDocument | null>(null);
     const [published, setPublished] = useState<SheetDocument | null>(null);
     const [view, setView] = useState<'draft' | 'published'>('draft');
-    const [tool, setTool] = useState<'move' | 'pen' | 'highlighter' | 'eraser' | 'stamp' | 'text' | 'rect'>('move');
+    const [tool, setTool] = useState<'move' | 'pen' | 'highlighter' | 'eraser' | 'stamp' | 'text' | 'rect' | 'songform'>('move');
     const [stamp, setStamp] = useState<string>(WORSHIP_STAMP_PRESETS[0]);
     const [color, setColor] = useState(SHEET_COLORS[0]);
     const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_COLORS[0]);
@@ -59,6 +76,8 @@ export default function SheetAnnotationWorkspace({
     const [redoStack, setRedoStack] = useState<SheetMark[]>([]);
     const [textModal, setTextModal] = useState<{ isOpen: boolean; x: number; y: number; text: string } | null>(null);
     const [rectStart, setRectStart] = useState<[number, number] | null>(null);
+    const [songFormDrag, setSongFormDrag] = useState<SongFormDrag | null>(null);
+    const [pendingSongFormAnchor, setPendingSongFormAnchor] = useState<{ page: number; point: [number, number] } | null>(null);
     const [songFormOverlayMode, setSongFormOverlayMode] = useState<SongFormOverlayDisplayMode>(() => {
         if (typeof window === 'undefined') return 'first_page_only';
         return (window.localStorage.getItem('wt_sheet_songform_mode') as SongFormOverlayDisplayMode) || 'first_page_only';
@@ -80,6 +99,7 @@ export default function SheetAnnotationWorkspace({
     const rafRef = useRef<number | null>(null);
     const lastEraserCheckRef = useRef<number>(0);
     const sectionRef = useRef<HTMLElement | null>(null);
+    const songFormDragRef = useRef<SongFormDrag | null>(null);
 
     const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen();
     const { isActive: isWakeLockActive, isSupported: isWakeLockSupported, toggle: toggleWakeLock } = useScreenWakeLock(true);
@@ -88,6 +108,9 @@ export default function SheetAnnotationWorkspace({
     const publishedKey = sheetKey(teamId, songId, true);
     const shown = view === 'draft' ? draft : published;
     const activePage = shown?.pages[page - 1];
+    const pageRatio = activePage ? activePage.height / activePage.width : 1;
+    const songFormSections = (view === 'draft' && activePage?.marks.find((m) => m.kind === 'songform')?.sections) || [];
+    const isSongFormEditing = tool === 'songform' && view === 'draft';
 
     usePageTurner({
         onNext: () => {
@@ -222,6 +245,73 @@ export default function SheetAnnotationWorkspace({
         setStatus('필기 항목이 삭제되었습니다.');
     }
 
+    /** One song form band per page; reads documentRef so rapid chip taps never drop a chip. */
+    function currentSongFormMark(): SheetMark | null {
+        return documentRef.current?.pages[page - 1]?.marks.find((m) => m.kind === 'songform') ?? null;
+    }
+
+    function writeSongForm(sections: string[], anchor?: [number, number]) {
+        const current = documentRef.current;
+        const target = current?.pages[page - 1];
+        if (!current || !target) return;
+        const existing = currentSongFormMark();
+        const nextSections = sections.slice(0, SONG_FORM_MAX_SECTIONS);
+        let marks: SheetMark[];
+        if (!nextSections.length) {
+            marks = target.marks.filter((m) => m.kind !== 'songform');
+        } else if (existing) {
+            marks = target.marks.map((m) =>
+                m.id === existing.id ? { ...m, sections: nextSections, points: anchor ? [anchor] : m.points } : m
+            );
+        } else {
+            if (target.marks.length >= 2000) return;
+            const start = anchor ?? (pendingSongFormAnchor?.page === page ? pendingSongFormAnchor.point : SONG_FORM_DEFAULT_ANCHOR);
+            marks = [...target.marks, { id: createClientId(), kind: 'songform', color: '#0f172a', points: [start], sections: nextSections }];
+        }
+        setRedoStack([]);
+        persist({
+            ...current,
+            updatedAt: new Date().toISOString(),
+            pages: current.pages.map((item, index) => (index === page - 1 ? { ...item, marks } : item)),
+        });
+    }
+
+    function appendSongFormChip(label: string) {
+        const sections = currentSongFormMark()?.sections ?? [];
+        if (sections.length >= SONG_FORM_MAX_SECTIONS) {
+            setStatus(`송폼은 최대 ${SONG_FORM_MAX_SECTIONS}칸까지 얹을 수 있습니다.`);
+            return;
+        }
+        writeSongForm([...sections, label]);
+    }
+
+    function repeatLastSongFormChip(times: number) {
+        const sections = currentSongFormMark()?.sections ?? [];
+        if (!sections.length) return;
+        writeSongForm([...sections.slice(0, -1), toggleRepeat(sections[sections.length - 1], times)]);
+    }
+
+    function removeSongFormChip(index: number) {
+        writeSongForm((currentSongFormMark()?.sections ?? []).filter((_, i) => i !== index));
+    }
+
+    function importSavedSongForm() {
+        const saved = readSongForm(songId, teamId);
+        if (!saved?.sections.length) {
+            setStatus('이 곡에 저장된 송폼이 없습니다. 칩이나 프리셋으로 만들어주세요.');
+            return;
+        }
+        writeSongForm(saved.sections.map((section) => abbreviateSectionLabel(section.label)));
+    }
+
+    /** Converts a pointer position (viewBox units) into a clamped band anchor (mark units). */
+    function songFormAnchorAt(pointVb: [number, number], offset: [number, number], sections: string[]): [number, number] {
+        const plateHeight = layoutSongFormMarkup(sections, [0, 0]).plate.height;
+        const x = Math.max(0, Math.min(SONG_FORM_MAX_ANCHOR_X, pointVb[0] - offset[0]));
+        const yVb = Math.max(0, Math.min(1000 * pageRatio - plateHeight, pointVb[1] - offset[1]));
+        return [x, Math.max(0, Math.min(1000, yVb / pageRatio))];
+    }
+
     function position(clientX: number, clientY: number, target?: SVGSVGElement): [number, number] {
         const rect = rectRef.current ?? target?.getBoundingClientRect();
         if (!rect || rect.width === 0 || rect.height === 0) return [0, 0];
@@ -235,6 +325,27 @@ export default function SheetAnnotationWorkspace({
         if (view !== 'draft' || tool === 'move' || !event.isPrimary || busy || (event.pointerType === 'mouse' && event.button !== 0)) return;
         event.preventDefault();
         rectRef.current = event.currentTarget.getBoundingClientRect();
+
+        if (tool === 'songform') {
+            const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
+            const pointVb: [number, number] = [x, y * pageRatio];
+            const existing = currentSongFormMark();
+            if (!existing?.sections) {
+                setPendingSongFormAnchor({ page, point: songFormAnchorAt(pointVb, [0, SONG_FORM_ROW_HEIGHT / 2], ['I']) });
+                rectRef.current = null;
+                return;
+            }
+            const anchorVb: [number, number] = [existing.points[0][0], existing.points[0][1] * pageRatio];
+            // Grabbing the band keeps the grab offset; tapping elsewhere moves the band's first row there.
+            const offset: [number, number] = isPointNearMark(x, y, existing, pageRatio, 0)
+                ? [pointVb[0] - anchorVb[0], pointVb[1] - anchorVb[1]]
+                : [0, SONG_FORM_ROW_HEIGHT / 2];
+            event.currentTarget.setPointerCapture(event.pointerId);
+            const drag = { id: existing.id, offset, anchor: songFormAnchorAt(pointVb, offset, existing.sections) };
+            songFormDragRef.current = drag;
+            setSongFormDrag(drag);
+            return;
+        }
 
         if (tool === 'eraser') {
             const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
@@ -303,6 +414,19 @@ export default function SheetAnnotationWorkspace({
     }
 
     function pointerMove(event: PointerEvent<SVGSVGElement>) {
+        if (songFormDragRef.current) {
+            const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
+            const drag = songFormDragRef.current;
+            drag.anchor = songFormAnchorAt([x, y * pageRatio], drag.offset, currentSongFormMark()?.sections ?? []);
+            if (!rafRef.current) {
+                rafRef.current = requestAnimationFrame(() => {
+                    rafRef.current = null;
+                    if (songFormDragRef.current) setSongFormDrag({ ...songFormDragRef.current });
+                });
+            }
+            return;
+        }
+
         if (tool === 'eraser' && (event.buttons === 1 || event.pointerType === 'touch')) {
             const now = performance.now();
             if (now - lastEraserCheckRef.current < 25) return;
@@ -341,6 +465,14 @@ export default function SheetAnnotationWorkspace({
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
         }
+        if (songFormDragRef.current) {
+            const sections = currentSongFormMark()?.sections;
+            if (sections) writeSongForm(sections, songFormDragRef.current.anchor);
+            songFormDragRef.current = null;
+            setSongFormDrag(null);
+            rectRef.current = null;
+            return;
+        }
         if (tool === 'rect') {
             if (strokeRef.current && strokeRef.current.points.length >= 2) {
                 const [p1, p2] = strokeRef.current.points;
@@ -357,6 +489,13 @@ export default function SheetAnnotationWorkspace({
         strokeRef.current = null;
         setStroke(null);
         rectRef.current = null;
+    }
+
+    function cancelPointer() {
+        strokeRef.current = null;
+        setStroke(null);
+        songFormDragRef.current = null;
+        setSongFormDrag(null);
     }
 
     function handleSaveTextMark() {
@@ -622,12 +761,34 @@ export default function SheetAnnotationWorkspace({
         );
     }
 
-    function renderMarkList(marks: SheetMark[], currentStroke?: SheetMark | null) {
+    function renderSongFormMark(mark: SheetMark, interactive: boolean) {
+        const drag = interactive && songFormDrag?.id === mark.id ? songFormDrag : null;
+        return (
+            <SongFormMarkup
+                key={mark.id}
+                sections={mark.sections ?? []}
+                anchor={drag?.anchor ?? mark.points[0]}
+                ratio={pageRatio}
+                dragging={Boolean(drag)}
+                selected={interactive && isSongFormEditing}
+                className={tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : ''}
+                onClick={(e) => {
+                    if (tool === 'eraser') {
+                        e.stopPropagation();
+                        removeMark(mark.id);
+                    }
+                }}
+            />
+        );
+    }
+
+    function renderMarkList(marks: SheetMark[], currentStroke?: SheetMark | null, interactive = true) {
         const highlighters = marks.filter((m) => m.kind === 'highlighter');
         const rects = marks.filter((m) => m.kind === 'rect');
         const pens = marks.filter((m) => m.kind === 'pen');
         const stamps = marks.filter((m) => m.kind === 'stamp');
         const texts = marks.filter((m) => m.kind === 'text');
+        const songForms = marks.filter((m) => m.kind === 'songform');
 
         return (
             <>
@@ -641,6 +802,13 @@ export default function SheetAnnotationWorkspace({
                 {currentStroke?.kind === 'stamp' ? renderMark(currentStroke) : null}
                 {texts.map(renderMark)}
                 {currentStroke?.kind === 'text' ? renderMark(currentStroke) : null}
+                {songForms.map((mark) => renderSongFormMark(mark, interactive))}
+                {interactive && isSongFormEditing && !songForms.length ? (
+                    <SongFormMarkupPlaceholder
+                        anchor={pendingSongFormAnchor?.page === page ? pendingSongFormAnchor.point : SONG_FORM_DEFAULT_ANCHOR}
+                        ratio={pageRatio}
+                    />
+                ) : null}
             </>
         );
     }
@@ -725,6 +893,9 @@ export default function SheetAnnotationWorkspace({
                         <button className={`${button} ${tool === 'move' ? 'bg-primary text-primary-foreground' : ''}`} aria-pressed={tool === 'move'} onClick={() => setTool('move')}>
                             <Hand size={16} /> 이동
                         </button>
+                        <button className={`${button} ${tool === 'songform' ? 'bg-violet-500/20 border-violet-400 text-violet-700 dark:text-violet-300 font-bold' : ''}`} aria-pressed={tool === 'songform'} onClick={() => setTool('songform')}>
+                            <ListMusic size={16} /> 송폼
+                        </button>
                         <button className={`${button} ${tool === 'pen' ? 'bg-primary text-primary-foreground' : ''}`} aria-pressed={tool === 'pen'} onClick={() => setTool('pen')}>
                             <Pencil size={16} /> 펜
                         </button>
@@ -783,6 +954,109 @@ export default function SheetAnnotationWorkspace({
 
                     {/* Tool Detail Options (Colors & Stroke Widths) */}
                     <div className="flex flex-wrap items-center gap-4 pt-1 border-t border-primary/10">
+                        {tool === 'songform' && (
+                            <div className="w-full space-y-2.5" role="group" aria-label="송폼 칩">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">섹션</span>
+                                    {SONG_FORM_CHIPS.map((chip) => (
+                                        <button
+                                            key={chip.label}
+                                            type="button"
+                                            title={`${chip.name} 추가`}
+                                            disabled={busy || !activePage || songFormSections.length >= SONG_FORM_MAX_SECTIONS}
+                                            onClick={() => appendSongFormChip(chip.label)}
+                                            className="tap-target min-w-12 rounded-xl px-3 text-sm font-black text-white shadow-xs transition hover:brightness-110 active:scale-95 disabled:opacity-40"
+                                            style={{ backgroundColor: songFormChipColor(chip.label) }}
+                                        >
+                                            {chip.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">반복</span>
+                                    {[2, 3].map((times) => (
+                                        <button
+                                            key={times}
+                                            type="button"
+                                            title={`마지막 칩을 ${times}번 반복으로 표시`}
+                                            disabled={busy || !songFormSections.length}
+                                            aria-pressed={splitRepeat(songFormSections[songFormSections.length - 1] ?? '').repeat === times}
+                                            onClick={() => repeatLastSongFormChip(times)}
+                                            className={`${button} min-w-12 aria-pressed:bg-primary aria-pressed:text-primary-foreground`}
+                                        >
+                                            ×{times}
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        className={button}
+                                        disabled={busy || !songFormSections.length}
+                                        onClick={() => removeSongFormChip(songFormSections.length - 1)}
+                                    >
+                                        <Delete size={16} /> 마지막 칩
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`${button} text-rose-600 border-rose-300/40 hover:bg-rose-500/10`}
+                                        disabled={busy || !songFormSections.length}
+                                        onClick={() => writeSongForm([])}
+                                    >
+                                        <Trash2 size={16} /> 송폼 지우기
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">프리셋</span>
+                                    {SONG_FORM_PRESETS.map((preset) => (
+                                        <button
+                                            key={preset.name}
+                                            type="button"
+                                            className={button}
+                                            title={preset.sections.join(' → ')}
+                                            disabled={busy || !activePage}
+                                            onClick={() => writeSongForm(preset.sections)}
+                                        >
+                                            {preset.name}
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        className={button}
+                                        title="곡 라이브러리·유튜브 챕터로 저장한 송폼을 칩으로 가져옵니다"
+                                        disabled={busy || !activePage}
+                                        onClick={importSavedSongForm}
+                                    >
+                                        곡 송폼 불러오기
+                                    </button>
+                                </div>
+                                <ol
+                                    aria-label="현재 페이지 송폼 순서"
+                                    className="flex min-h-11 flex-wrap items-center gap-1 rounded-xl border border-dashed border-primary/20 bg-background/60 px-2 py-1.5"
+                                >
+                                    {songFormSections.length ? (
+                                        songFormSections.map((label, index) => (
+                                            <li key={`${index}-${label}`} className="flex items-center gap-1">
+                                                {index > 0 && <ChevronRight size={12} className="text-muted-foreground" aria-hidden />}
+                                                <button
+                                                    type="button"
+                                                    aria-label={`${index + 1}번째 ${label} 빼기`}
+                                                    title="눌러서 이 칩 빼기"
+                                                    disabled={busy}
+                                                    onClick={() => removeSongFormChip(index)}
+                                                    className="group inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-xs font-black text-white transition active:scale-95"
+                                                    style={{ backgroundColor: songFormChipColor(label) }}
+                                                >
+                                                    {label}
+                                                    <X size={11} className="opacity-60 group-hover:opacity-100" aria-hidden />
+                                                </button>
+                                            </li>
+                                        ))
+                                    ) : (
+                                        <li className="text-xs text-muted-foreground">아직 송폼이 없습니다. 위 칩을 진행 순서대로 눌러보세요.</li>
+                                    )}
+                                </ol>
+                            </div>
+                        )}
+
                         {tool === 'pen' && (
                             <div className="flex items-center gap-1.5 text-xs">
                                 <span className="font-medium text-muted-foreground">선 굵기:</span>
@@ -889,6 +1163,8 @@ export default function SheetAnnotationWorkspace({
                     <p className="text-xs text-muted-foreground">
                         {tool === 'move'
                             ? '이동 모드에서는 손가락으로 화면을 스크롤할 수 있습니다.'
+                            : tool === 'songform'
+                                ? '칩을 누를 때마다 이 페이지 상단에 송폼이 마크업으로 얹힙니다. 악보를 누르거나 끌어서 위치를 옮기고, 공유본·공유 파일에 함께 담깁니다.'
                             : tool === 'pen'
                                 ? '악보 위에 손가락이나 펜으로 그리세요. 스크롤하려면 이동을 누르세요.'
                                 : tool === 'highlighter'
@@ -1015,8 +1291,8 @@ export default function SheetAnnotationWorkspace({
             <div className={`relative overflow-auto rounded-xl border border-primary/15 transition-all ${
                 isDarkInverted ? 'bg-[#0a0f0e] dark-sheet-invert' : 'bg-white text-gray-900'
             }`}>
-                {/* Song Form Roadmap Overlay on Sheet Music */}
-                {activePage && (
+                {/* Song Form Roadmap Overlay on Sheet Music — yields to a song form band burned into the page */}
+                {activePage && !isSongFormEditing && !activePage.marks.some((m) => m.kind === 'songform') && (
                     <SongFormScoreOverlay
                         teamId={teamId}
                         songId={songId}
@@ -1057,7 +1333,7 @@ export default function SheetAnnotationWorkspace({
                                     style={{
                                         touchAction: view === 'draft' && tool !== 'move' ? 'none' : 'auto',
                                         cursor:
-                                            tool === 'move'
+                                            tool === 'move' || tool === 'songform'
                                                 ? 'grab'
                                                 : tool === 'eraser'
                                                     ? 'pointer'
@@ -1068,10 +1344,7 @@ export default function SheetAnnotationWorkspace({
                                     onPointerDown={pointerDown}
                                     onPointerMove={pointerMove}
                                     onPointerUp={pointerUp}
-                                    onPointerCancel={() => {
-                                        strokeRef.current = null;
-                                        setStroke(null);
-                                    }}
+                                    onPointerCancel={cancelPointer}
                                 >
                                     {renderMarkList(activePage.marks, stroke)}
                                 </svg>
@@ -1100,7 +1373,7 @@ export default function SheetAnnotationWorkspace({
                                     viewBox={`0 0 1000 ${(1000 * shown.pages[page].height) / shown.pages[page].width}`}
                                     preserveAspectRatio="none"
                                 >
-                                    {renderMarkList(shown.pages[page].marks, null)}
+                                    {renderMarkList(shown.pages[page].marks, null, false)}
                                 </svg>
                                 <span className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
                                     {page + 1}p
@@ -1133,7 +1406,7 @@ export default function SheetAnnotationWorkspace({
                             style={{
                                 touchAction: view === 'draft' && tool !== 'move' ? 'none' : 'auto',
                                 cursor:
-                                    tool === 'move'
+                                    tool === 'move' || tool === 'songform'
                                         ? 'grab'
                                         : tool === 'eraser'
                                             ? 'pointer'
@@ -1144,10 +1417,7 @@ export default function SheetAnnotationWorkspace({
                             onPointerDown={pointerDown}
                             onPointerMove={pointerMove}
                             onPointerUp={pointerUp}
-                            onPointerCancel={() => {
-                                strokeRef.current = null;
-                                setStroke(null);
-                            }}
+                            onPointerCancel={cancelPointer}
                         >
                             {renderMarkList(activePage.marks, stroke)}
                         </svg>

@@ -43,6 +43,7 @@ import {
     type SheetMark,
 } from '@/lib/sheetAnnotations';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
+import SongFormMarkup from './SongFormMarkup';
 
 export interface LiveStageScoreViewerProps {
     teamId: string;
@@ -510,6 +511,10 @@ export default function LiveStageScoreViewer({
         const renderSingleMark = (mark: SheetMark) => {
             const point = mark.points[0];
 
+            if (mark.kind === 'songform') {
+                return <SongFormMarkup key={mark.id} sections={mark.sections ?? []} anchor={point} ratio={ratio} />;
+            }
+
             if (mark.kind === 'stamp') {
                 return (
                     <text
@@ -610,6 +615,7 @@ export default function LiveStageScoreViewer({
         const pens = marks.filter((m) => m.kind === 'pen');
         const stamps = marks.filter((m) => m.kind === 'stamp');
         const texts = marks.filter((m) => m.kind === 'text');
+        const songForms = marks.filter((m) => m.kind === 'songform');
 
         return (
             <>
@@ -618,6 +624,7 @@ export default function LiveStageScoreViewer({
                 {pens.map(renderSingleMark)}
                 {stamps.map(renderSingleMark)}
                 {texts.map(renderSingleMark)}
+                {songForms.map(renderSingleMark)}
             </>
         );
     }
@@ -1244,8 +1251,8 @@ export default function LiveStageScoreViewer({
 
             {/* Score Display Area with BPM Giant Bar & Pulse Overlay */}
             <div className="relative flex-1 min-h-0 overflow-hidden rounded-xl border border-white/10 bg-black flex flex-col">
-                {/* Song Form Roadmap Overlay on Sheet Music */}
-                {activePage && (
+                {/* Song Form Roadmap Overlay on Sheet Music — yields to a song form band burned into the page */}
+                {activePage && !activePage.marks.some((m) => m.kind === 'songform') && (
                     <SongFormScoreOverlay
                         teamId={teamId}
                         songId={songId}
