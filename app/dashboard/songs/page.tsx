@@ -32,6 +32,9 @@ export default async function SongsPage({ searchParams }: SongsPageProps) {
                             <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">샘플 데이터</span>
                         </h1>
                         <p className="mt-1 text-sm text-muted-foreground">이번 주 콘티와 순서, 팀 배치와 요청을 한곳에서</p>
+                        <Link href="/dashboard/songs/deadline" className="mt-1.5 inline-flex min-h-8 items-center text-xs font-semibold text-primary underline-offset-2 hover:underline">
+                            콘티 마감 알림 목업 보기 →
+                        </Link>
                     </div>
                     <Link
                         href="/dashboard/songs/library"
