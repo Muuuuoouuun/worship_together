@@ -3,7 +3,9 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { CalendarPlus, House, Inbox, ListMusic, MessageSquarePlus, Plus, UsersRound, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NOTICES, REQUESTS, THIS_WEEK_SETLIST_ID, type ScreenId } from './mockData';
+import { NOTICES, REQUESTS } from './mockData';
+import type { ScreenId } from './model';
+import { ContiProvider, type ContiData } from './context';
 import { ink, line, selected } from './ui';
 import WeekScreen from './WeekScreen';
 import ContiScreen from './ContiScreen';
@@ -47,10 +49,12 @@ const PAGE_TABS: { id: Exclude<ScreenId, 'order'>; label: string }[] = [
 export type WorkspaceMode = 'embedded' | 'app' | 'framed';
 
 export default function ContiWorkspace({
+    data,
     initialScreen = 'week',
-    initialSetlistId = THIS_WEEK_SETLIST_ID,
+    initialSetlistId,
     mode = 'embedded',
 }: {
+    data: ContiData;
     initialScreen?: ScreenId;
     initialSetlistId?: string;
     mode?: WorkspaceMode;
@@ -58,7 +62,7 @@ export default function ContiWorkspace({
     const framed = mode === 'framed';
     const embedded = mode === 'embedded';
     const [screen, setScreen] = useState<ScreenId>(initialScreen);
-    const [setlistId, setSetlistId] = useState(initialSetlistId);
+    const [setlistId, setSetlistId] = useState(initialSetlistId ?? data.thisWeekId ?? data.setlists[0]?.id ?? '');
     const [requests, setRequests] = useState(REQUESTS);
     const [notices, setNotices] = useState(NOTICES);
     const [sheetOpen, setSheetOpen] = useState(false);
@@ -106,14 +110,14 @@ export default function ContiWorkspace({
     }
 
     const screens = (
-        <>
+        <ContiProvider value={data}>
             {screen === 'week' && <WeekScreen requests={requests} notices={notices} go={go} openOrder={openOrder} />}
             {screen === 'conti' && <ContiScreen openOrder={openOrder} />}
             {screen === 'order' && <OrderScreen setlistId={setlistId} onBack={() => go('conti')} onSelect={selectSetlist} />}
             {screen === 'team' && <TeamScreen />}
             {screen === 'requests' && <RequestScreen requests={requests} onToggle={toggleRequest} />}
             {screen === 'alerts' && <AlertsScreen notices={notices} onRead={readNotice} onReadAll={readAllNotices} onBack={() => go('week')} />}
-        </>
+        </ContiProvider>
     );
 
     if (embedded) {

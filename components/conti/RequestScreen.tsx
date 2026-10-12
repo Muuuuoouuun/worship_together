@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { ArrowUp, Check, ListFilter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { REQUEST_KIND, member, type TeamRequest } from './mockData';
-import { Avatar, Eyebrow, RoundIconButton, ScreenTitle, body, chip, ink, line, selected, sub } from './ui';
+import { useConti } from './context';
+import { Avatar, Eyebrow, RoundIconButton, SampleChip, ScreenTitle, body, chip, ink, line, selected, sub } from './ui';
 
 type Filter = 'all' | 'open' | 'done';
 
@@ -17,6 +18,7 @@ const FILTERS: { id: Filter; label: string }[] = [
 const QUICK_REPLIES = ['확인했어요', '반영할게요', '연습 때 이야기해요'];
 
 export default function RequestScreen({ requests, onToggle }: { requests: TeamRequest[]; onToggle: (id: string) => void }) {
+    const { sampleSections } = useConti();
     const [filter, setFilter] = useState<Filter>('all');
     const [openId, setOpenId] = useState<string | null>('r1');
     const openCount = requests.filter((request) => !request.done).length;
@@ -25,7 +27,7 @@ export default function RequestScreen({ requests, onToggle }: { requests: TeamRe
     return (
         <div className="space-y-6">
             <ScreenTitle
-                eyebrow="요청"
+                eyebrow={<>요청 {sampleSections && <SampleChip className="ml-1" />}</>}
                 title="요청 관리"
                 trailing={`${openCount}건 진행 중`}
                 aside={

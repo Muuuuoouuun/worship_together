@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { ArrowLeft, CheckCheck, CircleCheck, Clock, Inbox, MessageCircle, PencilLine, Upload, UserCheck, UserX, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NOTICE_KIND, member, type Notice, type NoticeCategory, type NoticeKind } from './mockData';
-import { Avatar, Eyebrow, RoundIconButton, TONE_BLOCK, TONE_ICON, body, chip, ink, line, sub } from './ui';
+import { useConti } from './context';
+import { Avatar, Eyebrow, RoundIconButton, SampleChip, TONE_BLOCK, TONE_ICON, body, chip, ink, line, sub } from './ui';
 
 export const NOTICE_ICON: Record<NoticeKind, LucideIcon> = {
     request: Inbox,
@@ -27,6 +28,7 @@ const FILTERS: { id: 'all' | NoticeCategory; label: string }[] = [
 const GROUPS: Notice['group'][] = ['오늘', '어제', '이번 주'];
 
 export default function AlertsScreen({ notices, onRead, onReadAll, onBack }: { notices: Notice[]; onRead: (id: string) => void; onReadAll: () => void; onBack: () => void }) {
+    const { sampleSections } = useConti();
     const [filter, setFilter] = useState<'all' | NoticeCategory>('all');
     const unread = notices.filter((notice) => notice.unread).length;
     const shown = notices.filter((notice) => filter === 'all' || NOTICE_KIND[notice.kind].category === filter);
@@ -38,7 +40,7 @@ export default function AlertsScreen({ notices, onRead, onReadAll, onBack }: { n
                     <ArrowLeft size={18} />
                 </RoundIconButton>
                 <div className="min-w-0 flex-1">
-                    <Eyebrow>알림</Eyebrow>
+                    <Eyebrow>알림 {sampleSections && <SampleChip className="ml-1" />}</Eyebrow>
                     <h1 className={cn('mt-0.5 text-[17px] font-semibold tracking-tight', ink)}>
                         팀 소식
                         {unread > 0 && <span className={cn('ml-1.5 font-normal', sub)}>새 소식 {unread}</span>}

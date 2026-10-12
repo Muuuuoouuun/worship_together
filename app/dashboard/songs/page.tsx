@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { Library } from 'lucide-react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import ContiWorkspace from '@/components/conti/ContiWorkspace';
-import { SETLISTS, THIS_WEEK_SETLIST_ID, type ScreenId } from '@/components/conti/mockData';
+import LiveContiWorkspace from '@/components/conti/LiveContiWorkspace';
+import type { ScreenId } from '@/components/conti/model';
+import { getCurrentUser } from '@/lib/auth';
+import { DEMO_TEAM_ID } from '@/lib/constants';
+import { getSetlistsByTeam, getSongsByTeam } from '@/lib/data';
+import { getTeamRepository } from '@/lib/server/teams';
+import { supabase } from '@/lib/supabase';
 
 export const metadata: Metadata = {
     title: '콘티·악보',
@@ -18,32 +21,29 @@ const SCREENS: ScreenId[] = ['week', 'conti', 'order', 'team', 'requests', 'aler
 export default async function SongsPage({ searchParams }: SongsPageProps) {
     const params = await searchParams;
     const tab = typeof params.tab === 'string' ? params.tab : '';
-    const setlist = typeof params.setlist === 'string' ? params.setlist : '';
+    const setlist = typeof params.setlist === 'string' && params.setlist ? params.setlist : undefined;
+    const team = typeof params.team === 'string' && params.team ? params.team : undefined;
     const screen = SCREENS.find((item) => item === tab) ?? 'week';
-    const setlistId = SETLISTS.some((item) => item.id === setlist && item.items.length > 0) ? setlist : THIS_WEEK_SETLIST_ID;
+
+    // 곡 보관함과 같은 데이터를 같은 규칙으로 읽습니다.
+    const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID), getCurrentUser()]);
+    const onlineTeams = user ? getTeamRepository().list(user.id).map((item) => ({ id: item.id, name: item.name })) : [];
 
     return (
         <DashboardLayout currentPath="/dashboard/songs">
-            <div className="mx-auto flex max-w-3xl flex-col gap-4">
-                <section className="flex items-end justify-between gap-3 px-1">
-                    <div>
-                        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-foreground">
-                            콘티·악보
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">샘플 데이터</span>
-                        </h1>
-                        <p className="mt-1 text-sm text-muted-foreground">이번 주 콘티와 순서, 팀 배치와 요청을 한곳에서</p>
-                    </div>
-                    <Link
-                        href="/dashboard/songs/library"
-                        className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
-                    >
-                        <Library size={15} aria-hidden="true" />
-                        곡 보관함
-                    </Link>
-                </section>
-
-                <ContiWorkspace initialScreen={screen} initialSetlistId={setlistId} mode="embedded" />
-            </div>
+            <LiveContiWorkspace
+                initialSongs={songs}
+                initialSetlists={setlists.map(({ songs: _songs, ...row }) => {
+                    void _songs;
+                    return row;
+                })}
+                hasBackend={Boolean(supabase)}
+                onlineTeams={onlineTeams}
+                onlineTeamId={team}
+                viewerName={user?.name ?? null}
+                initialScreen={screen === 'order' && !setlist ? 'conti' : screen}
+                initialSetlistId={setlist}
+            />
         </DashboardLayout>
     );
 }

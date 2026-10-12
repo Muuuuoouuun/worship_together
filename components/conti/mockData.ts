@@ -1,10 +1,10 @@
 /**
- * 콘티·악보 화면 목업 데이터. 실제 데이터 연결 전까지 화면 구성을 확인하는 용도입니다.
- * 실제 저장소와 분리되어 있고, 기준일을 고정해 날짜 표시가 항상 같게 렌더링됩니다.
+ * 콘티·악보 화면 목업 데이터. 디자인 시안 페이지와, 아직 실제 데이터가 연결되지 않은
+ * 팀 배치·일정·요청·팀 소식 영역에서 씁니다. 기준일을 고정해 날짜 표시가 항상 같게 렌더링됩니다.
  */
 
-export type ScreenId = 'week' | 'conti' | 'order' | 'team' | 'requests' | 'alerts';
-export type Tone = 'sky' | 'mint' | 'peach' | 'lilac' | 'sand';
+import { LINK_LABEL, type ContiSetlist, type ContiSong, type LinkKind, type SongLink, type Tone } from './model';
+import type { ContiData } from './context';
 
 /** 시안의 오늘 (월요일). */
 export const TODAY = '2026-10-12';
@@ -34,70 +34,8 @@ export function member(id: string | null | undefined): Member | null {
     return MEMBERS.find((item) => item.id === id) ?? null;
 }
 
-/* ───────────── 콘티 ───────────── */
+/* ───────────── 콘티 (시안용) ───────────── */
 
-export type SetlistStatus = 'done' | 'confirmed' | 'writing' | 'empty';
-
-export const SECTION_NAMES: Record<string, string> = {
-    I: 'Intro', V1: 'Verse 1', V2: 'Verse 2', V3: 'Verse 3', PC: 'Pre-Chorus',
-    C: 'Chorus', B: 'Bridge', Tag: 'Tag', O: 'Outro',
-};
-
-export type LinkKind = 'video' | 'sheet' | 'mr';
-
-export interface SongLink {
-    kind: LinkKind;
-    label: string;
-    /** 새로 올라온 자료 표시 */
-    fresh?: boolean;
-}
-
-export interface SongComment {
-    from: string;
-    text: string;
-    ago: string;
-}
-
-export interface Song {
-    kind: 'song';
-    id: string;
-    title: string;
-    originalKey: string;
-    key: string;
-    bpm: number;
-    lead: string;
-    /** 송폼 진행 순서. 반복되는 후렴도 각각 한 칸 */
-    form: string[];
-    links: SongLink[];
-    /** 인도자가 정한 특이사항 */
-    notes: string[];
-    /** 팀원들이 남긴 코멘트 */
-    comments: SongComment[];
-}
-
-export interface Moment {
-    kind: 'moment';
-    id: string;
-    moment: 'prayer' | 'word';
-    title: string;
-    memo?: string;
-}
-
-export type OrderItem = Song | Moment;
-
-export interface Setlist {
-    id: string;
-    /** 주일 날짜 YYYY-MM-DD */
-    date: string;
-    time: string;
-    service: string;
-    theme: string;
-    owner: string;
-    status: SetlistStatus;
-    items: OrderItem[];
-}
-
-export const LINK_LABEL: Record<LinkKind, string> = { video: '원곡 영상', sheet: '악보', mr: 'MR' };
 const L = (...kinds: LinkKind[]): SongLink[] => kinds.map((kind) => ({ kind, label: LINK_LABEL[kind] }));
 
 const FORM = {
@@ -106,103 +44,99 @@ const FORM = {
     hymn: ['I', 'V1', 'C', 'V2', 'C', 'V3', 'C'],
 };
 
-function song(
-    id: string, title: string, originalKey: string, key: string, bpm: number, lead: string,
-    form: string[], extra: Partial<Pick<Song, 'links' | 'notes' | 'comments'>> = {},
-): Song {
-    return { kind: 'song', id, title, originalKey, key, bpm, lead, form, links: extra.links ?? L('video', 'sheet'), notes: extra.notes ?? [], comments: extra.comments ?? [] };
+type SongExtra = Partial<Pick<ContiSong, 'links' | 'notes'>> & { comments?: { author: string; text: string; ago: string }[] };
+
+function song(id: string, title: string, originalKey: string, key: string, bpm: number, lead: string, form: string[], extra: SongExtra = {}): ContiSong {
+    return {
+        kind: 'song', id, songId: id, title, artist: null, originalKey, key, bpm, lead, form,
+        links: extra.links ?? L('video', 'sheet'), notes: extra.notes ?? [], comments: extra.comments ?? [],
+    };
 }
 
-export const SETLISTS: Setlist[] = [
+export const SETLISTS: ContiSetlist[] = [
     {
-        id: 's1004', date: '2026-10-04', time: '11:00', service: '주일 2부 예배', theme: '은혜의 강', owner: 'm3', status: 'done',
+        id: 's1004', date: '2026-10-04', time: '11:00', service: '주일 2부 예배', theme: '은혜의 강', owner: '박은혜', status: 'done',
         items: [
-            song('a1', '주 품에', 'E', 'E', 70, 'm3', FORM.basic),
-            song('a2', '은혜', 'D', 'D', 64, 'm2', FORM.basic),
-            song('a3', '믿음으로 서리라', 'D', 'D', 72, 'm1', FORM.pre),
-            song('a4', '보내소서', 'A', 'A', 76, 'm3', FORM.basic),
+            song('a1', '주 품에', 'E', 'E', 70, '박은혜', FORM.basic),
+            song('a2', '은혜', 'D', 'D', 64, '이소망', FORM.basic),
+            song('a3', '믿음으로 서리라', 'D', 'D', 72, '김찬양', FORM.pre),
+            song('a4', '보내소서', 'A', 'A', 76, '박은혜', FORM.basic),
         ],
     },
     {
-        id: 's1011', date: '2026-10-11', time: '11:00', service: '주일 2부 예배', theme: '부르심', owner: 'm1', status: 'done',
+        id: 's1011', date: '2026-10-11', time: '11:00', service: '주일 2부 예배', theme: '부르심', owner: '김찬양', status: 'done',
         items: [
-            song('b1', '예수 열방의 소망', 'G', 'G', 112, 'm1', FORM.pre),
-            song('b2', '주님의 은혜', 'G', 'G', 68, 'm2', FORM.basic),
-            song('b3', '시선', 'A', 'A', 66, 'm3', FORM.pre),
-            song('b4', '보내소서', 'A', 'A', 76, 'm1', FORM.basic),
+            song('b1', '예수 열방의 소망', 'G', 'G', 112, '김찬양', FORM.pre),
+            song('b2', '주님의 은혜', 'G', 'G', 68, '이소망', FORM.basic),
+            song('b3', '시선', 'A', 'A', 66, '박은혜', FORM.pre),
+            song('b4', '보내소서', 'A', 'A', 76, '김찬양', FORM.basic),
         ],
     },
     {
-        id: 's1018', date: '2026-10-18', time: '11:00', service: '주일 2부 예배', theme: '신실하신 하나님', owner: 'm1', status: 'confirmed',
+        id: 's1018', date: '2026-10-18', time: '11:00', service: '주일 2부 예배', theme: '신실하신 하나님', owner: '김찬양', status: 'confirmed',
         items: [
-            song('c1', '감사함으로 그 문에 들어가며', 'D', 'D', 124, 'm2', ['I', 'V1', 'C', 'V2', 'C', 'C', 'O'], {
+            song('c1', '감사함으로 그 문에 들어가며', 'D', 'D', 124, '이소망', ['I', 'V1', 'C', 'V2', 'C', 'C', 'O'], {
                 links: L('video', 'sheet', 'mr'),
                 notes: ['드럼 4카운트 후 바로 진입', '마지막 후렴 전 브레이크 1마디'],
-                comments: [{ from: 'm8', text: '카운트는 하이햇으로 칠게요', ago: '어제' }],
+                comments: [{ author: '오기쁨', text: '카운트는 하이햇으로 칠게요', ago: '어제' }],
             }),
-            song('c2', '예수 열방의 소망', 'G', 'A', 112, 'm1', FORM.pre, {
+            song('c2', '예수 열방의 소망', 'G', 'A', 112, '김찬양', FORM.pre, {
                 notes: ['1절은 어쿠스틱 기타만', '후렴부터 풀밴드'],
-                comments: [{ from: 'm5', text: '어쿠스틱 대체가 없으면 1절은 일렉 클린톤으로 갈게요', ago: '3시간 전' }],
+                comments: [{ author: '최요셉', text: '어쿠스틱 대체가 없으면 1절은 일렉 클린톤으로 갈게요', ago: '3시간 전' }],
             }),
             { kind: 'moment', id: 'c-m1', moment: 'prayer', title: '인도자 기도', memo: '피아노 E 패드 유지, 다음 곡 Key로 연결' },
-            song('c3', '믿음으로 서리라', 'D', 'E', 72, 'm3', ['I', 'V1', 'PC', 'C', 'V2', 'PC', 'C', 'B', 'B', 'C', 'O'], {
+            song('c3', '믿음으로 서리라', 'D', 'E', 72, '박은혜', ['I', 'V1', 'PC', 'C', 'V2', 'PC', 'C', 'B', 'B', 'C', 'O'], {
                 links: L('video', 'sheet', 'mr'),
                 notes: ['브릿지 2회, 두 번째는 빌드업', '엔딩은 후렴 마지막 줄 2번'],
                 comments: [
-                    { from: 'm4', text: '첫 번째 브릿지는 패드만 깔게요', ago: '3시간 전' },
-                    { from: 'm3', text: '두 번째 브릿지부터 화음 들어갈게요', ago: '1시간 전' },
+                    { author: '정다윗', text: '첫 번째 브릿지는 패드만 깔게요', ago: '3시간 전' },
+                    { author: '박은혜', text: '두 번째 브릿지부터 화음 들어갈게요', ago: '1시간 전' },
                 ],
             }),
-            song('c4', '주님의 은혜', 'G', 'G', 68, 'm1', [...FORM.basic.slice(0, 7), 'Tag'], {
+            song('c4', '주님의 은혜', 'G', 'G', 68, '김찬양', [...FORM.basic.slice(0, 7), 'Tag'], {
                 links: [{ kind: 'sheet', label: '악보', fresh: true }, { kind: 'video', label: '원곡 영상' }],
-                comments: [{ from: 'm3', text: '편곡 버전 악보로 새로 올렸어요', ago: '2일 전' }],
+                comments: [{ author: '박은혜', text: '편곡 버전 악보로 새로 올렸어요', ago: '2일 전' }],
             }),
-            song('c5', '내 영혼이 은총 입어', 'F', 'G', 64, 'm2', FORM.hymn, {
+            song('c5', '내 영혼이 은총 입어', 'F', 'G', 64, '이소망', FORM.hymn, {
                 links: L('sheet'),
                 notes: ['3절은 무반주 회중 찬양', '자막은 찬송가 가사 그대로'],
             }),
             { kind: 'moment', id: 'c-m2', moment: 'word', title: '말씀 연결 · 대표 기도', memo: '건반만 잔잔하게, 기도 끝나면 Intro 바로' },
-            song('c6', '보내소서', 'A', 'A', 76, 'm1', ['I', 'V1', 'C', 'V2', 'C', 'B', 'C', 'C', 'O'], {
+            song('c6', '보내소서', 'A', 'A', 76, '김찬양', ['I', 'V1', 'C', 'V2', 'C', 'B', 'C', 'C', 'O'], {
                 links: L('video', 'sheet', 'mr'),
                 notes: ['후렴 2회 반복 후 엔딩 리타르단도'],
-                comments: [{ from: 'm2', text: 'Key G로 내리는 거 요청 남겼어요!', ago: '2시간 전' }],
+                comments: [{ author: '이소망', text: 'Key G로 내리는 거 요청 남겼어요!', ago: '2시간 전' }],
             }),
         ],
     },
     {
-        id: 's1025', date: '2026-10-25', time: '11:00', service: '주일 2부 예배', theme: '감사의 노래', owner: 'm2', status: 'writing',
+        id: 's1025', date: '2026-10-25', time: '11:00', service: '주일 2부 예배', theme: '감사의 노래', owner: '이소망', status: 'writing',
         items: [
-            song('d1', '감사함으로 그 문에 들어가며', 'D', 'D', 124, 'm2', ['I', 'V1', 'C', 'V2', 'C', 'O']),
-            song('d2', '주님 다시 오실 때까지', 'G', 'G', 84, 'm3', FORM.basic, { notes: ['2절 후 간주 4마디'] }),
-            song('d3', '은혜', 'D', 'D', 64, 'm2', FORM.basic),
+            song('d1', '감사함으로 그 문에 들어가며', 'D', 'D', 124, '이소망', ['I', 'V1', 'C', 'V2', 'C', 'O']),
+            song('d2', '주님 다시 오실 때까지', 'G', 'G', 84, '박은혜', FORM.basic, { notes: ['2절 후 간주 4마디'] }),
+            song('d3', '은혜', 'D', 'D', 64, '이소망', FORM.basic),
         ],
     },
     {
-        id: 's1101', date: '2026-11-01', time: '11:00', service: '주일 2부 예배', theme: '', owner: 'm3', status: 'empty',
+        id: 's1101', date: '2026-11-01', time: '11:00', service: '주일 2부 예배', theme: '', owner: '박은혜', status: 'empty',
         items: [],
     },
 ];
 
 export const THIS_WEEK_SETLIST_ID = 's1018';
 
-export const SETLIST_STATUS: Record<SetlistStatus, { label: string; dot: string; text: string }> = {
-    done: { label: '완료', dot: 'bg-neutral-300 dark:bg-neutral-600', text: 'text-neutral-400 dark:text-neutral-500' },
-    confirmed: { label: '확정', dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
-    writing: { label: '작성 중', dot: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400' },
-    empty: { label: '미작성', dot: 'bg-neutral-300 dark:bg-neutral-600', text: 'text-neutral-400 dark:text-neutral-500' },
+/** 시안 기준 이번 주 주일 (팀 배치 목업의 기본 선택값) */
+export const MOCK_SUNDAY = '2026-10-18';
+
+/** 디자인 시안 페이지용 읽기 전용 데이터 */
+export const MOCK_CONTI_DATA: ContiData = {
+    today: TODAY,
+    setlists: SETLISTS,
+    thisWeekId: THIS_WEEK_SETLIST_ID,
+    editor: null,
+    sampleSections: false,
+    roster: MEMBERS.map((item) => item.name),
 };
-
-export function setlistById(id: string): Setlist {
-    return SETLISTS.find((item) => item.id === id) ?? SETLISTS[0];
-}
-
-export function songsOf(items: OrderItem[]): Song[] {
-    return items.filter((item): item is Song => item.kind === 'song');
-}
-
-export function commentsOf(items: OrderItem[]): SongComment[] {
-    return songsOf(items).flatMap((item) => item.comments);
-}
 
 /* ───────────── 팀 배치 ───────────── */
 
@@ -358,72 +292,3 @@ export const NOTICES: Notice[] = [
     { id: 'n10', actor: 'm2', kind: 'edit', message: '10/25 콘티 작성을 시작했어요', group: '이번 주', ago: '3일 전', unread: false },
 ];
 
-/* ───────────── 날짜 도우미 ───────────── */
-
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const ORDINALS = ['첫째', '둘째', '셋째', '넷째', '다섯째'];
-
-function parts(date: string) {
-    const [y, m, d] = date.split('-').map(Number);
-    return { y, m, d, utc: Date.UTC(y, m - 1, d) };
-}
-
-export function weekday(date: string): string {
-    return WEEKDAYS[new Date(parts(date).utc).getUTCDay()];
-}
-
-export function dayOf(date: string): number {
-    return parts(date).d;
-}
-
-export function monthOf(date: string): number {
-    return parts(date).m;
-}
-
-export function addDays(date: string, days: number): string {
-    const next = new Date(parts(date).utc + days * 86_400_000);
-    return next.toISOString().slice(0, 10);
-}
-
-export function diffDays(date: string, from = TODAY): number {
-    return Math.round((parts(date).utc - parts(from).utc) / 86_400_000);
-}
-
-export function dDay(date: string): string {
-    const diff = diffDays(date);
-    return diff === 0 ? 'D-DAY' : diff > 0 ? `D-${diff}` : `D+${-diff}`;
-}
-
-/** 주일 날짜 → '10월 셋째 주' */
-export function weekLabel(sunday: string): string {
-    const { m, d } = parts(sunday);
-    return `${m}월 ${ORDINALS[Math.floor((d - 1) / 7)]} 주`;
-}
-
-export function shortWeekLabel(sunday: string): string {
-    const { d } = parts(sunday);
-    return `${ORDINALS[Math.floor((d - 1) / 7)]} 주`;
-}
-
-export function md(date: string): string {
-    const { m, d } = parts(date);
-    return `${m}/${d}`;
-}
-
-/** 해당 주일로 끝나는 월~일 7일 */
-export function weekDates(sunday: string): string[] {
-    return Array.from({ length: 7 }, (_, index) => addDays(sunday, index - 6));
-}
-
-/** 'YYYY-MM' 달력 6주 그리드 (일요일 시작). 다른 달 날짜는 null. */
-export function monthGrid(year: number, month: number): (string | null)[] {
-    const first = new Date(Date.UTC(year, month - 1, 1));
-    const lead = first.getUTCDay();
-    const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    const cells: (string | null)[] = Array.from({ length: lead }, () => null);
-    for (let d = 1; d <= days; d += 1) {
-        cells.push(`${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
-    }
-    while (cells.length % 7) cells.push(null);
-    return cells;
-}

@@ -80,9 +80,14 @@ export async function createSetlist(formData: FormData) {
         redirect('/dashboard/songs/library?error=invalid-setlist-songs');
     }
 
+    // 콘티 만들기 화면이 미리 정한 id 를 쓰면 곡별 세부 정보(Key·BPM·메모)와 같은 id 로 이어집니다.
+    const requestedId = getString(formData, 'setlistId');
+    const id = UUID_PATTERN.test(requestedId) ? requestedId : undefined;
+
     const { error } = await supabase
         .from('setlists')
         .insert({
+            ...(id ? { id } : {}),
             team_id: teamId,
             title,
             theme,
@@ -227,6 +232,8 @@ export async function updateSongBpmPreset(formData: FormData) {
     revalidatePath('/dashboard/songs/library');
     redirect('/dashboard/songs/library?created=bpm');
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function getString(formData: FormData, key: string): string {
     return String(formData.get(key) ?? '').trim();

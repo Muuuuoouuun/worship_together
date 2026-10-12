@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import ContiWorkspace from '@/components/conti/ContiWorkspace';
-import type { ScreenId } from '@/components/conti/mockData';
+import { MOCK_CONTI_DATA } from '@/components/conti/mockData';
+import type { ScreenId } from '@/components/conti/model';
 
 export const metadata: Metadata = {
     title: '콘티·순서 디자인 시안',
@@ -33,7 +34,7 @@ export default async function SetlistDraftsPage({ searchParams }: SetlistDraftsP
             {/* 휴대폰·태블릿: 실제 앱처럼 한 화면 */}
             <div className="lg:hidden">
                 <div className="mx-auto min-h-dvh max-w-md bg-white shadow-sm dark:bg-neutral-900">
-                    <ContiWorkspace initialScreen={screen} mode="app" />
+                    <ContiWorkspace data={MOCK_CONTI_DATA} initialScreen={screen} mode="app" />
                 </div>
             </div>
 
@@ -59,7 +60,7 @@ export default async function SetlistDraftsPage({ searchParams }: SetlistDraftsP
                     {FRAMES.map((frame, index) => (
                         <figure key={frame.screen}>
                             <div className="h-[780px] w-[375px] overflow-hidden rounded-[2.75rem] bg-white shadow-[0_40px_80px_-32px_rgba(15,23,42,0.28)] ring-1 ring-black/5 dark:bg-neutral-900 dark:ring-white/10">
-                                <ContiWorkspace initialScreen={frame.screen} mode="framed" />
+                                <ContiWorkspace data={MOCK_CONTI_DATA} initialScreen={frame.screen} mode="framed" />
                             </div>
                             <figcaption className="mt-5 px-2">
                                 <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">

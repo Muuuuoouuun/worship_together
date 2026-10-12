@@ -3,26 +3,10 @@
 import { useState } from 'react';
 import { Captions, Drum, Guitar, Mic, MicVocal, Piano, Plus, SlidersVertical, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-    ASSIGNMENTS,
-    EVENTS,
-    EVENT_KIND,
-    PARTS,
-    TEAM_SUNDAYS,
-    THIS_WEEK_SETLIST_ID,
-    dayOf,
-    md,
-    member,
-    setlistById,
-    shortWeekLabel,
-    weekDates,
-    weekday,
-    monthOf,
-    type AssignStatus,
-    type Assignment,
-    type PartId,
-} from './mockData';
-import { AddButton, Avatar, AvatarStack, Eyebrow, ScreenTitle, SectionTitle, TONE_BLOCK, chip, ink, line, selected, sub } from './ui';
+import { ASSIGNMENTS, EVENTS, EVENT_KIND, MOCK_SUNDAY, PARTS, TEAM_SUNDAYS, member, type AssignStatus, type Assignment, type PartId } from './mockData';
+import { dayOf, md, monthOf, shortWeekLabel, weekDates, weekday } from './model';
+import { useConti } from './context';
+import { AddButton, Avatar, AvatarStack, Eyebrow, SampleChip, ScreenTitle, SectionTitle, TONE_BLOCK, chip, ink, line, selected, sub } from './ui';
 
 const PART_ICON: Record<PartId, LucideIcon> = {
     lead: Mic,
@@ -43,7 +27,8 @@ const STATUS_TEXT: Record<AssignStatus, { label: string; className: string }> = 
 };
 
 export default function TeamScreen() {
-    const [sunday, setSunday] = useState(setlistById(THIS_WEEK_SETLIST_ID).date);
+    const { sampleSections } = useConti();
+    const [sunday, setSunday] = useState(MOCK_SUNDAY);
     const list = ASSIGNMENTS[sunday] ?? [];
     const count = {
         confirmed: list.filter((item) => item.status === 'confirmed').length,
@@ -56,7 +41,7 @@ export default function TeamScreen() {
 
     return (
         <div className="space-y-7">
-            <ScreenTitle eyebrow="팀" title="악기 담당 · 일정" aside={<AddButton label="담당 배정" />} />
+            <ScreenTitle eyebrow={<>팀 {sampleSections && <SampleChip className="ml-1" />}</>} title="악기 담당 · 일정" aside={<AddButton label="담당 배정" />} />
 
             <div className={cn('grid grid-cols-4 gap-1 rounded-2xl border p-1.5', line)} role="tablist" aria-label="주일 선택">
                 {TEAM_SUNDAYS.map((date) => {

@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ChevronDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { member, type Tone } from './mockData';
+import { member } from './mockData';
+import { avatarLabel, toneForName, type Tone } from './model';
 
 /** 시안 공통 색: 흰 바탕 + 중립 회색 + 브랜드 primary 한 가지 강조색. */
 export const ink = 'text-neutral-900 dark:text-neutral-50';
@@ -13,7 +14,7 @@ export const chip = 'bg-neutral-100 dark:bg-neutral-800';
 /** 선택된 날짜·탭: 레퍼런스처럼 검정 알약 */
 export const selected = 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900';
 /** 오늘 날짜: 선택과 헷갈리지 않도록 테두리 대신 강조색 글자 */
-export const today = 'font-semibold text-primary';
+export const todayText = 'font-semibold text-primary';
 
 export const TONE_BLOCK: Record<Tone, string> = {
     sky: 'bg-sky-50 dark:bg-sky-400/10',
@@ -53,11 +54,11 @@ const AVATAR_SIZE = {
     md: 'size-9 text-[11px]',
 } as const;
 
-/** 사진 대신 이름(성 제외 두 글자)으로 표시하는 아바타 */
-export function Avatar({ id, size = 'sm', ring = false, className }: { id: string | null; size?: keyof typeof AVATAR_SIZE; ring?: boolean; className?: string }) {
-    const person = member(id);
+/** 사진 대신 이름(성 제외 두 글자)으로 표시하는 아바타. 목업 팀원 id 또는 이름을 받습니다. */
+export function Avatar({ id, name, size = 'sm', ring = false, className }: { id?: string | null; name?: string | null; size?: keyof typeof AVATAR_SIZE; ring?: boolean; className?: string }) {
+    const person = id ? member(id) : name?.trim() ? { name: name.trim(), tone: toneForName(name.trim()) } : null;
     if (!person) return null;
-    const label = size === 'xs' ? person.name.slice(1, 2) : person.name.slice(1);
+    const label = avatarLabel(person.name, size === 'xs');
     return (
         <span
             title={person.name}
@@ -74,13 +75,14 @@ export function Avatar({ id, size = 'sm', ring = false, className }: { id: strin
     );
 }
 
-export function AvatarStack({ ids, max = 3, size = 'sm' }: { ids: string[]; max?: number; size?: keyof typeof AVATAR_SIZE }) {
-    const shown = ids.slice(0, max);
-    const rest = ids.length - shown.length;
+export function AvatarStack({ ids = [], names = [], max = 3, size = 'sm' }: { ids?: string[]; names?: string[]; max?: number; size?: keyof typeof AVATAR_SIZE }) {
+    const people = [...ids.map((id) => ({ key: `id:${id}`, id, name: null })), ...names.map((name) => ({ key: `name:${name}`, id: null, name }))];
+    const shown = people.slice(0, max);
+    const rest = people.length - shown.length;
     return (
-        <span className={cn('flex items-center', size === 'xs' ? '-space-x-1' : '-space-x-1.5')} aria-label={`${ids.length}명`}>
-            {shown.map((id) => (
-                <Avatar key={id} id={id} size={size} ring />
+        <span className={cn('flex items-center', size === 'xs' ? '-space-x-1' : '-space-x-1.5')} aria-label={`${people.length}명`}>
+            {shown.map((person) => (
+                <Avatar key={person.key} id={person.id} name={person.name} size={size} ring />
             ))}
             {rest > 0 && (
                 <span className={cn('inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white dark:ring-neutral-900', AVATAR_SIZE[size], selected)}>
@@ -126,12 +128,13 @@ export function RoundIconButton({ label, onClick, children, disabled }: { label:
 }
 
 /** 레퍼런스의 "Today's Task ⌄" 형태 섹션 제목 */
-export function SectionTitle({ title, meta, action, className }: { title: string; meta?: ReactNode; action?: ReactNode; className?: string }) {
+export function SectionTitle({ title, badge, meta, action, className }: { title: string; badge?: ReactNode; meta?: ReactNode; action?: ReactNode; className?: string }) {
     return (
         <div className={cn('flex items-center justify-between gap-3', className)}>
             <h2 className={cn('flex items-center gap-1.5 text-[17px] font-semibold tracking-tight', ink)}>
                 {title}
                 <ChevronDown size={16} className={sub} aria-hidden="true" />
+                {badge}
             </h2>
             <div className="flex items-center gap-2">
                 {meta && <span className={cn('text-xs', sub)}>{meta}</span>}
@@ -157,10 +160,20 @@ export function ScreenTitle({ eyebrow, title, trailing, aside }: { eyebrow?: Rea
 }
 
 export function KeyText({ from, to }: { from: string; to: string }) {
-    if (from === to) return <span>Key {to}</span>;
+    if (!to) return <span>Key -</span>;
+    if (!from || from === to) return <span>Key {to}</span>;
     return (
         <span>
             Key <span className="opacity-60">{from}</span>→<span className="font-semibold">{to}</span>
+        </span>
+    );
+}
+
+/** 아직 실제 데이터가 연결되지 않은 영역 표시 */
+export function SampleChip({ className }: { className?: string }) {
+    return (
+        <span title="아직 실제 데이터가 연결되지 않은 샘플 화면입니다" className={cn('inline-flex h-5 items-center rounded-full px-2 align-middle text-[10px] font-medium', chip, sub, className)}>
+            샘플
         </span>
     );
 }
