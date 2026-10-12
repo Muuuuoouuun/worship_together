@@ -58,7 +58,7 @@ npm ci
 npm run dev
 ```
 
-[로컬 앱](http://localhost:4000/dashboard) · [로그인](http://localhost:4000/login) · [팀·초대](http://localhost:4000/dashboard/team)
+[로컬 앱](http://localhost:4000/dashboard) · [로그인](http://localhost:4000/login) · [팀·초대](http://localhost:4000/dashboard/team) · [송폼 마크업 목업 A](http://localhost:4000/mockups/songform-a.html) · [목업 B](http://localhost:4000/mockups/songform-b.html)
 
 `NEXTAUTH_SECRET`과 `NEXTAUTH_URL`을 설정하고 사용할 Google·네이버 제공자의 키를 추가합니다. Kakao 공유는 `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`와 등록된 공개 도메인이 필요합니다. `localhost` 초대는 다른 기기에서 열 수 없으며 카카오톡 공유 버튼도 비활성화됩니다. 상세 절차는 [인증·초대 문서](docs/auth-and-invitations.md)를 따릅니다.
 
