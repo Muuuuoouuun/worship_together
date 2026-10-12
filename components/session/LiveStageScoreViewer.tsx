@@ -43,7 +43,7 @@ import {
     type SheetMark,
 } from '@/lib/sheetAnnotations';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
-import SongFormMarkup from './SongFormMarkup';
+import SongFormMarkup, { SongFormSectionMarker } from './SongFormMarkup';
 
 export interface LiveStageScoreViewerProps {
     teamId: string;
@@ -512,7 +512,15 @@ export default function LiveStageScoreViewer({
             const point = mark.points[0];
 
             if (mark.kind === 'songform') {
-                return <SongFormMarkup key={mark.id} sections={mark.sections ?? []} anchor={point} ratio={ratio} />;
+                return (
+                    <SongFormMarkup key={mark.id} sections={mark.sections ?? []} anchor={point} ratio={ratio} fontSize={mark.fontSize} opacity={mark.opacity} />
+                );
+            }
+
+            if (mark.kind === 'section') {
+                return (
+                    <SongFormSectionMarker key={mark.id} label={mark.text ?? ''} anchor={point} ratio={ratio} fontSize={mark.fontSize} opacity={mark.opacity} />
+                );
             }
 
             if (mark.kind === 'stamp') {
@@ -615,7 +623,8 @@ export default function LiveStageScoreViewer({
         const pens = marks.filter((m) => m.kind === 'pen');
         const stamps = marks.filter((m) => m.kind === 'stamp');
         const texts = marks.filter((m) => m.kind === 'text');
-        const songForms = marks.filter((m) => m.kind === 'songform');
+        // Section markers draw above the song form band.
+        const songForms = [...marks.filter((m) => m.kind === 'songform'), ...marks.filter((m) => m.kind === 'section')];
 
         return (
             <>

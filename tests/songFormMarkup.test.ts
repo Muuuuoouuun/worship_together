@@ -2,13 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     abbreviateSectionLabel,
+    isSongFormTint,
     isValidSongFormSections,
+    layoutSectionMarker,
     layoutSongFormMarkup,
+    songFormRowHeight,
     songFormChipColor,
     splitRepeat,
     toggleRepeat,
     SONG_FORM_MAX_SECTIONS,
     SONG_FORM_PRESETS,
+    SONG_FORM_TINT_OPACITY,
 } from '../lib/songFormMarkup';
 import { isPointNearMark, validateSheet, type SheetDocument, type SheetMark } from '../lib/sheetAnnotations';
 
@@ -79,4 +83,43 @@ test('isPointNearMark hits the songform band plate only', () => {
     assert.equal(isPointNearMark(plate.x + 10, insideY, mark, ratio), true);
     assert.equal(isPointNearMark(plate.x + plate.width + 40, insideY, mark, ratio), false);
     assert.equal(isPointNearMark(plate.x + 10, 500, mark, ratio), false);
+});
+
+test('band and markers scale with the size preset and wrap earlier when larger', () => {
+    const sections = SONG_FORM_PRESETS[1].sections;
+    const normal = layoutSongFormMarkup(sections, [16, 4]);
+    const large = layoutSongFormMarkup(sections, [16, 4], 42);
+    assert.ok(large.chips[0].height > normal.chips[0].height * 1.6);
+    assert.ok(new Set(large.chips.map((c) => c.y)).size > new Set(normal.chips.map((c) => c.y)).size);
+    for (const chip of large.chips) assert.ok(chip.x + chip.width <= 1000, `${chip.label} overflows`);
+    assert.equal(songFormRowHeight(48), songFormRowHeight(24) * 2);
+
+    const marker = layoutSectionMarker('V1', [300, 500], 32);
+    assert.deepEqual([marker.x, marker.y], [300, 500]);
+    assert.equal(marker.height, layoutSectionMarker('V1', [0, 0], 16).height * 2);
+});
+
+test('translucent look is encoded as opacity below 1', () => {
+    assert.equal(isSongFormTint(undefined), false);
+    assert.equal(isSongFormTint(1), false);
+    assert.equal(isSongFormTint(SONG_FORM_TINT_OPACITY), true);
+});
+
+test('section markers validate their label and hit-test their chip box', () => {
+    const ratio = 1600 / 1200;
+    const marker: SheetMark = { id: 'm1', kind: 'section', color: '#2563eb', text: 'V1', points: [[300, 400]], fontSize: 32, opacity: SONG_FORM_TINT_OPACITY };
+    const doc: SheetDocument = {
+        version: 1,
+        title: '은혜로다',
+        updatedAt: new Date().toISOString(),
+        pages: [{ image: 'data:image/jpeg;base64,/9j/4AAQ', width: 1200, height: 1600, marks: [marker] }],
+    };
+    assert.doesNotThrow(() => validateSheet(doc));
+    assert.throws(() => validateSheet({ ...doc, pages: [{ ...doc.pages[0], marks: [{ ...marker, text: '' }] }] }));
+    assert.throws(() => validateSheet({ ...doc, pages: [{ ...doc.pages[0], marks: [{ ...marker, text: undefined }] }] }));
+
+    const box = layoutSectionMarker('V1', [300, 400 * ratio], 32);
+    const centerY = (box.y + box.height / 2) / ratio;
+    assert.equal(isPointNearMark(box.x + box.width / 2, centerY, marker, ratio, 0), true);
+    assert.equal(isPointNearMark(box.x + box.width + 30, centerY, marker, ratio, 0), false);
 });

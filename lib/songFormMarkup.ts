@@ -88,25 +88,45 @@ export function isValidSongFormSections(value: unknown): value is string[] {
 
 export const SONG_FORM_DEFAULT_ANCHOR: [number, number] = [16, 3];
 
-const FONT_SIZE = 24;
-const REPEAT_FONT_SIZE = 17;
-const CHIP_HEIGHT = 40;
-const CHIP_PAD_X = 13;
-const ARROW_WIDTH = 26;
-const ROW_GAP = 10;
-const PLATE_PAD = 8;
+/** Chip text size presets (viewBox units, page width = 1000). Stored on the mark as `fontSize`. */
+export const SONG_FORM_SIZES: ReadonlyArray<{ label: string; fontSize: number }> = [
+    { label: '작게', fontSize: 18 },
+    { label: '보통', fontSize: 24 },
+    { label: '크게', fontSize: 32 },
+    { label: '최대', fontSize: 42 },
+];
+export const SONG_FORM_DEFAULT_FONT_SIZE = 24;
+/** `opacity` below 1 renders the translucent "shade" style that lets the score show through. */
+export const SONG_FORM_TINT_OPACITY = 0.35;
+
+export function isSongFormTint(opacity: number | undefined): boolean {
+    return opacity !== undefined && opacity < 1;
+}
+
 const PAGE_RIGHT = 988;
 /** Keeps at least one chip's room between the anchor and the right edge. */
 export const SONG_FORM_MAX_ANCHOR_X = PAGE_RIGHT - 160;
 
-export const SONG_FORM_CHIP_FONT_SIZE = FONT_SIZE;
-export const SONG_FORM_REPEAT_FONT_SIZE = REPEAT_FONT_SIZE;
+/** All band/marker dimensions scale linearly from the 24-unit "보통" size. */
+export function songFormMetrics(fontSize = SONG_FORM_DEFAULT_FONT_SIZE) {
+    const scale = fontSize / SONG_FORM_DEFAULT_FONT_SIZE;
+    return {
+        scale,
+        fontSize,
+        repeatFontSize: 17 * scale,
+        chipHeight: 40 * scale,
+        chipPadX: 13 * scale,
+        arrowWidth: 26 * scale,
+        rowGap: 10 * scale,
+        platePad: 8 * scale,
+    };
+}
 
 /** Bold sans-serif width estimate; SVG text cannot be measured without a DOM. */
 function estimateTextWidth(text: string, fontSize: number): number {
     let width = 0;
     for (const char of text) {
-        if (/[ㄱ-ㆎ가-힣]/.test(char)) width += fontSize * 0.98;
+        if (/[\u3131-\u318e\uac00-\ud7a3]/.test(char)) width += fontSize * 0.98;
         else if (/[A-Z0-9]/.test(char)) width += fontSize * 0.68;
         else if (char === ' ') width += fontSize * 0.3;
         else width += fontSize * 0.58;
@@ -114,10 +134,11 @@ function estimateTextWidth(text: string, fontSize: number): number {
     return width;
 }
 
-export function songFormChipWidth(label: string): number {
+export function songFormChipWidth(label: string, fontSize = SONG_FORM_DEFAULT_FONT_SIZE): number {
+    const m = songFormMetrics(fontSize);
     const { base, repeat } = splitRepeat(label);
-    const repeatWidth = repeat === null ? 0 : estimateTextWidth(`×${repeat}`, REPEAT_FONT_SIZE) + 3;
-    return Math.max(CHIP_HEIGHT, Math.round(estimateTextWidth(base, FONT_SIZE) + repeatWidth + CHIP_PAD_X * 2));
+    const repeatWidth = repeat === null ? 0 : estimateTextWidth(`×${repeat}`, m.repeatFontSize) + 3 * m.scale;
+    return Math.max(m.chipHeight, Math.round(estimateTextWidth(base, fontSize) + repeatWidth + m.chipPadX * 2));
 }
 
 export type SongFormChipBox = { label: string; x: number; y: number; width: number; height: number; color: string };
@@ -128,28 +149,33 @@ export type SongFormMarkupLayout = {
 };
 
 /** Lays chips left-to-right from `origin` (viewBox units), wrapping before a chip that would cross the page edge. */
-export function layoutSongFormMarkup(sections: string[], origin: [number, number]): SongFormMarkupLayout {
+export function layoutSongFormMarkup(
+    sections: string[],
+    origin: [number, number],
+    fontSize = SONG_FORM_DEFAULT_FONT_SIZE
+): SongFormMarkupLayout {
+    const m = songFormMetrics(fontSize);
     const [originX, originY] = origin;
-    const startX = originX + PLATE_PAD;
-    const rightLimit = PAGE_RIGHT - PLATE_PAD;
+    const startX = originX + m.platePad;
+    const rightLimit = PAGE_RIGHT - m.platePad;
     let x = startX;
-    let y = originY + PLATE_PAD;
+    let y = originY + m.platePad;
     let maxRight = startX;
     const chips: SongFormChipBox[] = [];
     const arrows: SongFormMarkupLayout['arrows'] = [];
 
     sections.forEach((label, index) => {
-        const width = songFormChipWidth(label);
-        const arrow = index > 0 ? ARROW_WIDTH : 0;
+        const width = songFormChipWidth(label, fontSize);
+        const arrow = index > 0 ? m.arrowWidth : 0;
         if (index > 0 && x + arrow + width > rightLimit) {
             x = startX;
-            y += CHIP_HEIGHT + ROW_GAP;
+            y += m.chipHeight + m.rowGap;
         }
         if (arrow) {
-            arrows.push({ x: x + ARROW_WIDTH / 2, y: y + CHIP_HEIGHT / 2 });
-            x += ARROW_WIDTH;
+            arrows.push({ x: x + m.arrowWidth / 2, y: y + m.chipHeight / 2 });
+            x += m.arrowWidth;
         }
-        chips.push({ label, x, y, width, height: CHIP_HEIGHT, color: songFormChipColor(label) });
+        chips.push({ label, x, y, width, height: m.chipHeight, color: songFormChipColor(label) });
         x += width;
         maxRight = Math.max(maxRight, x);
     });
@@ -158,8 +184,8 @@ export function layoutSongFormMarkup(sections: string[], origin: [number, number
         plate: {
             x: originX,
             y: originY,
-            width: maxRight - originX + PLATE_PAD,
-            height: y + CHIP_HEIGHT + PLATE_PAD - originY,
+            width: maxRight - originX + m.platePad,
+            height: y + m.chipHeight + m.platePad - originY,
         },
         chips,
         arrows,
@@ -167,4 +193,23 @@ export function layoutSongFormMarkup(sections: string[], origin: [number, number
 }
 
 /** Height of a single-row band; used to centre the band's first row on a tap point. */
-export const SONG_FORM_ROW_HEIGHT = CHIP_HEIGHT + PLATE_PAD * 2;
+export function songFormRowHeight(fontSize = SONG_FORM_DEFAULT_FONT_SIZE): number {
+    const m = songFormMetrics(fontSize);
+    return m.chipHeight + m.platePad * 2;
+}
+
+/** A section marker (kind 'section') is one chip whose top-left sits at `origin` (viewBox units). */
+export function layoutSectionMarker(
+    label: string,
+    origin: [number, number],
+    fontSize = SONG_FORM_DEFAULT_FONT_SIZE
+): SongFormChipBox {
+    return {
+        label,
+        x: origin[0],
+        y: origin[1],
+        width: songFormChipWidth(label, fontSize),
+        height: songFormMetrics(fontSize).chipHeight,
+        color: songFormChipColor(label),
+    };
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { createClientId } from '@/lib/clientId';
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react';
 import { BookOpen, ChevronRight, Delete, Download, Eraser, FileUp, Hand, Highlighter, ListMusic, Maximize2, Minimize2, Moon, Pencil, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
@@ -21,23 +21,29 @@ import {
     pointsToSvgPath,
     type SheetDocument,
     type SheetMark,
+    type SheetPage,
 } from '@/lib/sheetAnnotations';
 import {
     abbreviateSectionLabel,
+    isSongFormTint,
+    layoutSectionMarker,
     layoutSongFormMarkup,
     songFormChipColor,
+    songFormRowHeight,
     splitRepeat,
     toggleRepeat,
     SONG_FORM_CHIPS,
     SONG_FORM_DEFAULT_ANCHOR,
+    SONG_FORM_DEFAULT_FONT_SIZE,
     SONG_FORM_MAX_ANCHOR_X,
     SONG_FORM_MAX_SECTIONS,
     SONG_FORM_PRESETS,
-    SONG_FORM_ROW_HEIGHT,
+    SONG_FORM_SIZES,
+    SONG_FORM_TINT_OPACITY,
 } from '@/lib/songFormMarkup';
 import { readSongForm } from '@/lib/songFormStorage';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
-import SongFormMarkup, { SongFormMarkupPlaceholder } from './SongFormMarkup';
+import SongFormMarkup, { SongFormMarkupPlaceholder, SongFormSectionMarker } from './SongFormMarkup';
 
 type Props = {
     teamId: string;
@@ -49,7 +55,14 @@ type Props = {
     onPageCountChange?: (count: number) => void;
 };
 
-type SongFormDrag = { id: string; offset: [number, number]; anchor: [number, number] };
+type SongFormDrag = {
+    id: string;
+    offset: [number, number];
+    bounds: { maxX: number; height: number };
+    anchor: [number, number];
+};
+
+const isSongFormMark = (mark: SheetMark) => mark.kind === 'songform' || mark.kind === 'section';
 
 const button =
     'tap-target inline-flex items-center justify-center gap-2 rounded-xl border border-primary/15 px-3 py-2 text-sm font-semibold disabled:opacity-40';
@@ -58,7 +71,7 @@ export default function SheetAnnotationWorkspace({
     teamId,
     songId,
     title,
-    page,
+    page: livePage,
     onPageChange,
     canTurnPage,
     onPageCountChange,
@@ -78,6 +91,11 @@ export default function SheetAnnotationWorkspace({
     const [rectStart, setRectStart] = useState<[number, number] | null>(null);
     const [songFormDrag, setSongFormDrag] = useState<SongFormDrag | null>(null);
     const [pendingSongFormAnchor, setPendingSongFormAnchor] = useState<{ page: number; point: [number, number] } | null>(null);
+    const [songFormMode, setSongFormMode] = useState<'band' | 'section'>('band');
+    const [armedSection, setArmedSection] = useState<string | null>(null);
+    /** While following the leader (no page control), marking up another page opens it locally only. */
+    const [editPage, setEditPage] = useState<number | null>(null);
+    const [songFormLook, setSongFormLook] = useState({ fontSize: SONG_FORM_DEFAULT_FONT_SIZE, tint: false });
     const [songFormOverlayMode, setSongFormOverlayMode] = useState<SongFormOverlayDisplayMode>(() => {
         if (typeof window === 'undefined') return 'first_page_only';
         return (window.localStorage.getItem('wt_sheet_songform_mode') as SongFormOverlayDisplayMode) || 'first_page_only';
@@ -107,9 +125,16 @@ export default function SheetAnnotationWorkspace({
     const draftKey = sheetKey(teamId, songId);
     const publishedKey = sheetKey(teamId, songId, true);
     const shown = view === 'draft' ? draft : published;
+    const isEditingOtherPage = !canTurnPage && editPage !== null && editPage !== livePage && editPage <= (shown?.pages.length ?? 0);
+    const page = isEditingOtherPage && editPage !== null ? editPage : livePage;
     const activePage = shown?.pages[page - 1];
     const pageRatio = activePage ? activePage.height / activePage.width : 1;
-    const songFormSections = (view === 'draft' && activePage?.marks.find((m) => m.kind === 'songform')?.sections) || [];
+    const pageSongFormMarks = (view === 'draft' && activePage?.marks.filter(isSongFormMark)) || [];
+    const songFormSections = pageSongFormMarks.find((m) => m.kind === 'songform')?.sections ?? [];
+    const pageSectionMarkers = pageSongFormMarks.filter((m) => m.kind === 'section');
+    // The tray mirrors the page's existing look so new markers match the band already on it.
+    const songFormFontSize = pageSongFormMarks[0] ? (pageSongFormMarks[0].fontSize ?? SONG_FORM_DEFAULT_FONT_SIZE) : songFormLook.fontSize;
+    const songFormTint = pageSongFormMarks[0] ? isSongFormTint(pageSongFormMarks[0].opacity) : songFormLook.tint;
     const isSongFormEditing = tool === 'songform' && view === 'draft';
 
     usePageTurner({
@@ -183,9 +208,11 @@ export default function SheetAnnotationWorkspace({
         );
     }
 
-    async function upload(file?: File, sharedFile = false) {
+    async function upload(files: File[], sharedFile = false) {
+        const file = files[0];
         if (!file) return;
         setBusy(true);
+        let firstNewPage = 1;
         try {
             if (sharedFile) {
                 if (file.size > 35 * 1024 * 1024) throw new Error('공유 파일은 35MB 이하로 선택해주세요.');
@@ -196,10 +223,14 @@ export default function SheetAnnotationWorkspace({
                 channelRef.current?.postMessage('published');
                 setStatus('공유 악보와 필기를 불러왔습니다. 팀 공유본에서 확인하세요.');
             } else {
-                const pages = await importSheetPages(file);
                 const existing = documentRef.current;
-                if ((existing?.pages.length ?? 0) + pages.length > 20) {
-                    throw new Error('한 곡에 최대 20페이지를 추가할 수 있습니다.');
+                const existingCount = existing?.pages.length ?? 0;
+                // Several page photos picked at once keep their file-name order (page1, page2, … page10).
+                const ordered = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+                const pages: SheetPage[] = [];
+                for (const item of ordered) {
+                    pages.push(...(await importSheetPages(item)));
+                    if (existingCount + pages.length > 20) throw new Error('한 곡에 최대 20페이지를 추가할 수 있습니다.');
                 }
                 persist({
                     version: 1,
@@ -208,8 +239,9 @@ export default function SheetAnnotationWorkspace({
                     updatedAt: new Date().toISOString(),
                 });
                 setView('draft');
+                firstNewPage = existingCount + 1;
             }
-            if (canTurnPage) onPageChange(1);
+            if (canTurnPage) onPageChange(firstNewPage);
         } catch (error) {
             setStatus(error instanceof Error ? error.message : '파일을 불러오지 못했습니다.');
         } finally {
@@ -245,29 +277,19 @@ export default function SheetAnnotationWorkspace({
         setStatus('필기 항목이 삭제되었습니다.');
     }
 
-    /** One song form band per page; reads documentRef so rapid chip taps never drop a chip. */
-    function currentSongFormMark(): SheetMark | null {
-        return documentRef.current?.pages[page - 1]?.marks.find((m) => m.kind === 'songform') ?? null;
+    /** Reads documentRef (not render state) so rapid chip taps never drop a chip. */
+    function currentPageMarks(): SheetMark[] {
+        return documentRef.current?.pages[page - 1]?.marks ?? [];
     }
 
-    function writeSongForm(sections: string[], anchor?: [number, number]) {
+    /** One song form band per page. */
+    function currentSongFormMark(): SheetMark | null {
+        return currentPageMarks().find((m) => m.kind === 'songform') ?? null;
+    }
+
+    function replacePageMarks(marks: SheetMark[]) {
         const current = documentRef.current;
-        const target = current?.pages[page - 1];
-        if (!current || !target) return;
-        const existing = currentSongFormMark();
-        const nextSections = sections.slice(0, SONG_FORM_MAX_SECTIONS);
-        let marks: SheetMark[];
-        if (!nextSections.length) {
-            marks = target.marks.filter((m) => m.kind !== 'songform');
-        } else if (existing) {
-            marks = target.marks.map((m) =>
-                m.id === existing.id ? { ...m, sections: nextSections, points: anchor ? [anchor] : m.points } : m
-            );
-        } else {
-            if (target.marks.length >= 2000) return;
-            const start = anchor ?? (pendingSongFormAnchor?.page === page ? pendingSongFormAnchor.point : SONG_FORM_DEFAULT_ANCHOR);
-            marks = [...target.marks, { id: createClientId(), kind: 'songform', color: '#0f172a', points: [start], sections: nextSections }];
-        }
+        if (!current?.pages[page - 1]) return;
         setRedoStack([]);
         persist({
             ...current,
@@ -276,7 +298,55 @@ export default function SheetAnnotationWorkspace({
         });
     }
 
-    function appendSongFormChip(label: string) {
+    function writeSongForm(sections: string[]) {
+        if (!documentRef.current?.pages[page - 1]) return;
+        const marks = currentPageMarks();
+        const existing = currentSongFormMark();
+        const nextSections = sections.slice(0, SONG_FORM_MAX_SECTIONS);
+        if (!nextSections.length) {
+            replacePageMarks(marks.filter((m) => m.kind !== 'songform'));
+        } else if (existing) {
+            replacePageMarks(marks.map((m) => (m.id === existing.id ? { ...m, sections: nextSections } : m)));
+        } else if (marks.length < 2000) {
+            const start = pendingSongFormAnchor?.page === page ? pendingSongFormAnchor.point : SONG_FORM_DEFAULT_ANCHOR;
+            replacePageMarks([
+                ...marks,
+                {
+                    id: createClientId(),
+                    kind: 'songform',
+                    color: '#0f172a',
+                    points: [start],
+                    sections: nextSections,
+                    fontSize: songFormFontSize,
+                    opacity: songFormTint ? SONG_FORM_TINT_OPACITY : 1,
+                },
+            ]);
+        }
+    }
+
+    function moveMark(id: string, anchor: [number, number]) {
+        const marks = currentPageMarks();
+        const target = marks.find((m) => m.id === id);
+        if (!target || (target.points[0][0] === anchor[0] && target.points[0][1] === anchor[1])) return;
+        replacePageMarks(marks.map((m) => (m.id === id ? { ...m, points: [anchor] } : m)));
+    }
+
+    /** Size and solid/translucent look apply to the whole page's band and section markers, and to new ones. */
+    function applySongFormLook(fontSize: number, tint: boolean) {
+        setSongFormLook({ fontSize, tint });
+        const marks = currentPageMarks();
+        if (!marks.some(isSongFormMark)) return;
+        replacePageMarks(
+            marks.map((m) => (isSongFormMark(m) ? { ...m, fontSize, opacity: tint ? SONG_FORM_TINT_OPACITY : 1 } : m))
+        );
+    }
+
+    function handleSongFormChip(label: string) {
+        if (songFormMode === 'section') {
+            setArmedSection(label);
+            setStatus(`악보에서 ‘${label}’ 섹션이 시작되는 마디를 누르세요.`);
+            return;
+        }
         const sections = currentSongFormMark()?.sections ?? [];
         if (sections.length >= SONG_FORM_MAX_SECTIONS) {
             setStatus(`송폼은 최대 ${SONG_FORM_MAX_SECTIONS}칸까지 얹을 수 있습니다.`);
@@ -304,12 +374,70 @@ export default function SheetAnnotationWorkspace({
         writeSongForm(saved.sections.map((section) => abbreviateSectionLabel(section.label)));
     }
 
-    /** Converts a pointer position (viewBox units) into a clamped band anchor (mark units). */
-    function songFormAnchorAt(pointVb: [number, number], offset: [number, number], sections: string[]): [number, number] {
-        const plateHeight = layoutSongFormMarkup(sections, [0, 0]).plate.height;
-        const x = Math.max(0, Math.min(SONG_FORM_MAX_ANCHOR_X, pointVb[0] - offset[0]));
-        const yVb = Math.max(0, Math.min(1000 * pageRatio - plateHeight, pointVb[1] - offset[1]));
+    function songFormBounds(mark: SheetMark): SongFormDrag['bounds'] {
+        if (mark.kind === 'section') {
+            const box = layoutSectionMarker(mark.text ?? '', [0, 0], mark.fontSize);
+            return { maxX: 1000 - box.width, height: box.height };
+        }
+        return { maxX: SONG_FORM_MAX_ANCHOR_X, height: layoutSongFormMarkup(mark.sections ?? [], [0, 0], mark.fontSize).plate.height };
+    }
+
+    /** Converts a pointer position (viewBox units) into a clamped top-left anchor (mark units). */
+    function anchorWithin(pointVb: [number, number], offset: [number, number], bounds: SongFormDrag['bounds']): [number, number] {
+        const x = Math.max(0, Math.min(bounds.maxX, pointVb[0] - offset[0]));
+        const yVb = Math.max(0, Math.min(1000 * pageRatio - bounds.height, pointVb[1] - offset[1]));
         return [x, Math.max(0, Math.min(1000, yVb / pageRatio))];
+    }
+
+    function startSongFormDrag(event: PointerEvent<SVGSVGElement>, mark: SheetMark, pointVb: [number, number], offset: [number, number]) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        const bounds = songFormBounds(mark);
+        const drag = { id: mark.id, offset, bounds, anchor: anchorWithin(pointVb, offset, bounds) };
+        songFormDragRef.current = drag;
+        setSongFormDrag(drag);
+    }
+
+    /** 송폼 tool: press a band/marker to drag it; tap empty space to move the band (띠) or place a marker (마디 섹션). */
+    function songFormPointerDown(event: PointerEvent<SVGSVGElement>) {
+        const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
+        const pointVb: [number, number] = [x, y * pageRatio];
+        const marks = currentPageMarks();
+        // Topmost first: section markers render above the band.
+        const hit = [...marks].reverse().find((m) => isSongFormMark(m) && isPointNearMark(x, y, m, pageRatio, 0));
+        if (hit) {
+            startSongFormDrag(event, hit, pointVb, [pointVb[0] - hit.points[0][0], pointVb[1] - hit.points[0][1] * pageRatio]);
+            return;
+        }
+        if (songFormMode === 'section') {
+            if (!armedSection) {
+                setStatus('먼저 섹션 칩을 고른 뒤 악보를 눌러주세요.');
+                rectRef.current = null;
+                return;
+            }
+            if (marks.length >= 2000) return;
+            const box = layoutSectionMarker(armedSection, [0, 0], songFormFontSize);
+            const offset: [number, number] = [box.width / 2, box.height / 2];
+            const mark: SheetMark = {
+                id: createClientId(),
+                kind: 'section',
+                color: box.color,
+                text: armedSection,
+                points: [anchorWithin(pointVb, offset, { maxX: 1000 - box.width, height: box.height })],
+                fontSize: songFormFontSize,
+                opacity: songFormTint ? SONG_FORM_TINT_OPACITY : 1,
+            };
+            addMark(mark);
+            startSongFormDrag(event, mark, pointVb, offset);
+            return;
+        }
+        const band = currentSongFormMark();
+        const rowHeight = songFormRowHeight(songFormFontSize);
+        if (!band) {
+            setPendingSongFormAnchor({ page, point: anchorWithin(pointVb, [0, rowHeight / 2], { maxX: SONG_FORM_MAX_ANCHOR_X, height: rowHeight }) });
+            rectRef.current = null;
+            return;
+        }
+        startSongFormDrag(event, band, pointVb, [0, rowHeight / 2]);
     }
 
     function position(clientX: number, clientY: number, target?: SVGSVGElement): [number, number] {
@@ -327,23 +455,7 @@ export default function SheetAnnotationWorkspace({
         rectRef.current = event.currentTarget.getBoundingClientRect();
 
         if (tool === 'songform') {
-            const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
-            const pointVb: [number, number] = [x, y * pageRatio];
-            const existing = currentSongFormMark();
-            if (!existing?.sections) {
-                setPendingSongFormAnchor({ page, point: songFormAnchorAt(pointVb, [0, SONG_FORM_ROW_HEIGHT / 2], ['I']) });
-                rectRef.current = null;
-                return;
-            }
-            const anchorVb: [number, number] = [existing.points[0][0], existing.points[0][1] * pageRatio];
-            // Grabbing the band keeps the grab offset; tapping elsewhere moves the band's first row there.
-            const offset: [number, number] = isPointNearMark(x, y, existing, pageRatio, 0)
-                ? [pointVb[0] - anchorVb[0], pointVb[1] - anchorVb[1]]
-                : [0, SONG_FORM_ROW_HEIGHT / 2];
-            event.currentTarget.setPointerCapture(event.pointerId);
-            const drag = { id: existing.id, offset, anchor: songFormAnchorAt(pointVb, offset, existing.sections) };
-            songFormDragRef.current = drag;
-            setSongFormDrag(drag);
+            songFormPointerDown(event);
             return;
         }
 
@@ -417,7 +529,7 @@ export default function SheetAnnotationWorkspace({
         if (songFormDragRef.current) {
             const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
             const drag = songFormDragRef.current;
-            drag.anchor = songFormAnchorAt([x, y * pageRatio], drag.offset, currentSongFormMark()?.sections ?? []);
+            drag.anchor = anchorWithin([x, y * pageRatio], drag.offset, drag.bounds);
             if (!rafRef.current) {
                 rafRef.current = requestAnimationFrame(() => {
                     rafRef.current = null;
@@ -466,8 +578,7 @@ export default function SheetAnnotationWorkspace({
             rafRef.current = null;
         }
         if (songFormDragRef.current) {
-            const sections = currentSongFormMark()?.sections;
-            if (sections) writeSongForm(sections, songFormDragRef.current.anchor);
+            moveMark(songFormDragRef.current.id, songFormDragRef.current.anchor);
             songFormDragRef.current = null;
             setSongFormDrag(null);
             rectRef.current = null;
@@ -763,22 +874,31 @@ export default function SheetAnnotationWorkspace({
 
     function renderSongFormMark(mark: SheetMark, interactive: boolean) {
         const drag = interactive && songFormDrag?.id === mark.id ? songFormDrag : null;
-        return (
-            <SongFormMarkup
+        const editing = interactive && isSongFormEditing;
+        const shared = {
+            anchor: drag?.anchor ?? mark.points[0],
+            ratio: pageRatio,
+            fontSize: mark.fontSize,
+            opacity: mark.opacity,
+            dragging: Boolean(drag),
+            selected: editing,
+            className: tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : '',
+            onClick: (e: ReactMouseEvent<SVGGElement>) => {
+                if (tool === 'eraser') {
+                    e.stopPropagation();
+                    removeMark(mark.id);
+                }
+            },
+        };
+        return mark.kind === 'section' ? (
+            <SongFormSectionMarker
                 key={mark.id}
-                sections={mark.sections ?? []}
-                anchor={drag?.anchor ?? mark.points[0]}
-                ratio={pageRatio}
-                dragging={Boolean(drag)}
-                selected={interactive && isSongFormEditing}
-                className={tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : ''}
-                onClick={(e) => {
-                    if (tool === 'eraser') {
-                        e.stopPropagation();
-                        removeMark(mark.id);
-                    }
-                }}
+                {...shared}
+                label={mark.text ?? ''}
+                onRemove={editing ? () => removeMark(mark.id) : undefined}
             />
+        ) : (
+            <SongFormMarkup key={mark.id} {...shared} sections={mark.sections ?? []} onRemoveChip={editing ? removeSongFormChip : undefined} />
         );
     }
 
@@ -789,6 +909,7 @@ export default function SheetAnnotationWorkspace({
         const stamps = marks.filter((m) => m.kind === 'stamp');
         const texts = marks.filter((m) => m.kind === 'text');
         const songForms = marks.filter((m) => m.kind === 'songform');
+        const sectionMarkers = marks.filter((m) => m.kind === 'section');
 
         return (
             <>
@@ -803,10 +924,12 @@ export default function SheetAnnotationWorkspace({
                 {texts.map(renderMark)}
                 {currentStroke?.kind === 'text' ? renderMark(currentStroke) : null}
                 {songForms.map((mark) => renderSongFormMark(mark, interactive))}
-                {interactive && isSongFormEditing && !songForms.length ? (
+                {sectionMarkers.map((mark) => renderSongFormMark(mark, interactive))}
+                {interactive && isSongFormEditing && songFormMode === 'band' && !songForms.length ? (
                     <SongFormMarkupPlaceholder
                         anchor={pendingSongFormAnchor?.page === page ? pendingSongFormAnchor.point : SONG_FORM_DEFAULT_ANCHOR}
                         ratio={pageRatio}
+                        fontSize={songFormFontSize}
                     />
                 ) : null}
             </>
@@ -834,9 +957,10 @@ export default function SheetAnnotationWorkspace({
                         className="sr-only"
                         type="file"
                         accept="application/pdf,image/png,image/jpeg,image/webp"
+                        multiple
                         disabled={busy || !loaded}
                         onChange={(e) => {
-                            void upload(e.target.files?.[0]);
+                            void upload(Array.from(e.target.files ?? []));
                             e.target.value = '';
                         }}
                     />
@@ -850,7 +974,7 @@ export default function SheetAnnotationWorkspace({
                         accept="application/json,.json"
                         disabled={busy || !loaded}
                         onChange={(e) => {
-                            void upload(e.target.files?.[0], true);
+                            void upload(Array.from(e.target.files ?? []), true);
                             e.target.value = '';
                         }}
                     />
@@ -956,104 +1080,215 @@ export default function SheetAnnotationWorkspace({
                     <div className="flex flex-wrap items-center gap-4 pt-1 border-t border-primary/10">
                         {tool === 'songform' && (
                             <div className="w-full space-y-2.5" role="group" aria-label="송폼 칩">
+                                {(shown?.pages.length ?? 0) > 1 && (
+                                    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="송폼을 얹을 페이지">
+                                        <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">페이지</span>
+                                        {shown?.pages.map((item, index) => {
+                                            const hasMarkup = item.marks.some(isSongFormMark);
+                                            return (
+                                                <button
+                                                    key={index}
+                                                    type="button"
+                                                    aria-pressed={page === index + 1}
+                                                    aria-label={`${index + 1}페이지${hasMarkup ? ' · 송폼 있음' : ''}`}
+                                                    title={canTurnPage ? undefined : '라이브 페이지는 그대로 두고 이 페이지만 열어 편집합니다'}
+                                                    disabled={busy}
+                                                    onClick={() => {
+                                                        if (canTurnPage) onPageChange(index + 1);
+                                                        else setEditPage(index + 1);
+                                                    }}
+                                                    className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground relative min-w-12`}
+                                                >
+                                                    {index + 1}p
+                                                    {hasMarkup && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-violet-500" aria-hidden />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="송폼 입력 방식">
+                                    <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">방식</span>
+                                    <button type="button" aria-pressed={songFormMode === 'band'} onClick={() => setSongFormMode('band')} className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}>
+                                        송폼 띠 (상단)
+                                    </button>
+                                    <button type="button" aria-pressed={songFormMode === 'section'} onClick={() => setSongFormMode('section')} className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}>
+                                        마디 섹션
+                                    </button>
+                                </div>
                                 <div className="flex flex-wrap items-center gap-1.5">
                                     <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">섹션</span>
-                                    {SONG_FORM_CHIPS.map((chip) => (
-                                        <button
-                                            key={chip.label}
-                                            type="button"
-                                            title={`${chip.name} 추가`}
-                                            disabled={busy || !activePage || songFormSections.length >= SONG_FORM_MAX_SECTIONS}
-                                            onClick={() => appendSongFormChip(chip.label)}
-                                            className="tap-target min-w-12 rounded-xl px-3 text-sm font-black text-white shadow-xs transition hover:brightness-110 active:scale-95 disabled:opacity-40"
-                                            style={{ backgroundColor: songFormChipColor(chip.label) }}
-                                        >
-                                            {chip.label}
-                                        </button>
-                                    ))}
+                                    {SONG_FORM_CHIPS.map((chip) => {
+                                        const armed = songFormMode === 'section' && armedSection === chip.label;
+                                        return (
+                                            <button
+                                                key={chip.label}
+                                                type="button"
+                                                title={songFormMode === 'band' ? `${chip.name} 추가` : `${chip.name} 표시를 마디에 놓기`}
+                                                aria-pressed={songFormMode === 'section' ? armed : undefined}
+                                                disabled={busy || !activePage || (songFormMode === 'band' && songFormSections.length >= SONG_FORM_MAX_SECTIONS)}
+                                                onClick={() => handleSongFormChip(chip.label)}
+                                                className={`tap-target min-w-12 rounded-xl px-3 text-sm font-black text-white shadow-xs transition hover:brightness-110 active:scale-95 disabled:opacity-40 ${
+                                                    armed ? 'scale-105 ring-4 ring-amber-400 ring-offset-2 ring-offset-background' : ''
+                                                }`}
+                                                style={{ backgroundColor: songFormChipColor(chip.label) }}
+                                            >
+                                                {chip.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">반복</span>
-                                    {[2, 3].map((times) => (
+                                {songFormMode === 'band' ? (
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">반복</span>
+                                        {[2, 3].map((times) => (
+                                            <button
+                                                key={times}
+                                                type="button"
+                                                title={`마지막 칩을 ${times}번 반복으로 표시`}
+                                                disabled={busy || !songFormSections.length}
+                                                aria-pressed={splitRepeat(songFormSections[songFormSections.length - 1] ?? '').repeat === times}
+                                                onClick={() => repeatLastSongFormChip(times)}
+                                                className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground min-w-12`}
+                                            >
+                                                ×{times}
+                                            </button>
+                                        ))}
                                         <button
-                                            key={times}
-                                            type="button"
-                                            title={`마지막 칩을 ${times}번 반복으로 표시`}
-                                            disabled={busy || !songFormSections.length}
-                                            aria-pressed={splitRepeat(songFormSections[songFormSections.length - 1] ?? '').repeat === times}
-                                            onClick={() => repeatLastSongFormChip(times)}
-                                            className={`${button} min-w-12 aria-pressed:bg-primary aria-pressed:text-primary-foreground`}
-                                        >
-                                            ×{times}
-                                        </button>
-                                    ))}
-                                    <button
-                                        type="button"
-                                        className={button}
-                                        disabled={busy || !songFormSections.length}
-                                        onClick={() => removeSongFormChip(songFormSections.length - 1)}
-                                    >
-                                        <Delete size={16} /> 마지막 칩
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={`${button} text-rose-600 border-rose-300/40 hover:bg-rose-500/10`}
-                                        disabled={busy || !songFormSections.length}
-                                        onClick={() => writeSongForm([])}
-                                    >
-                                        <Trash2 size={16} /> 송폼 지우기
-                                    </button>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">프리셋</span>
-                                    {SONG_FORM_PRESETS.map((preset) => (
-                                        <button
-                                            key={preset.name}
                                             type="button"
                                             className={button}
-                                            title={preset.sections.join(' → ')}
-                                            disabled={busy || !activePage}
-                                            onClick={() => writeSongForm(preset.sections)}
+                                            disabled={busy || !songFormSections.length}
+                                            onClick={() => removeSongFormChip(songFormSections.length - 1)}
                                         >
-                                            {preset.name}
+                                            <Delete size={16} /> 마지막 칩
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`${button} text-rose-600 border-rose-300/40 hover:bg-rose-500/10`}
+                                            disabled={busy || !songFormSections.length}
+                                            onClick={() => writeSongForm([])}
+                                        >
+                                            <Trash2 size={16} /> 송폼 지우기
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">표시</span>
+                                        {pageSectionMarkers.length ? (
+                                            [...pageSectionMarkers]
+                                                .sort((a, b) => a.points[0][1] - b.points[0][1] || a.points[0][0] - b.points[0][0])
+                                                .map((marker) => (
+                                                    <button
+                                                        key={marker.id}
+                                                        type="button"
+                                                        aria-label={`${marker.text} 표시 빼기`}
+                                                        title="눌러서 이 표시 빼기"
+                                                        disabled={busy}
+                                                        onClick={() => removeMark(marker.id)}
+                                                        className="group inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-xs font-black text-white transition active:scale-95"
+                                                        style={{ backgroundColor: songFormChipColor(marker.text ?? '') }}
+                                                    >
+                                                        {marker.text}
+                                                        <X size={11} className="opacity-60 group-hover:opacity-100" aria-hidden />
+                                                    </button>
+                                                ))
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground">이 페이지에 놓은 섹션 표시가 없습니다.</span>
+                                        )}
+                                        {pageSectionMarkers.length > 0 && (
+                                            <button
+                                                type="button"
+                                                className={`${button} text-rose-600 border-rose-300/40 hover:bg-rose-500/10`}
+                                                disabled={busy}
+                                                onClick={() => replacePageMarks(currentPageMarks().filter((m) => m.kind !== 'section'))}
+                                            >
+                                                <Trash2 size={16} /> 섹션 표시 지우기
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="송폼 크기와 스타일">
+                                    <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">모양</span>
+                                    {SONG_FORM_SIZES.map((size) => (
+                                        <button
+                                            key={size.fontSize}
+                                            type="button"
+                                            aria-pressed={songFormFontSize === size.fontSize}
+                                            disabled={busy}
+                                            onClick={() => applySongFormLook(size.fontSize, songFormTint)}
+                                            className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}
+                                        >
+                                            {size.label}
                                         </button>
                                     ))}
+                                    <span className="mx-1 h-6 w-px bg-primary/15" aria-hidden />
+                                    <button type="button" aria-pressed={!songFormTint} disabled={busy} onClick={() => applySongFormLook(songFormFontSize, false)} className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}>
+                                        진하게
+                                    </button>
                                     <button
                                         type="button"
-                                        className={button}
-                                        title="곡 라이브러리·유튜브 챕터로 저장한 송폼을 칩으로 가져옵니다"
-                                        disabled={busy || !activePage}
-                                        onClick={importSavedSongForm}
+                                        aria-pressed={songFormTint}
+                                        disabled={busy}
+                                        title="악보가 비쳐 보이는 반투명 음영으로 표시합니다"
+                                        onClick={() => applySongFormLook(songFormFontSize, true)}
+                                        className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}
                                     >
-                                        곡 송폼 불러오기
+                                        반투명
                                     </button>
                                 </div>
-                                <ol
-                                    aria-label="현재 페이지 송폼 순서"
-                                    className="flex min-h-11 flex-wrap items-center gap-1 rounded-xl border border-dashed border-primary/20 bg-background/60 px-2 py-1.5"
-                                >
-                                    {songFormSections.length ? (
-                                        songFormSections.map((label, index) => (
-                                            <li key={`${index}-${label}`} className="flex items-center gap-1">
-                                                {index > 0 && <ChevronRight size={12} className="text-muted-foreground" aria-hidden />}
+                                {songFormMode === 'band' && (
+                                    <>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">프리셋</span>
+                                            {SONG_FORM_PRESETS.map((preset) => (
                                                 <button
+                                                    key={preset.name}
                                                     type="button"
-                                                    aria-label={`${index + 1}번째 ${label} 빼기`}
-                                                    title="눌러서 이 칩 빼기"
-                                                    disabled={busy}
-                                                    onClick={() => removeSongFormChip(index)}
-                                                    className="group inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-xs font-black text-white transition active:scale-95"
-                                                    style={{ backgroundColor: songFormChipColor(label) }}
+                                                    className={button}
+                                                    title={preset.sections.join(' → ')}
+                                                    disabled={busy || !activePage}
+                                                    onClick={() => writeSongForm(preset.sections)}
                                                 >
-                                                    {label}
-                                                    <X size={11} className="opacity-60 group-hover:opacity-100" aria-hidden />
+                                                    {preset.name}
                                                 </button>
-                                            </li>
-                                        ))
-                                    ) : (
-                                        <li className="text-xs text-muted-foreground">아직 송폼이 없습니다. 위 칩을 진행 순서대로 눌러보세요.</li>
-                                    )}
-                                </ol>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                className={button}
+                                                title="곡 라이브러리·유튜브 챕터로 저장한 송폼을 칩으로 가져옵니다"
+                                                disabled={busy || !activePage}
+                                                onClick={importSavedSongForm}
+                                            >
+                                                곡 송폼 불러오기
+                                            </button>
+                                        </div>
+                                        <ol
+                                            aria-label="현재 페이지 송폼 순서"
+                                            className="flex min-h-11 flex-wrap items-center gap-1 rounded-xl border border-dashed border-primary/20 bg-background/60 px-2 py-1.5"
+                                        >
+                                            {songFormSections.length ? (
+                                                songFormSections.map((label, index) => (
+                                                    <li key={`${index}-${label}`} className="flex items-center gap-1">
+                                                        {index > 0 && <ChevronRight size={12} className="text-muted-foreground" aria-hidden />}
+                                                        <button
+                                                            type="button"
+                                                            aria-label={`${index + 1}번째 ${label} 빼기`}
+                                                            title="눌러서 이 칩 빼기"
+                                                            disabled={busy}
+                                                            onClick={() => removeSongFormChip(index)}
+                                                            className="group inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-xs font-black text-white transition active:scale-95"
+                                                            style={{ backgroundColor: songFormChipColor(label) }}
+                                                        >
+                                                            {label}
+                                                            <X size={11} className="opacity-60 group-hover:opacity-100" aria-hidden />
+                                                        </button>
+                                                    </li>
+                                                ))
+                                            ) : (
+                                                <li className="text-xs text-muted-foreground">아직 송폼이 없습니다. 위 칩을 진행 순서대로 눌러보세요.</li>
+                                            )}
+                                        </ol>
+                                    </>
+                                )}
                             </div>
                         )}
 
@@ -1164,7 +1399,11 @@ export default function SheetAnnotationWorkspace({
                         {tool === 'move'
                             ? '이동 모드에서는 손가락으로 화면을 스크롤할 수 있습니다.'
                             : tool === 'songform'
-                                ? '칩을 누를 때마다 이 페이지 상단에 송폼이 마크업으로 얹힙니다. 악보를 누르거나 끌어서 위치를 옮기고, 공유본·공유 파일에 함께 담깁니다.'
+                                ? songFormMode === 'band'
+                                    ? '칩을 누를 때마다 이 페이지 상단에 송폼이 얹힙니다. 띠를 끌어 옮기고, 칩에 마우스를 올리면 나오는 ×로 뺍니다. 공유본·공유 파일에 함께 담깁니다.'
+                                    : armedSection
+                                        ? `악보에서 ‘${armedSection}’ 섹션이 시작되는 마디를 누르면 표시가 놓입니다. 놓은 표시는 끌어서 옮기고 ×로 지웁니다.`
+                                        : '섹션 칩을 고른 뒤 악보에서 그 섹션이 시작되는 마디를 누르세요.'
                             : tool === 'pen'
                                 ? '악보 위에 손가락이나 펜으로 그리세요. 스크롤하려면 이동을 누르세요.'
                                 : tool === 'highlighter'
@@ -1191,6 +1430,16 @@ export default function SheetAnnotationWorkspace({
                     <span className="text-sm font-bold">
                         {isDualPage && shown && page + 1 <= shown.pages.length ? `${page}-${page + 1}` : page} / {shown?.pages.length ?? 0}p
                     </span>
+                    {isEditingOtherPage && (
+                        <button
+                            type="button"
+                            className={`${button} border-violet-400/50 bg-violet-500/10 text-violet-700 dark:text-violet-300`}
+                            title="라이브 진행 중인 페이지로 돌아갑니다"
+                            onClick={() => setEditPage(null)}
+                        >
+                            {page}p 편집 중 · 라이브 {livePage}p로
+                        </button>
+                    )}
                     <button
                         className={button}
                         disabled={!canTurnPage || page >= (shown?.pages.length ?? 0)}
@@ -1333,7 +1582,7 @@ export default function SheetAnnotationWorkspace({
                                     style={{
                                         touchAction: view === 'draft' && tool !== 'move' ? 'none' : 'auto',
                                         cursor:
-                                            tool === 'move' || tool === 'songform'
+                                            tool === 'move' || (tool === 'songform' && songFormMode === 'band')
                                                 ? 'grab'
                                                 : tool === 'eraser'
                                                     ? 'pointer'
@@ -1406,7 +1655,7 @@ export default function SheetAnnotationWorkspace({
                             style={{
                                 touchAction: view === 'draft' && tool !== 'move' ? 'none' : 'auto',
                                 cursor:
-                                    tool === 'move' || tool === 'songform'
+                                    tool === 'move' || (tool === 'songform' && songFormMode === 'band')
                                         ? 'grab'
                                         : tool === 'eraser'
                                             ? 'pointer'

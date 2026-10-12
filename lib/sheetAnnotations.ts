@@ -1,6 +1,7 @@
-import { isValidSongFormSections, layoutSongFormMarkup } from './songFormMarkup';
+import { isValidSongFormSections, layoutSectionMarker, layoutSongFormMarkup } from './songFormMarkup';
 
-export type SheetMarkKind = 'pen' | 'highlighter' | 'stamp' | 'text' | 'rect' | 'songform';
+/** 'songform' = song form band (I → V1 → C …); 'section' = one section chip placed at a measure (text = label). */
+export type SheetMarkKind = 'pen' | 'highlighter' | 'stamp' | 'text' | 'rect' | 'songform' | 'section';
 
 export type SheetMark = {
     id: string;
@@ -104,7 +105,7 @@ export function validateSheet(value: unknown): SheetDocument {
                 HIGHLIGHTER_COLORS.includes(mark.color) ||
                 /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(mark.color) ||
                 /^rgba?\([^)]+\)$/.test(mark.color);
-            const isValidKind = ['pen', 'highlighter', 'stamp', 'text', 'rect', 'songform'].includes(mark.kind);
+            const isValidKind = ['pen', 'highlighter', 'stamp', 'text', 'rect', 'songform', 'section'].includes(mark.kind);
             const isValidWidth = mark.strokeWidth === undefined || (Number.isFinite(mark.strokeWidth) && mark.strokeWidth >= 0.5 && mark.strokeWidth <= 60);
             const isValidOpacity = mark.opacity === undefined || (Number.isFinite(mark.opacity) && mark.opacity >= 0 && mark.opacity <= 1);
             const isValidFontSize = mark.fontSize === undefined || (Number.isFinite(mark.fontSize) && mark.fontSize >= 8 && mark.fontSize <= 72);
@@ -114,7 +115,8 @@ export function validateSheet(value: unknown): SheetDocument {
                 !Array.isArray(mark.points) || mark.points.length < 1 || mark.points.length > 5000 ||
                 mark.points.some((point) => !Array.isArray(point) || point.length !== 2 || point.some((n) => !Number.isFinite(n) || n < 0 || n > 1000)) ||
                 ((mark.kind === 'stamp' || mark.kind === 'text') && (typeof mark.text !== 'string' || mark.text.length > 100)) ||
-                (mark.kind === 'songform' && !isValidSongFormSections(mark.sections))) {
+                (mark.kind === 'songform' && !isValidSongFormSections(mark.sections)) ||
+                (mark.kind === 'section' && !isValidSongFormSections([mark.text]))) {
                 throw new Error('필기 데이터가 올바르지 않습니다.');
             }
         }
@@ -272,14 +274,17 @@ export function isPointNearMark(
         return Math.hypot(targetX - textX, targetY - textY) <= (threshold ?? 30);
     }
 
-    if (mark.kind === 'songform') {
-        const { plate } = layoutSongFormMarkup(mark.sections ?? [], [mark.points[0][0], mark.points[0][1] * ratio]);
+    if (mark.kind === 'songform' || mark.kind === 'section') {
+        const origin: [number, number] = [mark.points[0][0], mark.points[0][1] * ratio];
+        const box = mark.kind === 'songform'
+            ? layoutSongFormMarkup(mark.sections ?? [], origin, mark.fontSize).plate
+            : layoutSectionMarker(mark.text ?? '', origin, mark.fontSize);
         const tolerance = threshold ?? 6;
         return (
-            targetX >= plate.x - tolerance &&
-            targetX <= plate.x + plate.width + tolerance &&
-            targetY >= plate.y - tolerance &&
-            targetY <= plate.y + plate.height + tolerance
+            targetX >= box.x - tolerance &&
+            targetX <= box.x + box.width + tolerance &&
+            targetY >= box.y - tolerance &&
+            targetY <= box.y + box.height + tolerance
         );
     }
 
