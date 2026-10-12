@@ -125,7 +125,9 @@ export function validateSheet(value: unknown): SheetDocument {
 export async function importSheetPages(file: File): Promise<SheetPage[]> {
     if (file.size > 20 * 1024 * 1024) throw new Error('20MB 이하의 파일을 선택해주세요.');
     if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        const pdfjs = await import('pdfjs-dist');
+        // Legacy build: bundles polyfills (e.g. Map.prototype.getOrInsertComputed, native only in
+        // Chrome 145+/Safari 26.2+/Firefox 144+) that the modern build calls directly.
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
         pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
         const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
         const pdf = await task.promise;
