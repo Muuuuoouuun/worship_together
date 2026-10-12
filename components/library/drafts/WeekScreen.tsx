@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, CalendarDays, ChevronRight, CircleDashed, Clock3, ListMusic, MapPin } from 'lucide-react';
+import { Bell, CalendarDays, ChevronRight, CircleDashed, ListMusic, MapPin, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
     EVENTS,
@@ -14,24 +14,26 @@ import {
     member,
     monthOf,
     setlistById,
+    commentsOf,
     songsOf,
-    totalMinutes,
     weekDates,
     weekLabel,
     weekday,
     type EventKind,
+    type Notice,
     type ScreenId,
     type TeamRequest,
 } from './draftData';
-import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_DOT, TONE_ICON, body, ink, line, selected, sub, today } from './ui';
+import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_DOT, TONE_ICON, body, ink, line, selected, sub, today } from './ui';
+import { NoticeAvatar } from './AlertsScreen';
 
-const EVENT_ICON: Record<EventKind, typeof Clock3> = {
+const EVENT_ICON: Record<EventKind, typeof Bell> = {
     rehearsal: CircleDashed,
     service: CalendarDays,
     prayer: Bell,
 };
 
-export default function WeekScreen({ requests, go, openOrder }: { requests: TeamRequest[]; go: (screen: ScreenId) => void; openOrder: (id: string) => void }) {
+export default function WeekScreen({ requests, notices, go, openOrder }: { requests: TeamRequest[]; notices: Notice[]; go: (screen: ScreenId) => void; openOrder: (id: string) => void }) {
     const setlist = setlistById(THIS_WEEK_SETLIST_ID);
     const dates = weekDates(setlist.date);
     const [day, setDay] = useState(setlist.date);
@@ -39,6 +41,8 @@ export default function WeekScreen({ requests, go, openOrder }: { requests: Team
     const owner = member(setlist.owner);
     const events = EVENTS.filter((event) => event.date === day);
     const openRequests = requests.filter((request) => !request.done);
+    const comments = commentsOf(setlist.items);
+    const unread = notices.filter((notice) => notice.unread).length;
 
     return (
         <div className="space-y-7">
@@ -46,7 +50,17 @@ export default function WeekScreen({ requests, go, openOrder }: { requests: Team
                 eyebrow={weekLabel(setlist.date)}
                 title={`${monthOf(setlist.date)}월 ${dayOf(setlist.date)}일`}
                 trailing={`주일 · ${dDay(setlist.date)}`}
-                aside={<AddButton label="일정 추가" />}
+                aside={
+                    <>
+                        <span className="relative">
+                            <RoundIconButton label={`알림 ${unread}개`} onClick={() => go('alerts')}>
+                                <Bell size={18} />
+                            </RoundIconButton>
+                            {unread > 0 && <span className="absolute right-2 top-2 size-2 rounded-full bg-orange-500 ring-2 ring-white dark:ring-neutral-900" aria-hidden="true" />}
+                        </span>
+                        <AddButton label="일정 추가" />
+                    </>
+                }
             />
 
             <ol className="grid grid-cols-7 text-center" aria-label="이번 주 날짜">
@@ -110,8 +124,8 @@ export default function WeekScreen({ requests, go, openOrder }: { requests: Team
 
                     <div className="mt-4 flex items-center justify-between gap-3 border-t border-emerald-900/10 pt-3.5 dark:border-white/10">
                         <span className={cn('inline-flex items-center gap-1.5 text-xs', body)}>
-                            <Clock3 size={14} aria-hidden="true" />
-                            {songs.length}곡 · {totalMinutes(setlist.items)}분
+                            <MessageCircle size={14} aria-hidden="true" />
+                            {songs.length}곡 · 코멘트 {comments.length}
                         </span>
                         <span className="inline-flex items-center gap-2">
                             <span className={cn('text-xs', sub)}>담당</span>
@@ -120,6 +134,29 @@ export default function WeekScreen({ requests, go, openOrder }: { requests: Team
                         </span>
                     </div>
                 </button>
+            </section>
+
+            <section aria-label="팀 소식" className="space-y-1">
+                <SectionTitle
+                    title="팀 소식"
+                    meta={unread > 0 ? `새 소식 ${unread}` : undefined}
+                    action={<button type="button" onClick={() => go('alerts')} className={cn('text-xs font-medium underline-offset-2 hover:underline', body)}>모두 보기</button>}
+                />
+                <ul>
+                    {notices.slice(0, 3).map((notice) => (
+                        <li key={notice.id} className={cn('flex gap-3 border-b py-3.5 last:border-b-0', line)}>
+                            <NoticeAvatar notice={notice} size="sm" />
+                            <div className="min-w-0 flex-1">
+                                <p className="truncate text-[13px]">
+                                    <span className={cn('font-semibold', ink)}>{member(notice.actor)?.name}</span>
+                                    <span className={body}>님이 {notice.message}</span>
+                                </p>
+                                {notice.quote && <p className={cn('mt-0.5 truncate text-xs', sub)}>“{notice.quote}”</p>}
+                            </div>
+                            <span className={cn('shrink-0 text-[11px]', sub)}>{notice.ago}</span>
+                        </li>
+                    ))}
+                </ul>
             </section>
 
             <section aria-label="일정" className="space-y-1">

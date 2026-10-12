@@ -13,11 +13,12 @@ interface SetlistDraftsPageProps {
 }
 
 const FRAMES: { screen: ScreenId; title: string; detail: string }[] = [
-    { screen: 'week', title: '이번 주', detail: '주간 날짜 · 이번 주 콘티와 담당자 · 일정' },
+    { screen: 'week', title: '이번 주', detail: '이번 주 콘티와 담당자 · 팀 소식 · 일정' },
     { screen: 'conti', title: '콘티 내역', detail: '달력 · 주차별 담당 · 지난 콘티' },
-    { screen: 'order', title: '순서', detail: '시간 흐름으로 보는 곡·기도 순서' },
+    { screen: 'order', title: '순서', detail: '곡 순서 · 송폼 · 링크 · 특이사항 · 팀원 코멘트' },
     { screen: 'team', title: '악기 담당 · 일정', detail: '주일별 배치 현황과 연습 일정' },
     { screen: 'requests', title: '요청', detail: 'Key 변경 · 대체 · 질문을 한곳에서' },
+    { screen: 'alerts', title: '팀 소식', detail: '팀원들의 입력·응답·코멘트 알림' },
 ];
 
 const SCREENS = new Set<ScreenId>(FRAMES.map((frame) => frame.screen));
@@ -46,7 +47,7 @@ export default async function SetlistDraftsPage({ searchParams }: SetlistDraftsP
                         </Link>
                         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">콘티 · 순서 리디자인</h1>
                         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-                            흰 바탕과 여백, 한 가지 강조색. 주차별 담당부터 순서·악기 담당·요청까지 한 흐름으로 이어집니다.
+                            흰 바탕과 여백, 한 가지 강조색. 주차별 담당부터 순서·악기 담당·요청·팀 소식까지 한 흐름으로 이어집니다.
                         </p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1.5 text-xs text-neutral-500 ring-1 ring-neutral-200 dark:bg-neutral-900 dark:text-neutral-400 dark:ring-neutral-800">

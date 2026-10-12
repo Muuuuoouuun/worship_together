@@ -3,15 +3,16 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { CalendarPlus, House, Inbox, ListMusic, MessageSquarePlus, Plus, UsersRound, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { REQUESTS, THIS_WEEK_SETLIST_ID, type ScreenId } from './draftData';
+import { NOTICES, REQUESTS, THIS_WEEK_SETLIST_ID, type ScreenId } from './draftData';
 import { ink, line, selected } from './ui';
 import WeekScreen from './WeekScreen';
 import ContiScreen from './ContiScreen';
 import OrderScreen from './OrderScreen';
 import TeamScreen from './TeamScreen';
 import RequestScreen from './RequestScreen';
+import AlertsScreen from './AlertsScreen';
 
-const NAV: { id: Exclude<ScreenId, 'order'>; label: string; icon: LucideIcon }[] = [
+const NAV: { id: Exclude<ScreenId, 'order' | 'alerts'>; label: string; icon: LucideIcon }[] = [
     { id: 'week', label: '이번 주', icon: House },
     { id: 'conti', label: '콘티', icon: ListMusic },
     { id: 'team', label: '팀', icon: UsersRound },
@@ -33,9 +34,10 @@ export default function ContiApp({ initialScreen = 'week', framed = false }: { i
     const [screen, setScreen] = useState<ScreenId>(initialScreen);
     const [setlistId, setSetlistId] = useState(THIS_WEEK_SETLIST_ID);
     const [requests, setRequests] = useState(REQUESTS);
+    const [notices, setNotices] = useState(NOTICES);
     const [sheetOpen, setSheetOpen] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const activeNav = screen === 'order' ? 'conti' : screen;
+    const activeNav = screen === 'order' ? 'conti' : screen === 'alerts' ? 'week' : screen;
     const openCount = requests.filter((request) => !request.done).length;
 
     function go(next: ScreenId) {
@@ -54,17 +56,26 @@ export default function ContiApp({ initialScreen = 'week', framed = false }: { i
         setRequests((list) => list.map((request) => (request.id === id ? { ...request, done: !request.done } : request)));
     }
 
+    function readNotice(id: string) {
+        setNotices((list) => list.map((notice) => (notice.id === id ? { ...notice, unread: false } : notice)));
+    }
+
+    function readAllNotices() {
+        setNotices((list) => list.map((notice) => ({ ...notice, unread: false })));
+    }
+
     return (
-        <div className={cn('relative isolate flex flex-col bg-white dark:bg-neutral-900', framed ? 'h-full overflow-hidden' : 'min-h-dvh')}>
+        <div className={cn('relative isolate flex flex-col break-keep bg-white dark:bg-neutral-900', framed ? 'h-full overflow-hidden' : 'min-h-dvh')}>
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72" style={TOP_GLOW} />
 
             <div ref={scrollRef} className={cn('flex-1', framed && 'no-scrollbar overflow-y-auto overscroll-contain')}>
                 <div className={cn('px-5 pb-32', framed ? 'pt-12' : 'pt-[max(1.75rem,env(safe-area-inset-top))]')}>
-                    {screen === 'week' && <WeekScreen requests={requests} go={go} openOrder={openOrder} />}
+                    {screen === 'week' && <WeekScreen requests={requests} notices={notices} go={go} openOrder={openOrder} />}
                     {screen === 'conti' && <ContiScreen openOrder={openOrder} />}
                     {screen === 'order' && <OrderScreen setlistId={setlistId} onBack={() => go('conti')} onSelect={setSetlistId} />}
                     {screen === 'team' && <TeamScreen />}
                     {screen === 'requests' && <RequestScreen requests={requests} onToggle={toggleRequest} />}
+                    {screen === 'alerts' && <AlertsScreen notices={notices} onRead={readNotice} onReadAll={readAllNotices} onBack={() => go('week')} />}
                 </div>
             </div>
 

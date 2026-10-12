@@ -126,7 +126,7 @@ export default function TeamScreen() {
                                         row.memberId ? (
                                             <span key={index} className={cn('inline-flex items-center gap-1.5', row.status === 'declined' && 'opacity-40')}>
                                                 <Avatar id={row.memberId} size="sm" />
-                                                {rows.length === 1 && <span className={cn('text-[13px]', ink, row.status === 'declined' && 'line-through')}>{member(row.memberId)?.name}</span>}
+                                                {rows.length === 1 && row.status !== 'pending' && <span className={cn('text-[13px]', ink, row.status === 'declined' && 'line-through')}>{member(row.memberId)?.name}</span>}
                                             </span>
                                         ) : (
                                             <button key={index} type="button" className={cn('inline-flex h-8 items-center gap-1 rounded-full border border-dashed px-3 text-xs font-medium', 'border-neutral-300 dark:border-neutral-600', ink)}>
@@ -134,6 +134,11 @@ export default function TeamScreen() {
                                                 배정
                                             </button>
                                         ),
+                                    )}
+                                    {rows.length === 1 && rows[0].status === 'pending' && (
+                                        <button type="button" className={cn('inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold text-amber-700 dark:text-amber-200', TONE_BLOCK.sand)}>
+                                            다시 알리기
+                                        </button>
                                     )}
                                     {rows.some((row) => row.status === 'declined') && (
                                         <button type="button" className={cn('inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold text-orange-700 dark:text-orange-200', TONE_BLOCK.peach)}>

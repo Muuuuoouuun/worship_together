@@ -1,44 +1,40 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, BookOpen, ChevronDown, Clock3, HandHeart, Music2, Radio } from 'lucide-react';
+import { ArrowLeft, BookOpen, ChevronDown, CirclePlay, FileText, HandHeart, Headphones, MessageCircle, Radio, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
+    SECTION_NAMES,
     SETLISTS,
     SETLIST_STATUS,
-    clock,
+    commentsOf,
     dayOf,
     md,
     member,
     monthOf,
     setlistById,
     songsOf,
-    toMinutes,
-    totalMinutes,
     weekLabel,
-    type OrderItem,
-    type Tone,
+    type LinkKind,
+    type Song,
 } from './draftData';
-import { AddButton, Avatar, Eyebrow, KeyText, RoundIconButton, TONE_BLOCK, TONE_DOT, TONE_ICON, body, ink, line, selected, sub } from './ui';
+import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, TONE_BLOCK, TONE_ICON, body, chip, ink, line, selected, sub } from './ui';
 
-/** 1분당 높이(px). 곡 길이가 블록 높이로 드러납니다. */
-const PX_PER_MINUTE = 28;
-
-function toneOf(item: OrderItem): Tone {
-    if (item.kind === 'moment') return 'lilac';
-    return item.bpm >= 100 ? 'peach' : 'sky';
-}
+const LINK_ICON: Record<LinkKind, LucideIcon> = {
+    video: CirclePlay,
+    sheet: FileText,
+    mr: Headphones,
+};
 
 export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId: string; onBack: () => void; onSelect: (id: string) => void }) {
     const [picking, setPicking] = useState(false);
     const setlist = setlistById(setlistId);
     const owner = member(setlist.owner);
-    const start = toMinutes(setlist.time);
-    const total = totalMinutes(setlist.items);
     const songs = songsOf(setlist.items);
+    const comments = commentsOf(setlist.items);
+    const commenters = Array.from(new Set(comments.map((comment) => comment.from)));
     const choices = SETLISTS.filter((item) => item.items.length > 0);
     const numbers = setlist.items.map((_, index) => songsOf(setlist.items.slice(0, index + 1)).length);
-    const offsets = setlist.items.map((_, index) => totalMinutes(setlist.items.slice(0, index)));
 
     return (
         <div className="space-y-6">
@@ -56,7 +52,7 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
                         <ChevronDown size={18} className={cn('transition-transform', picking && 'rotate-180')} aria-hidden="true" />
                     </span>
                 </button>
-                <AddButton label="순서 추가" />
+                <AddButton label="곡 추가" />
             </header>
 
             {picking && (
@@ -81,95 +77,139 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
             )}
 
             <div>
-                <div className="flex items-end justify-between gap-3">
-                    <h2 className={cn('text-xl font-semibold tracking-tight', ink)}>{setlist.theme}</h2>
-                    <span className={cn('shrink-0 text-xs tabular-nums', sub)}>
-                        {songs.length}곡 · {total}분
-                    </span>
+                <Eyebrow>
+                    {setlist.service} · <span className={SETLIST_STATUS[setlist.status].text}>{SETLIST_STATUS[setlist.status].label}</span>
+                </Eyebrow>
+                <h2 className={cn('mt-1 text-xl font-semibold tracking-tight', ink)}>{setlist.theme}</h2>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                    <p className={cn('text-xs tabular-nums', sub)}>
+                        {songs.length}곡 · Key {songs.map((item) => item.key).join('·')}
+                    </p>
+                    {comments.length > 0 && (
+                        <span className={cn('inline-flex items-center gap-1.5 text-xs', body)}>
+                            <AvatarStack ids={commenters} max={3} size="xs" />
+                            코멘트 {comments.length}
+                        </span>
+                    )}
                 </div>
-                <p className={cn('mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]', sub)}>
-                    <Legend tone="peach" label="빠른 곡" />
-                    <Legend tone="sky" label="느린 곡" />
-                    <Legend tone="lilac" label="기도·말씀" />
-                </p>
             </div>
 
-            <ol aria-label={`${setlist.theme} 예배 순서`}>
+            <ol aria-label={`${setlist.theme} 콘티 순서`} className="space-y-3">
                 {setlist.items.map((item, index) => {
-                    const begin = start + offsets[index];
-                    const end = begin + item.minutes;
-                    const tone = toneOf(item);
-                    const number = numbers[index];
-                    const isSong = item.kind === 'song';
-
-                    return (
-                        <li
-                            key={item.id}
-                            className={cn('grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2 border-t', line)}
-                            style={{ minHeight: Math.max(item.minutes * PX_PER_MINUTE, isSong ? 118 : 72) }}
-                        >
-                            <span className={cn('pt-2.5 text-xs tabular-nums', sub)}>{clock(begin)}</span>
-                            <article className={cn('my-1.5 flex flex-col rounded-2xl px-4 py-3', TONE_BLOCK[tone])}>
-                                <div className="flex items-start justify-between gap-3">
-                                    <h3 className={cn('min-w-0 truncate text-[15px] font-semibold', ink)}>{item.title}</h3>
-                                    {item.kind === 'song' ? (
-                                        <Music2 size={17} className={cn('mt-0.5 shrink-0', TONE_ICON[tone])} aria-hidden="true" />
-                                    ) : item.moment === 'prayer' ? (
-                                        <HandHeart size={17} className={cn('mt-0.5 shrink-0', TONE_ICON[tone])} aria-hidden="true" />
-                                    ) : (
-                                        <BookOpen size={17} className={cn('mt-0.5 shrink-0', TONE_ICON[tone])} aria-hidden="true" />
-                                    )}
+                    if (item.kind === 'moment') {
+                        const Icon = item.moment === 'prayer' ? HandHeart : BookOpen;
+                        return (
+                            <li key={item.id} className={cn('flex items-start gap-3 rounded-2xl px-4 py-3', TONE_BLOCK.lilac)}>
+                                <Icon size={16} className={cn('mt-0.5 shrink-0', TONE_ICON.lilac)} aria-hidden="true" />
+                                <div className="min-w-0">
+                                    <p className={cn('text-sm font-medium', ink)}>{item.title}</p>
+                                    {item.memo && <p className={cn('mt-0.5 text-xs leading-relaxed', sub)}>{item.memo}</p>}
                                 </div>
-
-                                {item.kind === 'song' ? (
-                                    <p className={cn('mt-0.5 text-xs tabular-nums', sub)}>
-                                        {number}번 곡 · <KeyText from={item.originalKey} to={item.key} /> · {item.bpm} BPM
-                                    </p>
-                                ) : (
-                                    <p className={cn('mt-0.5 text-xs tabular-nums', sub)}>
-                                        {item.minutes}분 · {clock(begin)} - {clock(end)}
-                                    </p>
-                                )}
-
-                                {item.memo && <p className={cn('mt-2 line-clamp-2 text-xs leading-relaxed', body)}>{item.memo}</p>}
-
-                                {item.kind === 'song' && (
-                                    <div className="mt-auto flex items-center justify-between gap-3 border-t border-black/5 pt-2.5 dark:border-white/10">
-                                        <span className={cn('inline-flex items-center gap-1.5 text-xs tabular-nums', body)}>
-                                            <Clock3 size={14} aria-hidden="true" />
-                                            {clock(begin)} - {clock(end)}
-                                        </span>
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <Avatar id={item.lead} size="xs" />
-                                            <span className={cn('text-xs', body)}>
-                                                {member(item.lead)?.name} <span className={sub}>리드</span>
-                                            </span>
-                                        </span>
-                                    </div>
-                                )}
-                            </article>
-                        </li>
-                    );
+                            </li>
+                        );
+                    }
+                    return <SongCard key={item.id} song={item} number={numbers[index]} />;
                 })}
-                <li className={cn('grid grid-cols-[2.75rem_minmax(0,1fr)] gap-2 border-t pt-2.5', line)}>
-                    <span className={cn('text-xs tabular-nums', sub)}>{clock(start + total)}</span>
-                    <span className={cn('text-xs', sub)}>찬양 마침 · 말씀으로 이어집니다</span>
-                </li>
             </ol>
 
             <button type="button" className={cn('flex h-13 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99]', selected)}>
                 <Radio size={17} aria-hidden="true" />
-                이 순서로 예배 열기
+                이 콘티로 예배 열기
             </button>
         </div>
     );
 }
 
-function Legend({ tone, label }: { tone: Tone; label: string }) {
+function SongCard({ song, number }: { song: Song; number: number }) {
+    const lead = member(song.lead);
     return (
-        <span className="inline-flex items-center gap-1.5">
-            <span className={cn('size-1.5 rounded-full', TONE_DOT[tone])} aria-hidden="true" />
-            {label}
-        </span>
+        <li className={cn('rounded-3xl border p-4', line)}>
+            <div className="flex items-start gap-3">
+                <span className="w-6 shrink-0 pt-px text-[15px] font-semibold tabular-nums text-neutral-300 dark:text-neutral-600">{String(number).padStart(2, '0')}</span>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                        <h3 className={cn('text-[15px] font-semibold leading-snug', ink)}>{song.title}</h3>
+                        <span className={cn('shrink-0 rounded-lg px-2 py-1 text-xs tabular-nums', chip, ink)}>
+                            <KeyText from={song.originalKey} to={song.key} />
+                        </span>
+                    </div>
+                    <p className={cn('mt-0.5 text-xs tabular-nums', sub)}>
+                        {song.bpm} BPM · 리드 {lead?.name}
+                    </p>
+
+                    <div className="mt-3.5">
+                        <p className={cn('mb-1.5 text-[11px] font-medium', sub)}>송폼</p>
+                        <ol aria-label="송폼" className="flex flex-wrap gap-1">
+                            {song.form.map((code, index) => (
+                                <li
+                                    key={`${code}-${index}`}
+                                    title={SECTION_NAMES[code] ?? code}
+                                    className={cn(
+                                        'flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold tabular-nums',
+                                        code === 'C' || code === 'Tag' ? selected : code === 'B' ? cn('border', 'border-neutral-900 dark:border-white', ink) : cn(chip, body),
+                                    )}
+                                >
+                                    {code}
+                                </li>
+                            ))}
+                        </ol>
+                    </div>
+
+                    <ul aria-label="링크" className="mt-3 flex flex-wrap gap-1.5">
+                        {song.links.map((link) => {
+                            const Icon = LINK_ICON[link.kind];
+                            return (
+                                <li key={link.kind}>
+                                    <button type="button" className={cn('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition hover:bg-neutral-50 dark:hover:bg-neutral-800', line, ink)}>
+                                        <Icon size={14} aria-hidden="true" />
+                                        {link.label}
+                                        {link.fresh && <span className="rounded-full bg-orange-500 px-1.5 text-[9px] font-bold leading-4 text-white">NEW</span>}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+
+                    {song.notes.length > 0 && (
+                        <div className={cn('mt-3 rounded-2xl px-3.5 py-3', TONE_BLOCK.peach)}>
+                            <p className={cn('flex items-center gap-1.5 text-[11px] font-semibold', TONE_ICON.peach)}>
+                                <TriangleAlert size={13} aria-hidden="true" />
+                                특이사항
+                            </p>
+                            <ul className="mt-1.5 space-y-1">
+                                {song.notes.map((note) => (
+                                    <li key={note} className={cn('flex gap-2 text-[13px] leading-relaxed', ink)}>
+                                        <span className={cn('mt-[0.55rem] size-1 shrink-0 rounded-full bg-current opacity-40')} aria-hidden="true" />
+                                        {note}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {song.comments.length > 0 && (
+                        <ul aria-label="팀원 코멘트" className={cn('mt-3.5 space-y-3 border-t pt-3.5', line)}>
+                            {song.comments.map((comment, index) => (
+                                <li key={index} className="flex gap-2.5">
+                                    <Avatar id={comment.from} size="sm" />
+                                    <div className="min-w-0">
+                                        <p className="text-xs">
+                                            <span className={cn('font-semibold', ink)}>{member(comment.from)?.name}</span>
+                                            <span className={cn('ml-1.5', sub)}>{comment.ago}</span>
+                                        </p>
+                                        <p className={cn('mt-0.5 text-[13px] leading-relaxed', body)}>{comment.text}</p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+
+                    <button type="button" className={cn('mt-3 inline-flex h-8 items-center gap-1.5 text-xs font-medium', sub)}>
+                        <MessageCircle size={14} aria-hidden="true" />
+                        코멘트 남기기
+                    </button>
+                </div>
+            </div>
+        </li>
     );
 }
