@@ -1,0 +1,157 @@
+'use client';
+
+import { useRef, useState, type CSSProperties } from 'react';
+import { CalendarPlus, House, Inbox, ListMusic, MessageSquarePlus, Plus, UsersRound, type LucideIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { REQUESTS, THIS_WEEK_SETLIST_ID, type ScreenId } from './draftData';
+import { ink, line, selected } from './ui';
+import WeekScreen from './WeekScreen';
+import ContiScreen from './ContiScreen';
+import OrderScreen from './OrderScreen';
+import TeamScreen from './TeamScreen';
+import RequestScreen from './RequestScreen';
+
+const NAV: { id: Exclude<ScreenId, 'order'>; label: string; icon: LucideIcon }[] = [
+    { id: 'week', label: '이번 주', icon: House },
+    { id: 'conti', label: '콘티', icon: ListMusic },
+    { id: 'team', label: '팀', icon: UsersRound },
+    { id: 'requests', label: '요청', icon: Inbox },
+];
+
+const QUICK_ACTIONS: { label: string; detail: string; icon: LucideIcon }[] = [
+    { label: '새 콘티 만들기', detail: '곡을 고르고 순서를 정해요', icon: ListMusic },
+    { label: '일정 추가', detail: '연습·리허설·기도회', icon: CalendarPlus },
+    { label: '요청 남기기', detail: 'Key 변경, 대체, 질문', icon: MessageSquarePlus },
+];
+
+/** 화면 상단의 아주 옅은 브랜드 색 번짐 (레퍼런스의 라벤더 그라데이션 역할) */
+const TOP_GLOW: CSSProperties = {
+    backgroundImage: 'radial-gradient(90% 100% at 85% 0%, color-mix(in oklab, var(--primary) 8%, transparent), transparent 70%)',
+};
+
+export default function ContiApp({ initialScreen = 'week', framed = false }: { initialScreen?: ScreenId; framed?: boolean }) {
+    const [screen, setScreen] = useState<ScreenId>(initialScreen);
+    const [setlistId, setSetlistId] = useState(THIS_WEEK_SETLIST_ID);
+    const [requests, setRequests] = useState(REQUESTS);
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const activeNav = screen === 'order' ? 'conti' : screen;
+    const openCount = requests.filter((request) => !request.done).length;
+
+    function go(next: ScreenId) {
+        setScreen(next);
+        setSheetOpen(false);
+        if (framed) scrollRef.current?.scrollTo({ top: 0 });
+        else window.scrollTo({ top: 0 });
+    }
+
+    function openOrder(id: string) {
+        setSetlistId(id);
+        go('order');
+    }
+
+    function toggleRequest(id: string) {
+        setRequests((list) => list.map((request) => (request.id === id ? { ...request, done: !request.done } : request)));
+    }
+
+    return (
+        <div className={cn('relative isolate flex flex-col bg-white dark:bg-neutral-900', framed ? 'h-full overflow-hidden' : 'min-h-dvh')}>
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72" style={TOP_GLOW} />
+
+            <div ref={scrollRef} className={cn('flex-1', framed && 'no-scrollbar overflow-y-auto overscroll-contain')}>
+                <div className={cn('px-5 pb-32', framed ? 'pt-12' : 'pt-[max(1.75rem,env(safe-area-inset-top))]')}>
+                    {screen === 'week' && <WeekScreen requests={requests} go={go} openOrder={openOrder} />}
+                    {screen === 'conti' && <ContiScreen openOrder={openOrder} />}
+                    {screen === 'order' && <OrderScreen setlistId={setlistId} onBack={() => go('conti')} onSelect={setSetlistId} />}
+                    {screen === 'team' && <TeamScreen />}
+                    {screen === 'requests' && <RequestScreen requests={requests} onToggle={toggleRequest} />}
+                </div>
+            </div>
+
+            <div
+                aria-hidden="true"
+                className={cn(
+                    'pointer-events-none z-20 h-28 bg-gradient-to-t from-white via-white/80 to-transparent dark:from-neutral-900 dark:via-neutral-900/80',
+                    framed ? 'absolute inset-x-0 bottom-0' : 'fixed inset-x-0 bottom-0 mx-auto max-w-md',
+                )}
+            />
+
+            {sheetOpen && (
+                <>
+                    <button
+                        type="button"
+                        aria-label="닫기"
+                        onClick={() => setSheetOpen(false)}
+                        className={cn('z-30 bg-neutral-900/10 backdrop-blur-[1px] dark:bg-black/40', framed ? 'absolute inset-0' : 'fixed inset-0')}
+                    />
+                    <div
+                        role="menu"
+                        aria-label="빠른 추가"
+                        className={cn(
+                            'z-40 overflow-hidden rounded-3xl bg-white p-2 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.3)] ring-1 ring-neutral-100 animate-in fade-in slide-in-from-bottom-2 duration-150 dark:bg-neutral-800 dark:ring-neutral-700',
+                            framed ? 'absolute inset-x-4 bottom-24' : 'fixed inset-x-4 bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5rem)] mx-auto max-w-[26rem]',
+                        )}
+                    >
+                        {QUICK_ACTIONS.map((action) => (
+                            <button key={action.label} type="button" role="menuitem" onClick={() => setSheetOpen(false)} className="flex w-full items-center gap-3.5 rounded-2xl px-3 py-3 text-left transition hover:bg-neutral-50 dark:hover:bg-neutral-700/50">
+                                <span className={cn('flex size-10 items-center justify-center rounded-2xl border', line, ink)}>
+                                    <action.icon size={18} aria-hidden="true" />
+                                </span>
+                                <span>
+                                    <span className={cn('block text-sm font-medium', ink)}>{action.label}</span>
+                                    <span className="block text-xs text-neutral-500 dark:text-neutral-400">{action.detail}</span>
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </>
+            )}
+
+            <nav
+                aria-label="시안 앱 메뉴"
+                className={cn('z-40', framed ? 'absolute inset-x-4 bottom-4' : 'fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] mx-auto max-w-[26rem]')}
+            >
+                <div className="flex h-16 items-center justify-around rounded-[1.75rem] bg-white/95 px-2 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.22)] ring-1 ring-neutral-100 backdrop-blur dark:bg-neutral-800/95 dark:ring-neutral-700">
+                    {NAV.slice(0, 2).map((item) => (
+                        <NavButton key={item.id} item={item} active={activeNav === item.id} onClick={() => go(item.id)} />
+                    ))}
+                    <button
+                        type="button"
+                        aria-label="빠른 추가"
+                        aria-expanded={sheetOpen}
+                        onClick={() => setSheetOpen((value) => !value)}
+                        className={cn('flex size-12 items-center justify-center rounded-2xl transition active:scale-95', selected)}
+                    >
+                        <Plus size={22} strokeWidth={2.25} className={cn('transition-transform', sheetOpen && 'rotate-45')} />
+                    </button>
+                    {NAV.slice(2).map((item) => (
+                        <NavButton key={item.id} item={item} active={activeNav === item.id} onClick={() => go(item.id)} badge={item.id === 'requests' ? openCount : 0} />
+                    ))}
+                </div>
+            </nav>
+        </div>
+    );
+}
+
+function NavButton({ item, active, onClick, badge = 0 }: { item: (typeof NAV)[number]; active: boolean; onClick: () => void; badge?: number }) {
+    const Icon = item.icon;
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-label={item.label}
+            aria-current={active ? 'page' : undefined}
+            className={cn('relative flex h-12 w-14 flex-col items-center justify-center gap-0.5 transition', active ? 'text-primary' : 'text-neutral-500 dark:text-neutral-400')}
+        >
+            <span className="relative">
+                <Icon size={21} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
+                {badge > 0 && (
+                    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-semibold tabular-nums text-white ring-2 ring-white dark:ring-neutral-800">
+                        {badge}
+                    </span>
+                )}
+            </span>
+            {active && <span className="text-[10px] font-semibold">{item.label}</span>}
+        </button>
+    );
+}

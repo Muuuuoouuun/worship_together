@@ -61,7 +61,7 @@ export default async function SongLibraryPage({ searchParams }: LibraryPageProps
                         href="/dashboard/songs/drafts"
                         className="inline-flex min-h-10 items-center rounded-full border border-border bg-card px-3.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
                     >
-                        콘티·순서 디자인 시안 A·B·C
+                        콘티·순서 디자인 시안
                     </Link>
                 </section>
 
