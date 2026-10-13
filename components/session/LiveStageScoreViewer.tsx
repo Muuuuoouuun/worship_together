@@ -37,7 +37,6 @@ import { readSongStageNote, saveSongStageNote, STAGE_NOTE_CHANGED_EVENT } from '
 import { getCueCategory } from '@/types/session';
 import {
     createSampleSheetDocument,
-    pointsToSvgPath,
     readSheet,
     saveSheet,
     sheetKey,
@@ -46,6 +45,7 @@ import {
 } from '@/lib/sheetAnnotations';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
 import SongFormMarkup, { SongFormSectionMarker } from './SongFormMarkup';
+import SheetInkLayer from './SheetInkLayer';
 
 export interface LiveStageScoreViewerProps {
     teamId: string;
@@ -526,152 +526,36 @@ export default function LiveStageScoreViewer({
         };
     }, [latestCueMessage, latestCueRole, latestCueAccent, audioCueEnabled]);
 
-    // Renders marks in layered order: highlighters first (underneath), then pens, then stamps
+    // Hand-drawn marks come from the shared memoized layer; song form markup draws on top with the pedal highlight.
     function renderMarks(marks: SheetMark[], pageObj: { width: number; height: number }) {
         const ratio = pageObj.height / pageObj.width;
-
-        const renderSingleMark = (mark: SheetMark) => {
-            const point = mark.points[0];
-
-            if (mark.kind === 'songform') {
-                return (
-                    <SongFormMarkup
-                        key={mark.id}
-                        sections={mark.sections ?? []}
-                        anchor={point}
-                        ratio={ratio}
-                        fontSize={mark.fontSize}
-                        opacity={mark.opacity}
-                        currentIndex={stepper.active && stepper.route?.bandId === mark.id ? stepper.index : null}
-                    />
-                );
-            }
-
-            if (mark.kind === 'section') {
-                return (
-                    <SongFormSectionMarker
-                        key={mark.id}
-                        label={mark.text ?? ''}
-                        anchor={point}
-                        ratio={ratio}
-                        fontSize={mark.fontSize}
-                        opacity={mark.opacity}
-                        current={stepper.active && stepper.stop?.markId === mark.id}
-                    />
-                );
-            }
-
-            if (mark.kind === 'stamp') {
-                return (
-                    <text
-                        key={mark.id}
-                        x={Math.min(point[0], 780)}
-                        y={Math.max(point[1] * ratio, 25)}
-                        fill={mark.color}
-                        fontSize="25"
-                        fontWeight="800"
-                        stroke={isDarkInverted ? '#000' : '#fff'}
-                        strokeWidth="3"
-                        paintOrder="stroke"
-                    >
-                        {mark.text}
-                    </text>
-                );
-            }
-
-            if (mark.kind === 'highlighter') {
-                return (
-                    <path
-                        key={mark.id}
-                        d={pointsToSvgPath(mark.points, ratio)}
-                        fill="none"
-                        stroke={mark.color}
-                        strokeWidth={mark.strokeWidth || 16}
-                        strokeLinecap="square"
-                        strokeLinejoin="round"
-                        style={{ mixBlendMode: isDarkInverted ? 'screen' : 'multiply', opacity: mark.opacity ?? 0.55 }}
-                    />
-                );
-            }
-
-            if (mark.kind === 'text') {
-                const fSize = mark.fontSize ?? 20;
-                return (
-                    <g key={mark.id}>
-                        <rect
-                            x={Math.min(point[0], 900) - 4}
-                            y={Math.max(point[1] * ratio, 20) - fSize}
-                            width={(mark.text?.length ?? 3) * (fSize * 0.65) + 8}
-                            height={fSize + 6}
-                            rx="4"
-                            fill={isDarkInverted ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.75)'}
-                        />
-                        <text
-                            x={Math.min(point[0], 900)}
-                            y={Math.max(point[1] * ratio, 20) - 2}
-                            fill={isDarkInverted ? '#000' : mark.color}
-                            fontSize={fSize}
-                            fontWeight="800"
-                            fontFamily="monospace, sans-serif"
-                        >
-                            {mark.text}
-                        </text>
-                    </g>
-                );
-            }
-
-            if (mark.kind === 'rect') {
-                if (mark.points.length < 2) return null;
-                const [p1, p2] = mark.points;
-                const minX = Math.min(p1[0], p2[0]);
-                const maxX = Math.max(p1[0], p2[0]);
-                const minY = Math.min(p1[1], p2[1]) * ratio;
-                const maxY = Math.max(p1[1], p2[1]) * ratio;
-                return (
-                    <rect
-                        key={mark.id}
-                        x={minX}
-                        y={minY}
-                        width={maxX - minX}
-                        height={maxY - minY}
-                        fill={mark.color}
-                        fillOpacity={mark.opacity ?? 0.15}
-                        stroke={mark.color}
-                        strokeWidth={mark.strokeWidth || 3}
-                        rx="6"
-                    />
-                );
-            }
-
-            return (
-                <path
-                    key={mark.id}
-                    d={pointsToSvgPath(mark.points, ratio)}
-                    fill="none"
-                    stroke={mark.color}
-                    strokeWidth={mark.strokeWidth || 2.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                />
-            );
-        };
-
-        const highlighters = marks.filter((m) => m.kind === 'highlighter');
-        const rects = marks.filter((m) => m.kind === 'rect');
-        const pens = marks.filter((m) => m.kind === 'pen');
-        const stamps = marks.filter((m) => m.kind === 'stamp');
-        const texts = marks.filter((m) => m.kind === 'text');
-        // Section markers draw above the song form band.
         const songForms = [...marks.filter((m) => m.kind === 'songform'), ...marks.filter((m) => m.kind === 'section')];
-
         return (
             <>
-                {highlighters.map(renderSingleMark)}
-                {rects.map(renderSingleMark)}
-                {pens.map(renderSingleMark)}
-                {stamps.map(renderSingleMark)}
-                {texts.map(renderSingleMark)}
-                {songForms.map(renderSingleMark)}
+                <SheetInkLayer marks={marks} ratio={ratio} dark={isDarkInverted} />
+                {songForms.map((mark) =>
+                    mark.kind === 'songform' ? (
+                        <SongFormMarkup
+                            key={mark.id}
+                            sections={mark.sections ?? []}
+                            anchor={mark.points[0]}
+                            ratio={ratio}
+                            fontSize={mark.fontSize}
+                            opacity={mark.opacity}
+                            currentIndex={stepper.active && stepper.route?.bandId === mark.id ? stepper.index : null}
+                        />
+                    ) : (
+                        <SongFormSectionMarker
+                            key={mark.id}
+                            label={mark.text ?? ''}
+                            anchor={mark.points[0]}
+                            ratio={ratio}
+                            fontSize={mark.fontSize}
+                            opacity={mark.opacity}
+                            current={stepper.active && stepper.stop?.markId === mark.id}
+                        />
+                    )
+                )}
             </>
         );
     }

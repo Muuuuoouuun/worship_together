@@ -1,7 +1,13 @@
-import { isValidSongFormSections, layoutSectionMarker, layoutSongFormMarkup } from './songFormMarkup';
+import { isValidSongFormSections, layoutSectionMarker, layoutSongFormMarkup, SONG_FORM_MAX_ANCHOR_X } from './songFormMarkup';
 
-/** 'songform' = song form band (I → V1 → C …); 'section' = one section chip placed at a measure (text = label). */
-export type SheetMarkKind = 'pen' | 'highlighter' | 'stamp' | 'text' | 'rect' | 'songform' | 'section';
+/**
+ * 'songform' = song form band (I → V1 → C …); 'section' = one section chip placed at a measure (text = label);
+ * 'line' = a straight stroke between two points, drawn as a line, an arrow or a hairpin.
+ */
+export type SheetMarkKind = 'pen' | 'highlighter' | 'stamp' | 'text' | 'rect' | 'line' | 'songform' | 'section';
+/** kind 'line': line | arrow | cresc (<) | decresc (>). kind 'rect': ellipse (outline circle); a box when unset. */
+export type SheetMarkShape = 'line' | 'arrow' | 'cresc' | 'decresc' | 'ellipse';
+export const LINE_SHAPES: ReadonlyArray<SheetMarkShape> = ['line', 'arrow', 'cresc', 'decresc'];
 
 export type SheetMark = {
     id: string;
@@ -14,6 +20,7 @@ export type SheetMark = {
     fontSize?: number;
     /** kind 'songform' only: ordered chip labels, e.g. ['I', 'V1', 'C×2']. */
     sections?: string[];
+    shape?: SheetMarkShape;
 };
 
 export type SheetPage = { image: string; width: number; height: number; marks: SheetMark[] };
@@ -53,23 +60,93 @@ export const WORSHIP_STAMP_PRESETS = [
 
 export const sheetKey = (teamId: string, songId: string, shared = false) => `${teamId}:${songId}:${shared ? 'published' : 'draft'}`;
 
+/**
+ * v2 keeps page images in their own store, so saving a stroke writes the marks (a few KB) instead of
+ * every page image again (several MB). v1 records, with images inline, still load and convert on next save.
+ */
 function openSheetDatabase(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('worship-together-sheets-v1', 1);
-        request.onupgradeneeded = () => request.result.createObjectStore('sheets');
+        const request = indexedDB.open('worship-together-sheets-v1', 2);
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains('sheets')) db.createObjectStore('sheets');
+            if (!db.objectStoreNames.contains('pageImages')) db.createObjectStore('pageImages');
+        };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
 }
 
+/** A page as stored in v2: the image lives in 'pageImages' under `imageId`. v1 pages carry `image` inline. */
+export type StoredSheetPage = Omit<SheetPage, 'image'> & { image?: string; imageId?: string };
+export type StoredSheetDocument = Omit<SheetDocument, 'pages'> & { pages: StoredSheetPage[] };
+
+/**
+ * Image data URL → its id in 'pageImages', for images known to be on disk. Edits keep the same string
+ * objects and V8 caches a string's hash, so a lookup doesn't rescan the image.
+ */
+const storedImageIds = new Map<string, string>();
+
+/** Splits a document into its stored form; images without an id yet come back in `newImages` ([id, data]). */
+export function splitSheetForStorage(
+    doc: SheetDocument,
+    idFor: (image: string) => string | undefined,
+    makeId: () => string
+): { stored: StoredSheetDocument; newImages: Array<[string, string]> } {
+    const newImages: Array<[string, string]> = [];
+    const pending = new Map<string, string>();
+    const pages = doc.pages.map(({ image, ...rest }) => {
+        let imageId = idFor(image) ?? pending.get(image);
+        if (!imageId) {
+            imageId = makeId();
+            pending.set(image, imageId);
+            newImages.push([imageId, image]);
+        }
+        return { ...rest, imageId };
+    });
+    return { stored: { ...doc, pages }, newImages };
+}
+
+/** Puts a stored document back together; a missing image fails loudly instead of loading a blank page. */
+export function assembleStoredSheet(stored: StoredSheetDocument, images: ReadonlyMap<string, string>): SheetDocument {
+    return {
+        ...stored,
+        pages: stored.pages.map(({ imageId, image, ...rest }) => {
+            const data = image ?? (imageId ? images.get(imageId) : undefined);
+            if (!data) throw new Error('악보 이미지 일부를 찾지 못했습니다. 공유 파일로 다시 불러와주세요.');
+            return { ...rest, image: data };
+        }),
+    };
+}
+
+const newImageId = () =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 export async function readSheet(key: string): Promise<SheetDocument | null> {
     const db = await openSheetDatabase();
     try {
-        return await new Promise((resolve, reject) => {
-            const request = db.transaction('sheets').objectStore('sheets').get(key);
-            request.onsuccess = () => resolve(request.result ? validateSheet(request.result) : null);
-            request.onerror = () => reject(request.error);
+        const { stored, images } = await new Promise<{ stored: StoredSheetDocument | undefined; images: Map<string, string> }>((resolve, reject) => {
+            const transaction = db.transaction(['sheets', 'pageImages']);
+            const images = new Map<string, string>();
+            let stored: StoredSheetDocument | undefined;
+            const get = transaction.objectStore('sheets').get(key);
+            get.onsuccess = () => {
+                stored = get.result as StoredSheetDocument | undefined;
+                for (const id of new Set((stored?.pages ?? []).map((p) => p.imageId).filter((v): v is string => Boolean(v)))) {
+                    const image = transaction.objectStore('pageImages').get(id);
+                    image.onsuccess = () => {
+                        if (typeof image.result === 'string') images.set(id, image.result);
+                    };
+                }
+            };
+            transaction.oncomplete = () => resolve({ stored, images });
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error);
         });
+        if (!stored) return null;
+        const doc = validateSheet(assembleStoredSheet(stored, images));
+        for (const [id, data] of images) storedImageIds.set(data, id);
+        return doc;
     } finally { db.close(); }
 }
 
@@ -77,9 +154,38 @@ export async function saveSheet(key: string, document: SheetDocument): Promise<v
     const db = await openSheetDatabase();
     try {
         await new Promise<void>((resolve, reject) => {
-            const transaction = db.transaction('sheets', 'readwrite');
-            transaction.objectStore('sheets').put(document, key);
-            transaction.oncomplete = () => resolve();
+            const transaction = db.transaction(['sheets', 'pageImages'], 'readwrite');
+            const sheets = transaction.objectStore('sheets');
+            const pageImages = transaction.objectStore('pageImages');
+            let newImages: Array<[string, string]> = [];
+            const previous = sheets.get(key);
+            // Runs once earlier saves have committed, so the id map matches what is on disk.
+            previous.onsuccess = () => {
+                const split = splitSheetForStorage(document, (image) => storedImageIds.get(image), newImageId);
+                newImages = split.newImages;
+                for (const [id, data] of newImages) pageImages.put(data, id);
+                sheets.put(split.stored, key);
+                const keep = new Set(split.stored.pages.map((p) => p.imageId));
+                const dropped = ((previous.result as StoredSheetDocument | undefined)?.pages ?? [])
+                    .map((p) => p.imageId)
+                    .filter((id): id is string => Boolean(id) && !keep.has(id));
+                if (!dropped.length) return;
+                // Delete images no saved sheet points at any more (the draft and the team copy share them).
+                const all = sheets.getAll();
+                all.onsuccess = () => {
+                    const used = new Set((all.result as StoredSheetDocument[]).flatMap((doc) => (doc.pages ?? []).map((p) => p.imageId)));
+                    for (const id of dropped) {
+                        if (used.has(id)) continue;
+                        pageImages.delete(id);
+                        for (const [data, known] of storedImageIds) if (known === id) storedImageIds.delete(data);
+                    }
+                };
+            };
+            transaction.oncomplete = () => {
+                // Only images now on disk may be referenced by id from later saves.
+                for (const [id, data] of newImages) storedImageIds.set(data, id);
+                resolve();
+            };
             transaction.onerror = () => reject(transaction.error);
             transaction.onabort = () => reject(transaction.error);
         });
@@ -105,13 +211,18 @@ export function validateSheet(value: unknown): SheetDocument {
                 HIGHLIGHTER_COLORS.includes(mark.color) ||
                 /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(mark.color) ||
                 /^rgba?\([^)]+\)$/.test(mark.color);
-            const isValidKind = ['pen', 'highlighter', 'stamp', 'text', 'rect', 'songform', 'section'].includes(mark.kind);
+            const isValidKind = ['pen', 'highlighter', 'stamp', 'text', 'rect', 'line', 'songform', 'section'].includes(mark.kind);
+            const isValidShape =
+                mark.shape === undefined ||
+                (mark.kind === 'line' && LINE_SHAPES.includes(mark.shape)) ||
+                (mark.kind === 'rect' && mark.shape === 'ellipse');
             const isValidWidth = mark.strokeWidth === undefined || (Number.isFinite(mark.strokeWidth) && mark.strokeWidth >= 0.5 && mark.strokeWidth <= 60);
             const isValidOpacity = mark.opacity === undefined || (Number.isFinite(mark.opacity) && mark.opacity >= 0 && mark.opacity <= 1);
             const isValidFontSize = mark.fontSize === undefined || (Number.isFinite(mark.fontSize) && mark.fontSize >= 8 && mark.fontSize <= 72);
 
             if (!mark || typeof mark.id !== 'string' || !isValidKind || !isValidColor ||
-                !isValidWidth || !isValidOpacity || !isValidFontSize ||
+                !isValidWidth || !isValidOpacity || !isValidFontSize || !isValidShape ||
+                (mark.kind === 'line' && mark.points?.length !== 2) ||
                 !Array.isArray(mark.points) || mark.points.length < 1 || mark.points.length > 5000 ||
                 mark.points.some((point) => !Array.isArray(point) || point.length !== 2 || point.some((n) => !Number.isFinite(n) || n < 0 || n > 1000)) ||
                 ((mark.kind === 'stamp' || mark.kind === 'text') && (typeof mark.text !== 'string' || mark.text.length > 100)) ||
@@ -123,6 +234,13 @@ export function validateSheet(value: unknown): SheetDocument {
     }
     return doc;
 }
+
+/**
+ * Long side of an imported page in pixels: sharp on a 2× tablet screen at full height or 150% zoom.
+ * At JPEG 0.85 a typical lead sheet page is ~340KB, about a third more than the old 1600px / 0.9.
+ */
+export const IMPORT_LONG_SIDE = 2200;
+const IMPORT_QUALITY = 0.85;
 
 /** `onPage` reports PDF progress (pages done, page count) so a long import can show where it is. */
 export async function importSheetPages(file: File, onPage?: (done: number, total: number) => void): Promise<SheetPage[]> {
@@ -148,12 +266,12 @@ export async function importSheetPages(file: File, onPage?: (done: number, total
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const original = page.getViewport({ scale: 1 });
-                const viewport = page.getViewport({ scale: Math.min(2, 1600 / Math.max(original.width, original.height)) });
+                const viewport = page.getViewport({ scale: Math.min(3, IMPORT_LONG_SIDE / Math.max(original.width, original.height)) });
                 const canvas = document.createElement('canvas');
                 canvas.width = Math.ceil(viewport.width);
                 canvas.height = Math.ceil(viewport.height);
                 await page.render({ canvas, viewport }).promise;
-                pages.push({ image: canvas.toDataURL('image/jpeg', 0.9), width: canvas.width, height: canvas.height, marks: [] });
+                pages.push({ image: canvas.toDataURL('image/jpeg', IMPORT_QUALITY), width: canvas.width, height: canvas.height, marks: [] });
                 canvas.width = canvas.height = 0;
                 page.cleanup();
                 onPage?.(i, pdf.numPages);
@@ -164,7 +282,7 @@ export async function importSheetPages(file: File, onPage?: (done: number, total
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('PDF, PNG, JPG, WebP 파일을 선택해주세요.');
     const bitmap = await createImageBitmap(file);
     try {
-        const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+        const scale = Math.min(1, IMPORT_LONG_SIDE / Math.max(bitmap.width, bitmap.height));
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(bitmap.width * scale));
         canvas.height = Math.max(1, Math.round(bitmap.height * scale));
@@ -173,7 +291,7 @@ export async function importSheetPages(file: File, onPage?: (done: number, total
         context.fillStyle = '#fff';
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        return [{ image: canvas.toDataURL('image/jpeg', 0.9), width: canvas.width, height: canvas.height, marks: [] }];
+        return [{ image: canvas.toDataURL('image/jpeg', IMPORT_QUALITY), width: canvas.width, height: canvas.height, marks: [] }];
     } finally { bitmap.close(); }
 }
 
@@ -198,6 +316,67 @@ export function distanceToSegment(
     const projX = ax + t * dx;
     const projY = ay + t * dy;
     return Math.hypot(px - projX, py - projY);
+}
+
+/** Pen points closer than this (mark units) to the last kept point add nothing visible; they are dropped. */
+export const STROKE_MIN_STEP = 1.5;
+
+/** Adds a pointer sample to a stroke unless it sits on top of the last one. Returns whether it was kept. */
+export function appendStrokePoint(points: Array<[number, number]>, point: [number, number], minStep = STROKE_MIN_STEP): boolean {
+    const last = points[points.length - 1];
+    if (last && Math.hypot(point[0] - last[0], point[1] - last[1]) < minStep) return false;
+    points.push(point);
+    return true;
+}
+
+type Vec = [number, number];
+/**
+ * Straight segments (viewBox units, y scaled by the page ratio) that draw a 'line' mark: the stroke itself,
+ * an arrowhead at the end, or the two sides of a crescendo (<, opening at the end) / decrescendo (>) hairpin.
+ */
+export function lineMarkSegments(mark: Pick<SheetMark, 'points' | 'shape' | 'strokeWidth'>, ratio: number): Array<[Vec, Vec]> {
+    const [p, q] = mark.points;
+    if (!p || !q) return [];
+    const a: Vec = [p[0], p[1] * ratio];
+    const b: Vec = [q[0], q[1] * ratio];
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (length < 0.01) return [[a, b]];
+    const ux = (b[0] - a[0]) / length;
+    const uy = (b[1] - a[1]) / length;
+    const nx = -uy;
+    const ny = ux;
+    if (mark.shape === 'cresc' || mark.shape === 'decresc') {
+        const spread = Math.min(26, Math.max(8, length * 0.12));
+        const [tip, mouth] = mark.shape === 'cresc' ? [a, b] : [b, a];
+        return [
+            [tip, [mouth[0] + nx * spread, mouth[1] + ny * spread]],
+            [tip, [mouth[0] - nx * spread, mouth[1] - ny * spread]],
+        ];
+    }
+    if (mark.shape === 'arrow') {
+        const head = Math.min(length * 0.45, Math.max(14, (mark.strokeWidth ?? 3) * 4.5));
+        const back = (side: number): Vec => [b[0] - ux * head * 0.88 + nx * head * 0.5 * side, b[1] - uy * head * 0.88 + ny * head * 0.5 * side];
+        return [[a, b], [b, back(1)], [b, back(-1)]];
+    }
+    return [[a, b]];
+}
+
+export function lineMarkPath(mark: Pick<SheetMark, 'points' | 'shape' | 'strokeWidth'>, ratio: number): string {
+    return lineMarkSegments(mark, ratio)
+        .map(([s, e]) => `M ${s[0].toFixed(2)} ${s[1].toFixed(2)} L ${e[0].toFixed(2)} ${e[1].toFixed(2)}`)
+        .join(' ');
+}
+
+/** Holding Shift while drawing a line snaps it to the nearest 45° (on screen, so y is scaled by the ratio). */
+export function snapLineEnd(start: Vec, end: Vec, ratio: number): Vec {
+    const dx = end[0] - start[0];
+    const dy = (end[1] - start[1]) * ratio;
+    const length = Math.hypot(dx, dy);
+    const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+    return [
+        Math.max(0, Math.min(1000, start[0] + Math.cos(angle) * length)),
+        Math.max(0, Math.min(1000, start[1] + (Math.sin(angle) * length) / ratio)),
+    ];
 }
 
 /**
@@ -296,6 +475,11 @@ export function isPointNearMark(
             targetY >= box.y - tolerance &&
             targetY <= box.y + box.height + tolerance
         );
+    }
+
+    if (mark.kind === 'line') {
+        const radius = threshold ?? Math.max(16, (mark.strokeWidth ?? 3) / 2 + 14);
+        return lineMarkSegments(mark, ratio).some(([a, b]) => distanceToSegment(targetX, targetY, a[0], a[1], b[0], b[1]) <= radius);
     }
 
     if (mark.kind === 'rect') {
@@ -570,7 +754,30 @@ export function createSampleSheetDocument(title = '은혜로다'): SheetDocument
 }
 
 /**
- * Rotates a sheet page clockwise by 90, 180, or 270 degrees.
+ * Moves marks with their page when it turns clockwise by `angleDeg`. Points map exactly; widths and text
+ * sizes (in units of the page width) are rescaled for 90°/270° so they keep their size on the music.
+ */
+export function rotateMarks(marks: SheetMark[], angleDeg: 90 | 180 | 270, width: number, height: number): SheetMark[] {
+    const map = ([x, y]: [number, number]): [number, number] =>
+        angleDeg === 90 ? [1000 - y, x] : angleDeg === 180 ? [1000 - x, 1000 - y] : [y, 1000 - x];
+    const scale = angleDeg === 180 ? 1 : width / height;
+    const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value));
+    return marks.map((mark) => {
+        let points = mark.points.map(map);
+        // Labels are anchored at one corner; keep the anchor where the label still fits on the page.
+        if (mark.kind === 'songform') points = points.map(([x, y]) => [clamp(x, 0, SONG_FORM_MAX_ANCHOR_X), clamp(y, 0, 960)]);
+        if (mark.kind === 'section' || mark.kind === 'stamp' || mark.kind === 'text') points = points.map(([x, y]) => [clamp(x, 0, 940), clamp(y, 0, 1000)]);
+        return {
+            ...mark,
+            points,
+            ...(mark.strokeWidth !== undefined ? { strokeWidth: clamp(mark.strokeWidth * scale, 0.5, 60) } : {}),
+            ...(mark.fontSize !== undefined ? { fontSize: clamp(mark.fontSize * scale, 8, 72) } : {}),
+        };
+    });
+}
+
+/**
+ * Rotates a sheet page clockwise by 90, 180, or 270 degrees, carrying its marks along.
  */
 export async function rotateSheetPage(page: SheetPage, angleDeg: 90 | 180 | 270 = 90): Promise<SheetPage> {
     if (typeof document === 'undefined') return page;
@@ -595,9 +802,9 @@ export async function rotateSheetPage(page: SheetPage, angleDeg: 90 | 180 | 270 
     ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
     return {
         ...page,
-        image: canvas.toDataURL('image/jpeg', 0.92),
+        image: canvas.toDataURL('image/jpeg', IMPORT_QUALITY),
         width: canvas.width,
         height: canvas.height,
-        marks: [], // Marks reset on rotation to prevent coordinate distortion
+        marks: rotateMarks(page.marks, angleDeg, page.width, page.height),
     };
 }
