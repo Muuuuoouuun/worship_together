@@ -115,7 +115,7 @@ button, input, label { font: inherit; color: inherit; }
 .track-add svg { width: 18px; height: 18px; }
 @media (hover: none) { .lane-x, .track.is-editing .lane-ins { opacity: 1; transform: none; } }
 .track-item.is-new .lane-btn::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 0 35%, color-mix(in srgb, var(--c) 55%, transparent) 50%, transparent 65% 100%); animation: sweep .7s ease-out forwards; }
-.playhead { position: absolute; top: -8px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--stage); box-shadow: 0 0 10px var(--stage); pointer-events: none; border-radius: 2px; }
+.playhead { position: absolute; left: 0; top: -8px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--stage); box-shadow: 0 0 10px var(--stage); pointer-events: none; border-radius: 2px; }
 .playhead::before { content: ""; position: absolute; top: -2px; left: -5px; border: 6px solid transparent; border-top: 7px solid var(--stage); border-bottom: 0; }
 .empty { margin: 0; padding: 16px; border: 1px dashed var(--line); border-radius: 10px; text-align: center; font-size: 13px; color: var(--muted); }
 
@@ -168,6 +168,14 @@ button.hud-chip:active { transform: scale(.94); }
 .band.is-grabbed .hud-chip { cursor: grabbing; }
 /* Small tabs on phones: a finger-sized invisible hit area so they can still be grabbed. */
 @media (pointer: coarse) { .tab .hud-chip::after { content: ""; position: absolute; inset: -16px; } }
+.tab.is-editing:focus, .band.is-editing:focus { outline: none; }
+.tab.is-editing:focus .hud-chip { outline: .12em dashed var(--stage); outline-offset: .22em; }
+.band.is-editing:focus { box-shadow: 0 0 0 .14em var(--stage); }
+.guide { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px dashed var(--stage); opacity: .8; pointer-events: none; }
+.btn.small { min-height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+.text-form { display: flex; gap: 6px; }
+.text-form input { flex: 1; width: 0; min-width: 0; min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: 500 14px/1.2 var(--font-ui); }
+.text-form input:focus-visible { outline: 2px solid var(--stage); outline-offset: 1px; }
 .tab.is-grabbed { cursor: grabbing; }
 .tab.is-live::before, .tab.is-linked::before { content: ""; position: absolute; left: 0; top: -1.9em; width: 86cqw; height: 3.8em; border-radius: .3em; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 34%, transparent), transparent 92%); pointer-events: none; transform-origin: left center; animation: wash 1.2s ease-out; }
 .tab.is-linked::before { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 22%, transparent), transparent 70%); animation-duration: .4s; }
@@ -338,7 +346,7 @@ button.hud-chip:active { transform: scale(.94); }
       <section class="arranger" aria-label="송폼 타임라인">
         <div class="arranger-head">
           <h2>Song Form</h2>
-          <span class="arranger-meta" id="arrangerMeta"></span>
+          <span class="row"><span class="arranger-meta" id="arrangerMeta"></span><button type="button" class="btn small" data-action="copy-text">텍스트 복사</button></span>
         </div>
         <div class="track-scroll"><div class="track" id="track"></div></div>
       </section>
@@ -409,6 +417,13 @@ button.hud-chip:active { transform: scale(.94); }
     ['프리코러스', [['I', 1], ['V1', 1], ['PC', 1], ['C', 1], ['V2', 1], ['PC', 1], ['C', 1], ['B', 2], ['C', 2], ['O', 1]]],
     ['짧은 곡', [['I', 1], ['V1', 1], ['C', 2], ['B', 1], ['C', 1], ['O', 1]]],
   ];
+  // Words people type for sections in team chats (lower-cased), on top of the pad keys themselves.
+  const WORDS = {
+    전주: 'I', 인트로: 'I', intro: 'I', in: 'I', '1절': 'V1', 절: 'V1', v: 'V1', verse: 'V1', verse1: 'V1', '2절': 'V2', verse2: 'V2',
+    프리코러스: 'PC', 프리: 'PC', pre: 'PC', 후렴: 'C', 코러스: 'C', chorus: 'C', 후렴2: 'C2', chorus2: 'C2',
+    브릿지: 'B', 브리지: 'B', bridge: 'B', 인터: '간주', inter: '간주', interlude: '간주',
+    태그: 'Tag', 엔딩: 'O', 아웃트로: 'O', outro: 'O', ending: 'O', out: 'O',
+  };
   const SYSTEM_TOPS = [360, 650, 940, 1230];
   const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
   const PLUS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
@@ -421,6 +436,39 @@ button.hud-chip:active { transform: scale(.94); }
   const sec = (key) => BY_KEY[key] ?? { key, name: key, en: '', group: 'intro', bars: 4 };
   const colorOf = (key) => `var(${GROUP_VAR[sec(key).group]})`;
   const anim = (el, frames, opts) => (reduceMotion || !el ? null : el.animate(frames, opts));
+  /** "I - V1 - C×2 - 브릿지 x2 …" → [{ key, rep }]; words it can't place come back in `unknown`. */
+  function parseForm(text) {
+    const out = [], unknown = [];
+    for (const raw of text.replace(/[()[\]{}]/g, ' ').split(/[\s,·•→>|/–—-]+/).filter(Boolean)) {
+      const times = raw.match(/^(\d)(?:회|번)$/);
+      const [, name, n] = raw.match(/^(.*?)(?:[×xX*](\d))?$/);
+      const rep = times ? Number(times[1]) : n ? Number(n) : 1;
+      if ((times || !name) && out.length) { out[out.length - 1].rep = clamp(rep, 1, 4); continue; }
+      const key = SECTIONS.find((sct) => sct.key.toLowerCase() === name.toLowerCase())?.key ?? WORDS[name.toLowerCase()];
+      if (key) out.push({ key, rep: clamp(rep, 1, 4) }); else unknown.push(raw);
+    }
+    return { out, unknown };
+  }
+  const formText = (items) => items.map((it) => `${it.key}${it.rep > 1 ? `×${it.rep}` : ''}`).join(' - ');
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* fall back below */ }
+    const ta = Object.assign(document.createElement('textarea'), { value: text, readOnly: true });
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    return ok;
+  }
+
+  /* ---------- Saved edits (per viewer, this browser only) ---------- */
+  const STORE = 'songform-b2:v1:';
+  let savedPrefs = null;
+  const storeGet = (key) => { try { return JSON.parse(localStorage.getItem(STORE + key)); } catch { return null; } };
+  const storeSet = (key, value) => { try { if (value == null) localStorage.removeItem(STORE + key); else localStorage.setItem(STORE + key, value); } catch { /* private mode or blocked storage */ } };
+  // The edit without its generated ids, to tell an untouched example from an edited one.
+  const shapeOf = (d) => JSON.stringify([[d.band.page, d.band.x, d.band.y, d.band.w], d.items.map((it) => [it.key, it.rep, it.bars]), d.tabs.map((t) => [t.page, t.key, t.x, t.y]), d.size]);
 
   /* ---------- Sample lead sheet ---------- */
   const SAMPLE = [
@@ -506,10 +554,38 @@ button.hud-chip:active { transform: scale(.94); }
   let available = [];
   const saved = {};
   const SONG_KEYS = ['pages', 'band', 'items', 'tabs', 'title', 'meta', 'bpm', 'aliases', 'sample', 'size'];
+  const pristine = {};
+  let lastRestored = null;
+  function restoreEdits(id, base) {
+    pristine[id] = shapeOf(base);
+    const d = storeGet(`song:${id}`);
+    const n = base.pages.length;
+    const okItem = (it) => typeof it?.id === 'string' && typeof it.key === 'string' && [it.rep, it.bars].every(Number.isFinite);
+    const okTab = (t) => typeof t?.id === 'string' && typeof t.key === 'string' && [t.page, t.x, t.y].every(Number.isFinite) && t.page < n;
+    const okBand = (b) => b && [b.page, b.x, b.y].every(Number.isFinite) && b.page < n;
+    if (!d || !Array.isArray(d.items) || !d.items.every(okItem) || !Array.isArray(d.tabs) || !okBand(d.band)) return {};
+    const tabs = d.tabs.filter(okTab);
+    // Keep new ids clear of the restored ones.
+    for (const x of [...d.items, ...tabs]) uid = Math.max(uid, Number(x.id.slice(1)) || 0);
+    lastRestored = id;
+    return { items: d.items, tabs, band: d.band, ...(SIZES.some(([v]) => v === d.size) ? { size: d.size } : {}) };
+  }
+  function saveNow() {
+    clearTimeout(saveTimer);
+    const id = state.songId;
+    if (!id || id === 'upload' || !(id in pristine)) return;
+    const data = { band: state.band, items: state.items, tabs: state.tabs, size: state.size };
+    storeSet(`song:${id}`, shapeOf(data) === pristine[id] ? null : JSON.stringify(data));
+  }
+  let saveTimer = 0;
+  const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 400); };
+  addEventListener('pagehide', saveNow);
   function loadSong(id) {
+    saveNow();
     if (state.songId && state.songId !== id) saved[state.songId] = Object.fromEntries(SONG_KEYS.map((k) => [k, state[k]]));
     const song = [...SONGS, SYNTH].find((x) => x.id === id);
-    Object.assign(state, saved[id] ?? { ...songState(song), size: song.size ?? 'M' }, { songId: id, page: 0, pos: 0, extra: {}, selected: null });
+    const fresh = () => { const base = { ...songState(song), size: song.size ?? 'M' }; return { ...base, ...restoreEdits(id, base) }; };
+    Object.assign(state, saved[id] ?? fresh(), { songId: id, page: 0, pos: 0, extra: {}, selected: null });
     history.past.length = 0;
     history.future.length = 0;
   }
@@ -593,7 +669,7 @@ button.hud-chip:active { transform: scale(.94); }
     const liveTab = !editing() && live ? findTab(live.key) : null;
     const showBand = state.band.page === index && state.items.length;
     return `<div class="page look-${state.look}${state.dark ? ' is-dark' : ''}" data-page="${index}" style="aspect-ratio:${p.w}/${p.h};--scale:${scaleOf()}">
-      <img src="${p.src}" alt="${esc(state.title)} 악보 ${index + 1}페이지" draggable="false">
+      <img src="${p.src}" alt="${esc(state.title)} 악보 ${index + 1}페이지" draggable="false"${interactive ? '' : ' loading="lazy" decoding="async"'}>
       <div class="overlay">
         ${showBand ? bandMarkup(interactive, edit) : ''}
         ${state.tabs.filter((t) => t.page === index).map((t) => tabMarkup(t, edit, liveTab?.id === t.id)).join('')}
@@ -610,11 +686,13 @@ button.hud-chip:active { transform: scale(.94); }
       return `${tick}<span class="hud-chip${edit && state.selected === it.id ? ' is-selected' : ''}" style="--c:${colorOf(it.key)}" data-key="${it.id}" data-lane="${it.id}" data-chip="${it.id}">${chipInner(it)}${x}</span>`;
     }).join('');
     const b = state.band;
-    return `<div class="band${edit ? ' is-editing' : ''}" data-band style="left:${b.x * 100}%;top:${b.y * 100}%;max-width:${(b.w ?? 1 - b.x - 0.02) * 100}%" ${interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"'}>${chips}</div>`;
+    const label = edit ? 'role="group" tabindex="0" aria-label="송폼 띠 · 방향키로 옮기기"' : interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"';
+    return `<div class="band${edit ? ' is-editing' : ''}" data-band style="left:${b.x * 100}%;top:${b.y * 100}%;max-width:${(b.w ?? 1 - b.x - 0.02) * 100}%" ${label}>${chips}</div>`;
   }
   function tabMarkup(t, edit, live) {
     const x = edit ? `<button type="button" class="chip-x" data-action="remove-tab" data-id="${t.id}" aria-label="${esc(sec(t.key).name)} 마디 표시 지우기">${X_ICON}</button>` : '';
-    return `<div class="tab${edit ? ' is-editing' : ''}${live ? ' is-live' : ''}" data-tab="${t.id}" data-tabkey="${esc(t.key)}" style="left:${t.x * 100}%;top:${t.y * 100}%;--c:${colorOf(t.key)}"><div class="tab-body"><span class="hud-chip" style="--c:${colorOf(t.key)}">${esc(t.key)}${x}</span></div></div>`;
+    const focus = edit ? ` tabindex="0" role="group" aria-label="${esc(t.key)} 마디 탭 · 방향키로 옮기고 Delete로 지우기"` : '';
+    return `<div class="tab${edit ? ' is-editing' : ''}${live ? ' is-live' : ''}"${focus} data-tab="${t.id}" data-tabkey="${esc(t.key)}" style="left:${t.x * 100}%;top:${t.y * 100}%;--c:${colorOf(t.key)}"><div class="tab-body"><span class="hud-chip" style="--c:${colorOf(t.key)}">${esc(t.key)}${x}</span></div></div>`;
   }
   function padsMarkup(armed, withHold) {
     return SECTIONS.map((s) => `<button type="button" class="pad" style="--c:${colorOf(s.key)}" data-pad="${esc(s.key)}" ${armed !== undefined ? `aria-pressed="${armed === s.key}"` : ''} aria-label="${esc(s.name)} ${esc(s.en)}">
@@ -686,6 +764,11 @@ button.hud-chip:active { transform: scale(.94); }
         </div>` : '<p class="empty">타임라인 레인이나 악보 위 칩을 누르면 마디 수와 반복을 바꿀 수 있습니다.</p>'}
       </section>
       <section class="card">
+        <div class="card-head"><h2>Text</h2><span class="meta">단톡방 송폼 그대로</span></div>
+        <form class="text-form" data-form="text"><input name="form" type="text" value="${esc(formText(state.items))}" placeholder="I - V1 - C - V2 - C - B - C×2 - O" aria-label="송폼 텍스트" autocomplete="off" spellcheck="false"><button type="submit" class="btn">적용</button></form>
+        <p class="note">띄어쓰기, -, →로 칸을 나눕니다. 전주·1절·후렴·브릿지 같은 말과 ×2·x2·2번도 알아듣습니다. 같은 섹션의 마디 수는 그대로 이어받습니다.</p>
+      </section>
+      <section class="card">
         <div class="card-head"><h2>Look</h2></div>
         <div class="row"><span class="label">크기</span><div class="seg" role="group" aria-label="크기">${SIZES.map(([v, l]) => seg('size', v, state.size, l)).join('')}</div></div>
         <div class="row"><span class="label">스타일</span><div class="seg" role="group" aria-label="스타일">${LOOKS.map(([v, l]) => seg('look', v, state.look, l)).join('')}</div></div>
@@ -720,6 +803,12 @@ button.hud-chip:active { transform: scale(.94); }
     return `${f(state.pos)} / ${f(totalBars())}`;
   }
 
+  function paintPager() {
+    $('#pageLabel').textContent = `${state.page + 1} / ${state.pages.length}`;
+    $('[data-action="prev"]').disabled = state.page === 0;
+    $('[data-action="next"]').disabled = state.page >= state.pages.length - 1;
+    $('#songMeta').textContent = `${state.title} · ${state.meta} · ♩ ${state.bpm} · ${state.pages.length}페이지${state.sample ? ' · 합성 예시 악보' : ''}`;
+  }
   function render() {
     closePop();
     workspace.classList.toggle('workspace-edit', editing());
@@ -735,19 +824,20 @@ button.hud-chip:active { transform: scale(.94); }
     $('#historyTools').hidden = !editing();
     $('[data-action="undo"]').disabled = !history.past.length;
     $('[data-action="redo"]').disabled = !history.future.length;
-    $('#pageLabel').textContent = `${state.page + 1} / ${state.pages.length}`;
-    $('[data-action="prev"]').disabled = state.page === 0;
-    $('[data-action="next"]').disabled = state.page >= state.pages.length - 1;
-    $('#songMeta').textContent = `${state.title} · ${state.meta} · ♩ ${state.bpm} · ${state.pages.length}페이지${state.sample ? ' · 합성 예시 악보' : ''}`;
+    paintPager();
     const sw = $('#songSwitch');
     sw.hidden = available.length < 2;
     sw.innerHTML = available.map((x) => `<button type="button" data-action="song" data-value="${x.id}" aria-pressed="${state.songId === x.id}">${esc(x.label)}</button>`).join('');
     $('#arrangerMeta').textContent = `${state.items.length}섹션 · ${totalBars()}마디 · 띠 ${state.band.page + 1}P${Object.keys(state.extra).length ? ' · 라이브 변경 있음' : ''}`;
     $('#caption').innerHTML = `<span class="rec" aria-hidden="true"></span>${!editing() ? '<b>무대 미리보기</b>칩을 누르면 그 섹션부터 · 끌면 옮기기' : `<b>편집 콘솔</b>${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
-    $('#hint').textContent = !editing() ? '송폼 띠와 마디 탭은 끌어서 옮길 수 있습니다.' : state.mode === 'band' ? '레인을 끌어 순서를 바꾸고 틈의 +로 끼워 넣습니다. 띠와 탭은 악보에서 끌어 옮깁니다.' : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽 패드에서 놓을 섹션을 먼저 고르세요.';
+    $('#hint').textContent = !editing() ? '←/→ 또는 페이지 넘김 페달로 섹션 이동 · Space 진행 · 띠와 탭은 끌어서 옮깁니다.' : state.mode === 'band' ? '레인을 끌어 순서를 바꾸고 틈의 +로 끼워 넣습니다. 띠와 탭은 악보에서 끌어 옮깁니다.' : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽 패드에서 놓을 섹션을 먼저 고르세요.';
     $('#darkToggle')?.addEventListener('change', (e) => { state.dark = e.target.checked; render(); });
     keepTabsOnPage();
+    shown.bar = shown.clock = null;
     placePlayhead();
+    scheduleSave();
+    const prefs = JSON.stringify({ look: state.look, dark: state.dark });
+    if (prefs !== savedPrefs) { savedPrefs = prefs; storeSet('prefs', prefs); }
   }
   function keepTabsOnPage() {
     document.querySelectorAll('.page').forEach((pageEl) => {
@@ -767,7 +857,7 @@ button.hud-chip:active { transform: scale(.94); }
     if (!visible) return;
     const loc = locate(state.pos);
     const el = track.querySelectorAll('.track-item')[loc.index];
-    if (el) head.style.left = `${el.offsetLeft + (loc.len ? loc.within / loc.len : 0) * el.offsetWidth}px`;
+    if (el) head.style.transform = `translateX(${el.offsetLeft + (loc.len ? loc.within / loc.len : 0) * el.offsetWidth}px)`;
   }
   function revealLane(el, align) {
     if (!el) return;
@@ -778,6 +868,7 @@ button.hud-chip:active { transform: scale(.94); }
 
   /* ---------- Live run ---------- */
   let raf = 0, last = 0, countToken = 0;
+  const shown = { bar: null, clock: null };
   function liveUpdate(force = false) {
     const loc = locate(state.pos);
     if (force || loc.index !== liveIndex) {
@@ -795,12 +886,16 @@ button.hud-chip:active { transform: scale(.94); }
     placePlayhead();
     const cur = state.items[loc.index];
     if (!cur) return;
+    // Every frame runs this; touch the DOM only when what it shows changes (bar number, clock second).
     const barNow = Math.min(cur.bars, Math.floor(loc.within % cur.bars) + 1);
-    const sub = $('#nowSub');
-    if (sub) sub.textContent = sub.textContent.replace(/^마디 \d+/, `마디 ${barNow}`);
-    $('#barMeter')?.querySelectorAll('span').forEach((s, i) => s.classList.toggle('is-on', i < barNow));
-    const clock = $('#clock');
-    if (clock) clock.textContent = formatClock();
+    if (barNow !== shown.bar) {
+      shown.bar = barNow;
+      const sub = $('#nowSub');
+      if (sub) sub.textContent = sub.textContent.replace(/^마디 \d+/, `마디 ${barNow}`);
+      $('#barMeter')?.querySelectorAll('span').forEach((s, i) => s.classList.toggle('is-on', i < barNow));
+    }
+    const time = formatClock();
+    if (time !== shown.clock) { shown.clock = time; const clock = $('#clock'); if (clock) clock.textContent = time; }
   }
   function tick(now) {
     if (!state.playing) return;
@@ -1041,22 +1136,10 @@ button.hud-chip:active { transform: scale(.94); }
     }
     else if (action === 'size' || action === 'look') { state[action] = value; render(); sheet.querySelectorAll('.band .hud-chip, .tab .hud-chip').forEach(flickerOn); }
     else if (action === 'band-here') { edit(null, () => { state.band = { page: state.page, x: 0.022, y: 0.014 }; }); flickerOn(sheet.querySelector('.band')); }
-    else if (action === 'preset') {
-      edit(`${PRESETS[Number(value)][0]} 프리셋을 넣었습니다.`, () => { state.items = PRESETS[Number(value)][1].map(([k, r]) => makeItem(k, r)); state.selected = null; });
-      track.querySelectorAll('.track-item').forEach((el, i) => anim(el, [{ transform: 'scaleX(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 300, delay: i * 50, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
-      sheet.querySelectorAll('.band .hud-chip').forEach((el, i) => setTimeout(() => flickerOn(el), i * 50));
-    }
+    else if (action === 'preset') setItems(PRESETS[Number(value)][1].map(([k, r]) => makeItem(k, r)), `${PRESETS[Number(value)][0]} 프리셋을 넣었습니다.`);
+    else if (action === 'copy-text') copyForm();
     else if (action === 'song') { if (value !== state.songId) { stop(true); loadSong(value); render(); anim(sheet.querySelector('.page'), [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' }); } }
-    else if (action === 'reset') {
-      if (state.songId === 'upload') { toast('올린 악보는 되돌릴 예시가 없습니다. 위에서 예시 악보를 고르세요.'); return; }
-      stop(true);
-      const id = state.songId ?? 'synth';
-      delete saved[id];
-      state.songId = null;
-      loadSong(id);
-      render();
-      toast('예시 악보를 처음 상태로 되돌렸습니다.');
-    }
+    else if (action === 'reset') resetSong();
   });
 
   /* ---------- Pads: tap adds, hold 0.45s = ×2, hold 0.9s = ×3 (side panel and popover) ---------- */
@@ -1152,6 +1235,80 @@ button.hud-chip:active { transform: scale(.94); }
     flickerOn(sheet.querySelector(`.band [data-key="${el.dataset.id}"]`));
   }
 
+  document.addEventListener('submit', (e) => {
+    if (!e.target.matches('[data-form="text"]')) return;
+    e.preventDefault();
+    applyText(e.target.elements.form.value);
+  });
+  function resetSong() {
+    if (state.songId === 'upload') { toast('올린 악보는 되돌릴 예시가 없습니다. 위에서 예시 악보를 고르세요.'); return; }
+    stop(true);
+    const id = state.songId ?? 'synth';
+    delete saved[id];
+    storeSet(`song:${id}`, null);
+    state.songId = null;
+    loadSong(id);
+    render();
+    toast('예시 악보를 처음 상태로 되돌렸습니다.');
+  }
+  function setItems(items, message) {
+    edit(message, () => { state.items = items; state.selected = null; });
+    track.querySelectorAll('.track-item').forEach((el, i) => anim(el, [{ transform: 'scaleX(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 300, delay: i * 50, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
+    sheet.querySelectorAll('.band .hud-chip').forEach((el, i) => setTimeout(() => flickerOn(el), i * 50));
+  }
+  function applyText(text) {
+    const { out, unknown } = parseForm(text);
+    const skipped = unknown.length ? ` 모르는 말 ${unknown.length}개는 뺐습니다: ${unknown.slice(0, 3).join(', ')}${unknown.length > 3 ? ' …' : ''}` : '';
+    if (!out.length) { toast(unknown.length ? `섹션을 알아보지 못했습니다: ${unknown.slice(0, 3).join(', ')}` : '송폼 텍스트를 입력하세요. 예: I V1 C V2 C B C×2 O'); return; }
+    // A section already in the form keeps its bar count (e.g. a 16-bar verse).
+    const barsOf = (key) => state.items.find((it) => it.key === key)?.bars ?? sec(key).bars;
+    stop(true);
+    state.pos = 0;
+    setItems(out.slice(0, 24).map(({ key, rep }) => ({ ...makeItem(key, rep), bars: barsOf(key) })), `텍스트로 ${Math.min(out.length, 24)}칸을 넣었습니다.${skipped}`);
+  }
+  async function copyForm() {
+    if (!state.items.length) { toast('복사할 송폼이 없습니다.'); return; }
+    const ok = await copyText(`${state.title} · ${state.meta} · ♩ ${state.bpm}\n${formText(state.items)}`);
+    toast(ok ? '송폼을 텍스트로 복사했습니다. 단톡방에 붙여 넣으세요.' : '복사하지 못했습니다. 자세히 보기의 Text 칸에서 직접 복사하세요.');
+  }
+  /** Previous/next section on stage — what a page-turner pedal or ←/→ does. */
+  function stepSection(dir) {
+    if (!state.items.length) return;
+    const i = state.playing || state.pos > 0 ? locate(state.pos).index : -1;
+    const j = i + dir;
+    if (j < 0 || j >= state.items.length) { toast(j < 0 ? '첫 섹션입니다.' : '마지막 섹션입니다.'); return; }
+    seek(state.items[j].id);
+  }
+  /** Arrow keys on a focused tab or the band: small steps, Shift for bigger ones; a burst is one undo. */
+  let lastNudge = { key: null, t: 0 };
+  function nudge(el, dx, dy) {
+    const isBand = el.matches('.band');
+    const obj = isBand ? state.band : state.tabs.find((t) => t.id === el.dataset.tab);
+    if (!obj) return;
+    const key = isBand ? 'band' : obj.id;
+    const lim = isBand ? [0, 0.8, 0, 0.95] : [0.06, 0.98, 0.01, 0.99];
+    const apply = () => { obj.x = clamp(obj.x + dx, lim[0], lim[1]); obj.y = clamp(obj.y + dy, lim[2], lim[3]); };
+    const now = performance.now();
+    if (lastNudge.key === key && now - lastNudge.t < 1000) { apply(); render(); } else edit(null, apply);
+    lastNudge = { key, t: now };
+    refocus(isBand ? 'band' : 'tab', obj);
+  }
+  const refocus = (kind, obj) => (kind === 'band' ? sheet.querySelector('.band') : sheet.querySelector(`[data-tab="${obj.id}"]`))?.focus({ preventScroll: true });
+  // Line tabs up: within 8px of another tab's x on this page, snap to it and show a guide (Alt places freely).
+  function snapToTabs(d, free) {
+    let snap = null;
+    if (!free) for (const t of state.tabs) {
+      if (t.page !== state.page || t.id === d.obj.id) continue;
+      if (Math.abs(t.x - d.nx) * d.r.width < 8 && (snap === null || Math.abs(t.x - d.nx) < Math.abs(snap - d.nx))) snap = t.x;
+    }
+    const overlay = d.el.parentElement;
+    let guide = overlay.querySelector('.guide');
+    if (snap === null) { guide?.remove(); return; }
+    d.nx = snap;
+    if (!guide) { guide = document.createElement('div'); guide.className = 'guide'; overlay.append(guide); }
+    guide.style.left = `${snap * 100}%`;
+  }
+
   /* ---------- Pointer input: lanes, band, tabs ---------- */
   let drag = null, pending = null;
   track.addEventListener('pointerdown', (e) => {
@@ -1196,6 +1353,7 @@ button.hud-chip:active { transform: scale(.94); }
       const lim = drag.kind === 'band' ? [0, 0.8, 0, 0.95] : [0.06, 0.98, 0.01, 0.99];
       drag.nx = clamp(drag.ox + (e.clientX - drag.sx) / drag.r.width, lim[0], lim[1]);
       drag.ny = clamp(drag.oy + (e.clientY - drag.sy) / drag.r.height, lim[2], lim[3]);
+      if (drag.kind === 'tab') snapToTabs(drag, e.altKey);
       drag.el.style.left = `${drag.nx * 100}%`;
       drag.el.style.top = `${drag.ny * 100}%`;
       if (drag.kind === 'band') drag.el.style.maxWidth = `${(1 - drag.nx - 0.02) * 100}%`;
@@ -1225,6 +1383,8 @@ button.hud-chip:active { transform: scale(.94); }
     }
     else if (!d.moved && d.chipId && !cancel) { state.selected = state.selected === d.chipId ? null : d.chipId; render(); }
     else if (d.moved || editing()) render();
+    // In 자세히 보기 a pressed tab or band keeps focus, so arrow keys can fine-tune it next.
+    if (editing() && !cancel) refocus(d.kind, d.obj);
   };
   // A drag that ends over a chip button must not also count as a tap on it.
   function swallowClick() {
@@ -1239,7 +1399,7 @@ button.hud-chip:active { transform: scale(.94); }
   document.addEventListener('keydown', (e) => {
     if (e.target.closest('input, textarea')) return;
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === 'z' && editing()) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (e.key === 'Escape' && drag) { finish(true); return; }
     if (e.key === 'Escape') { if (!pop.hidden) closePop(); else if (state.selected || state.armed) { state.selected = null; if (state.mode === 'section') state.armed = null; render(); } return; }
     if (!editing()) {
@@ -1247,8 +1407,15 @@ button.hud-chip:active { transform: scale(.94); }
       const k = e.key.toLowerCase();
       if (k === 'r') cue('again'); else if (k === 'n') cue('next'); else if (k === 'e') cue('ending');
       else if (e.key === ' ' && !e.target.closest('button')) { e.preventDefault(); play(); }
+      // Page-turner pedals send ←/→ or PageUp/PageDown.
+      else if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); stepSection(1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); stepSection(-1); }
       return;
     }
+    const held = e.target.closest('#sheet .tab, #sheet .band');
+    const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (held && arrow && !e.altKey && !mod) { e.preventDefault(); const k = e.shiftKey ? 0.01 : 0.0025; nudge(held, arrow[0] * k, arrow[1] * k); return; }
+    if (held?.matches('.tab') && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); removeTab(held.dataset.tab); return; }
     if (!state.selected) return;
     if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowUp')) { e.preventDefault(); moveItem(state.selected, -1); }
     else if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowDown')) { e.preventDefault(); moveItem(state.selected, 1); }
@@ -1266,65 +1433,101 @@ button.hud-chip:active { transform: scale(.94); }
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      return { src: canvas.toDataURL('image/jpeg', 0.9), w: canvas.width, h: canvas.height };
+      return await canvasToPage(canvas);
     } finally { URL.revokeObjectURL(url); }
   }
-  async function pdfToPages(file) {
-    const base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/';
-    const pdfjs = await import(`${base}pdf.min.mjs`);
-    pdfjs.GlobalWorkerOptions.workerSrc = `${base}pdf.worker.min.mjs`;
-    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-    const pages = [];
-    for (let n = 1; n <= Math.min(pdf.numPages, 12); n++) {
-      const page = await pdf.getPage(n);
-      const unit = page.getViewport({ scale: 1 });
-      const viewport = page.getViewport({ scale: Math.min(2, 1600 / Math.max(unit.width, unit.height)) });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-      pages.push({ src: canvas.toDataURL('image/jpeg', 0.9), w: canvas.width, h: canvas.height });
+  // Pages are held as blob: URLs: short strings that re-render cheaply, unlike ~250KB base64 data URLs.
+  const canvasToPage = (canvas) => new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve({ src: URL.createObjectURL(blob), w: canvas.width, h: canvas.height }) : reject(new Error('encode'))), 'image/jpeg', 0.9));
+  const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/';
+  async function* pdfPages(file) {
+    const pdfjs = await import(`${PDFJS}legacy/build/pdf.min.mjs`);
+    pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS}legacy/build/pdf.worker.min.mjs`;
+    const pdf = await pdfjs.getDocument({
+      data: await file.arrayBuffer(),
+      // Korean (CJK) text needs CMaps; without them titles and lyrics silently drop out of the render.
+      cMapUrl: `${PDFJS}cmaps/`, cMapPacked: true, standardFontDataUrl: `${PDFJS}standard_fonts/`,
+    }).promise;
+    try {
+      for (let n = 1; n <= pdf.numPages; n++) {
+        const page = await pdf.getPage(n);
+        const unit = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: Math.min(2, 1600 / Math.max(unit.width, unit.height)) });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        page.cleanup();
+        yield await canvasToPage(canvas);
+      }
+    } finally { await pdf.destroy(); }
+  }
+  async function* readPages(files) {
+    for (const file of files) {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) yield* pdfPages(file);
+      else yield await imageToPage(file);
     }
-    await pdf.destroy();
-    return pages;
+  }
+  // The first page shows as soon as it is ready; the rest stream in behind it.
+  let uploadToken = 0, uploadPages = [];
+  function showUpload(pages, file) {
+    uploadPages.forEach((p) => URL.revokeObjectURL(p.src));
+    uploadPages = pages;
+    stop(true);
+    saveNow();
+    if (state.songId && state.songId !== 'upload') saved[state.songId] = Object.fromEntries(SONG_KEYS.map((k) => [k, state[k]]));
+    delete saved.upload;
+    if (!available.some((x) => x.id === 'upload')) available.push({ id: 'upload', label: '올린 악보' });
+    Object.assign(state, { songId: 'upload', sample: false, aliases: {}, extra: {}, items: state.items.map((it) => ({ ...it })), pages, page: 0, pos: 0, tabs: [], selected: null, band: { page: 0, x: 0.022, y: 0.014 }, title: file.name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
+    history.past.length = 0; history.future.length = 0;
+    render();
   }
   $('#upload').addEventListener('change', async (event) => {
     const files = [...event.target.files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
     event.target.value = '';
     if (!files.length) return;
+    const token = ++uploadToken;
+    const pages = [];
+    let failed = false;
     toast('악보를 불러오는 중입니다.');
     try {
-      const pages = [];
-      for (const file of files) {
-        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-        pages.push(...(isPdf ? await pdfToPages(file) : [await imageToPage(file)]));
+      for await (const page of readPages(files)) {
+        if (token !== uploadToken) { URL.revokeObjectURL(page.src); break; }
+        pages.push(page);
+        // While pages stream in only the pager changes; one full render at the end (thumbnails included).
+        if (pages.length === 1) showUpload(pages, files[0]);
+        else if (state.pages === pages) paintPager();
+        toast(`악보를 불러오는 중입니다 · ${pages.length}페이지`);
+        if (pages.length >= 12) break;
       }
-      if (!pages.length) throw new Error('empty');
-      stop(true);
-      if (state.songId && state.songId !== 'upload') saved[state.songId] = Object.fromEntries(SONG_KEYS.map((k) => [k, state[k]]));
-      if (!available.some((x) => x.id === 'upload')) available.push({ id: 'upload', label: '올린 악보' });
-      Object.assign(state, { songId: 'upload', sample: false, aliases: {}, extra: {}, items: state.items.map((it) => ({ ...it })), pages: pages.slice(0, 12), page: 0, pos: 0, tabs: [], selected: null, band: { page: 0, x: 0.022, y: 0.014 }, title: files[0].name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
-      history.past.length = 0; history.future.length = 0;
-      render();
-      toast(`${state.pages.length}페이지를 불러왔습니다. 마디 섹션 탭은 새로 놓아 주세요.`);
-    } catch {
-      toast('악보를 열지 못했습니다. PDF, PNG, JPG, WebP 파일인지 확인해 주세요.');
-    }
+    } catch { failed = true; }
+    if (token !== uploadToken) return;
+    if (pages.length > 1 && state.pages === pages && !drag && !reorder) render();
+    if (!pages.length) { toast('악보를 열지 못했습니다. PDF, PNG, JPG, WebP 파일인지 확인해 주세요.'); return; }
+    toast(`${pages.length}페이지를 불러왔습니다.${failed ? ' 일부 파일은 열지 못했습니다.' : ''} 마디 섹션 탭은 새로 놓아 주세요.`);
   });
 
   window.addEventListener('resize', () => { keepTabsOnPage(); placePlayhead(); });
   $('#states').innerHTML = statesMarkup();
+  {
+    const prefs = storeGet('prefs');
+    if (LOOKS.some(([v]) => v === prefs?.look)) state.look = prefs.look;
+    if (typeof prefs?.dark === 'boolean') state.dark = prefs.dark;
+  }
   document.fonts?.ready.then(() => { if (!state.sample || !available.length) return; state.pages = [drawSamplePage(0), drawSamplePage(1)]; render(); });
   // Use the real example sheets when their images are published alongside; otherwise the synthetic one.
   // First render waits for that check (local files answer in milliseconds) so the wrong sheet never flashes.
   const probe = (src) => new Promise((resolve) => { const img = new Image(); img.onload = () => resolve(true); img.onerror = () => resolve(false); img.src = src; });
-  const fallback = setTimeout(() => { if (!available.length) { available = [SYNTH]; state.songId = 'synth'; render(); } }, 1500);
+  function start(list) {
+    available = list;
+    loadSong(list[0].id);
+    render();
+    if (lastRestored === list[0].id) toast('지난번에 고친 송폼과 마디 탭을 불러왔습니다.', { label: '처음 상태로', run: resetSong });
+  }
+  const fallback = setTimeout(() => { if (!available.length) start([SYNTH]); }, 1500);
   Promise.all(SONGS.map((x) => probe(x.src))).then((ok) => {
     clearTimeout(fallback);
     const real = SONGS.filter((_, i) => ok[i]);
-    if (!real.length) { if (!available.length) { available = [SYNTH]; state.songId = 'synth'; render(); } return; }
-    available = real;
-    loadSong(real[0].id);
-    render();
+    if (!real.length) { if (!available.length) start([SYNTH]); return; }
+    start(real);
   });
 })();
 </script>
