@@ -227,6 +227,9 @@ export default function LiveContiWorkspace(props: Props) {
                     <p className="mt-1 text-sm text-muted-foreground">
                         {source.kind === 'server' ? '서버에 저장된 콘티' : '곡 보관함에 저장된 콘티'}를 이번 주 순서·송폼·특이사항과 함께 봐요
                     </p>
+                    <Link href="/dashboard/songs/deadline" className="mt-1.5 inline-flex min-h-8 items-center text-xs font-semibold text-primary underline-offset-2 hover:underline">
+                        콘티 마감 알림 목업 보기 →
+                    </Link>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                     {source.teams.length > 1 && (
