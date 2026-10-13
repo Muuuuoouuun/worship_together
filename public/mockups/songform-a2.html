@@ -1,0 +1,1133 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- publish:start -->
+<title>송폼 마크업 목업</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: mockup chrome on top; a resizable device frame holds the product (sheet + rail); spec sheet below. Product layout follows the frame width via container queries. */
+:root {
+  --bg: #eceeea;
+  --surface: #ffffff;
+  --surface-2: #f4f5f2;
+  --ink: #1b211e;
+  --muted: #59625e;
+  --line: #d6dad5;
+  --accent: #2b4ed4;
+  --accent-ink: #ffffff;
+  --bezel: #1f2522;
+  /* The score page is paper in both themes, so its tokens never flip. */
+  --paper: #fffefb;
+  --paper-ink: #17201c;
+  --paper-mark: #2b4ed4;
+  --chip-ink: #ffffff;
+  --sec-intro: #4a5361;
+  --sec-verse: #2d59cf;
+  --sec-pre: #8636cc;
+  --sec-chorus: #c4343a;
+  --sec-bridge: #17754a;
+  --sec-inter: #9c560a;
+  --sec-tag: #0e7068;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-chip: "Barlow Condensed", "Arial Narrow", "IBM Plex Sans KR", sans-serif;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111513; --surface: #191e1c; --surface-2: #202624; --ink: #e6eae8; --muted: #a0a9a5; --line: #303734;
+    --accent: #93a6ff; --accent-ink: #0c1332; --bezel: #050706; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111513; --surface: #191e1c; --surface-2: #202624; --ink: #e6eae8; --muted: #a0a9a5; --line: #303734;
+  --accent: #93a6ff; --accent-ink: #0c1332; --bezel: #050706; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; }
+.shell { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 56px; display: grid; gap: 18px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+button, input, label { font: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Mockup chrome */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; }
+.brand { display: grid; gap: 2px; flex: 1 1 260px; min-width: 0; }
+.eyebrow { font: 600 12px/1.2 var(--font-ui); letter-spacing: .08em; color: var(--muted); }
+.brand h1 { margin: 0; font: 700 26px/1.2 var(--font-ui); text-wrap: balance; }
+.song { margin: 0; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.top-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.switch { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.switch a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px; color: var(--muted); text-decoration: none; font-weight: 600; font-size: 14px; border: 1px solid transparent; }
+.switch a[aria-current="page"] { color: var(--ink); border-color: var(--line); background: var(--surface); }
+.switch a:hover { color: var(--ink); }
+.switch .past { font-size: 13px; font-weight: 500; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 600; font-size: 14px; cursor: pointer; transition: background .15s, border-color .15s, transform .12s; }
+.btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .45; cursor: default; transform: none; }
+.btn.quiet { background: transparent; }
+.btn.small { min-height: 36px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
+.btn svg { width: 18px; height: 18px; }
+.seg { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 2px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.seg button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .14), 0 0 0 1px var(--line); }
+.seg button:disabled { opacity: .45; cursor: default; }
+
+/* Device frame: the product renders inside, sized like a desktop window, a tablet or a phone */
+.frame { container: frame / inline-size; width: 100%; margin-inline: auto; transition: max-width .35s cubic-bezier(.2,.8,.2,1); }
+.frame[data-device="tablet"] { max-width: 860px; }
+.frame[data-device="phone"] { max-width: 414px; }
+.frame-inner { display: grid; gap: 12px; }
+.frame:not([data-device="desktop"]) .frame-inner { border: 12px solid var(--bezel); border-radius: 36px; padding: 16px 14px 20px; background: var(--bg); box-shadow: 0 30px 60px -30px rgb(0 0 0 / .45); }
+.frame[data-device="phone"] .frame-inner { border-radius: 44px; padding-top: 22px; }
+
+/* Product */
+.app-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.app-bar .seg button { min-width: 96px; }
+.app-tools { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.workspace { display: grid; gap: 16px; align-items: start; }
+@container frame (min-width: 900px) { .workspace { grid-template-columns: minmax(0, 1fr) 340px; } }
+.stage { display: grid; gap: 10px; min-width: 0; }
+.stage-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.stage-caption { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 14px; color: var(--muted); min-width: 0; }
+.stage-caption b { color: var(--ink); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sec-bridge); flex: none; }
+.workspace[data-view="detail"] .dot { background: var(--accent); }
+.pager { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.icon-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.icon-btn:disabled { opacity: .4; cursor: default; }
+.icon-btn svg { width: 18px; height: 18px; }
+.sheet-wrap { max-width: 780px; width: 100%; margin-inline: auto; view-transition-name: sheet; }
+.hint { margin: 0; text-align: center; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+
+/* Paper page and overlay */
+.page { position: relative; container-type: inline-size; width: 100%; max-width: 100%; background: var(--paper); border-radius: 6px; overflow: hidden; box-shadow: 0 1px 0 rgb(0 0 0 / .04), 0 18px 40px -22px rgb(18 28 22 / .55); --scale: 1; }
+.page > img { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+.overlay { position: absolute; inset: 0; }
+.workspace[data-view="detail"] .stage .overlay { cursor: crosshair; }
+.workspace[data-view="detail"][data-mode="band"] .stage .overlay { cursor: default; }
+.links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+
+/* Sticker chip */
+.chip { --c: var(--sec-intro); position: relative; display: inline-flex; align-items: baseline; gap: .08em; padding: .27em .5em .23em; border: 0; border-radius: .4em; background: var(--c); color: var(--chip-ink); font: 700 1em/1 var(--font-chip); letter-spacing: .02em; white-space: nowrap; box-shadow: 0 0 0 .12em #fff, 0 .14em 0 .12em rgb(0 0 0 / .13), 0 .45em .9em -.15em rgb(16 24 20 / .32); transition: transform .2s cubic-bezier(.3, .7, .3, 1.5), box-shadow .2s, opacity .15s; }
+.chip-rep { font-size: .62em; font-weight: 600; opacity: .92; }
+button.chip { cursor: pointer; }
+button.chip:hover, .is-editing .chip:hover, .demo-hover { transform: translateY(-.1em) rotate(-1.6deg); box-shadow: 0 0 0 .12em #fff, 0 .3em 0 .12em rgb(0 0 0 / .1), 0 .8em 1.2em -.2em rgb(16 24 20 / .34); }
+button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-shadow: 0 0 0 .12em #fff, 0 .05em 0 .12em rgb(0 0 0 / .14); }
+.look-tint .chip { background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); box-shadow: inset 0 0 0 .09em color-mix(in srgb, var(--c) 72%, transparent); text-shadow: 0 0 .22em #fff, 0 0 .1em #fff; }
+.look-outline .chip { background: rgb(255 255 255 / .94); color: var(--c); box-shadow: inset 0 0 0 .12em var(--c), 0 .25em .5em -.15em rgb(0 0 0 / .22); }
+.chip.is-selected { outline: .13em solid var(--paper-mark); outline-offset: .16em; }
+.chip.is-current { outline: .13em solid var(--paper-ink); outline-offset: .14em; }
+.chip.is-placeholder { opacity: .26; }
+.chip.is-linked { transform: translateY(-.12em) scale(1.06); }
+.chip-flag { position: absolute; right: -.22em; bottom: -.22em; width: .5em; height: .5em; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 .1em var(--c); }
+.chip-page { position: absolute; right: -.3em; top: -.62em; padding: .08em .22em; border-radius: .3em; background: var(--paper-ink); color: #fff; font: 600 .44em/1 var(--font-ui); }
+
+.band { position: absolute; display: flex; flex-wrap: wrap; align-items: center; gap: .36em .62em; padding: .46em .62em; border-radius: .72em; background: rgb(255 255 255 / .88); box-shadow: 0 .12em .6em rgb(0 0 0 / .08); font-size: calc(var(--scale) * 2.5cqw); }
+.band > .chip + .chip::before { content: ""; position: absolute; left: -.33em; top: 50%; width: .26em; height: .26em; border-top: .11em solid #86908b; border-right: .11em solid #86908b; transform: translate(-60%, -50%) rotate(45deg); pointer-events: none; transition: opacity .15s; }
+.look-tint .band { background: rgb(255 255 255 / .32); box-shadow: none; }
+.band.is-editing { outline: .1em dashed color-mix(in srgb, var(--paper-mark) 70%, transparent); outline-offset: .16em; }
+.band.is-editing .chip { cursor: grab; touch-action: none; }
+.band.is-grabbed { box-shadow: 0 .8em 1.8em -.2em rgb(0 0 0 / .28); }
+.band-grip { flex: none; display: grid; place-items: center; width: .9em; height: 1.5em; margin-right: -.3em; padding: 0; border: 0; border-radius: .3em; background: transparent; color: #7c8580; cursor: grab; touch-action: none; }
+.band-grip svg { width: .55em; height: .9em; }
+.band-grip:hover { background: rgb(0 0 0 / .05); color: var(--paper-ink); }
+.ins { position: absolute; left: -.42em; top: 50%; z-index: 2; width: 1.1em; height: 1.1em; padding: 0; display: grid; place-items: center; border-radius: 50%; border: .1em solid var(--paper-mark); background: #fff; color: var(--paper-mark); font-size: .74em; cursor: pointer; opacity: 0; transform: translate(-50%, -50%) scale(.4); transition: opacity .15s, transform .2s cubic-bezier(.3,.7,.3,1.6); }
+.ins svg { width: .62em; height: .62em; }
+.band.is-editing:hover .ins, .ins:focus-visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.band.is-editing:hover > .chip + .chip::before { opacity: 0; }
+.ins-tail { position: static; transform: none; opacity: 1; width: 1.25em; height: 1.25em; font-size: .9em; border-style: dashed; }
+.band.is-editing:hover .ins-tail { transform: scale(1.08); }
+.band.is-reordering .ins { display: none; }
+@media (hover: none) {
+  .band.is-editing .ins:not(.ins-tail) { opacity: 1; transform: translate(-50%, -50%) scale(.85); }
+  .band.is-editing > .chip + .chip::before { opacity: 0; }
+}
+
+.marker { position: absolute; width: 0; height: 0; font-size: calc(var(--scale) * 2.5cqw); }
+.marker-body { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); display: flex; transition: transform .25s cubic-bezier(.3,.7,.3,1.5); }
+.marker.is-editing { cursor: grab; touch-action: none; }
+.marker.is-grabbed .chip { box-shadow: 0 0 0 .12em #fff, 0 .9em 1.4em -.2em rgb(0 0 0 / .35); }
+.marker.is-linked .marker-body { transform: translate(-50%, -50%) scale(1.18); }
+.marker.is-linked .chip { outline: .12em solid var(--c); outline-offset: .2em; }
+
+.chip-x { position: absolute; top: -.52em; right: -.52em; z-index: 3; width: 1.2em; height: 1.2em; padding: 0; display: grid; place-items: center; border-radius: 50%; border: .1em solid #fff; background: var(--paper-ink); color: #fff; font-size: .74em; cursor: pointer; opacity: 0; transform: scale(.4); transition: opacity .15s, transform .22s cubic-bezier(.3, .7, .3, 1.6); }
+.chip-x svg { width: .62em; height: .62em; }
+.chip:hover > .chip-x, .chip:focus-within > .chip-x, .demo-hover > .chip-x { opacity: 1; transform: none; }
+@media (hover: none) { .chip-x { opacity: 1; transform: none; } }
+
+.ghost { position: absolute; width: 0; height: 0; pointer-events: none; font-size: calc(var(--scale) * 2.5cqw); }
+.ghost .marker-body { opacity: .72; transform: translate(-50%, -50%) rotate(-5deg) scale(1.06); filter: drop-shadow(0 .5em .6em rgb(0 0 0 / .25)); }
+.placeholder { position: absolute; display: flex; align-items: center; gap: .4em; padding: .55em .8em; border-radius: .72em; border: .1em dashed var(--paper-mark); background: rgb(43 78 212 / .07); color: var(--paper-mark); font: 600 calc(var(--scale) * 1.7cqw)/1.2 var(--font-ui); pointer-events: none; }
+.ring { position: absolute; width: 0; height: 0; pointer-events: none; font-size: calc(var(--scale) * 2.5cqw); }
+.ring::before { content: ""; position: absolute; left: -1.6em; top: -1.6em; width: 3.2em; height: 3.2em; border-radius: 50%; border: .16em solid var(--c, var(--paper-mark)); }
+.spot { position: absolute; width: 0; height: 0; pointer-events: none; font-size: calc(var(--scale) * 2.5cqw); }
+.spot::before { content: ""; position: absolute; left: -3.4em; top: -3.4em; width: 6.8em; height: 6.8em; border-radius: 50%; box-shadow: 0 0 0 300vmax rgb(12 18 15 / .36); }
+
+/* Preview: road bar under the sheet */
+.roadbar { position: sticky; bottom: 10px; z-index: 5; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line); box-shadow: 0 10px 30px -18px rgb(0 0 0 / .5); backdrop-filter: blur(8px); }
+.road-now { display: grid; gap: 2px; min-width: 0; }
+.road-now small { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--muted); }
+.road-now b { font-size: 14px; white-space: nowrap; }
+.road-strip { display: flex; gap: 10px; overflow-x: auto; padding: 6px 4px; scrollbar-width: thin; }
+.road-strip .chip { font-size: 17px; flex: none; }
+
+/* Rail */
+.rail { display: grid; gap: 14px; min-width: 0; view-transition-name: rail; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.card h2 { margin: 0; font: 700 15px/1.3 var(--font-ui); }
+.meta { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: .06em; color: var(--muted); }
+.roadmap { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.road-item { width: 100%; display: grid; grid-template-columns: 30px 3.2em minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 48px; padding: 4px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; transition: background .15s; }
+.road-item:hover { background: var(--surface-2); }
+.road-item.is-current { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.road-step { font: 600 13px/1 var(--font-chip); color: var(--muted); font-variant-numeric: tabular-nums; }
+.road-item .chip { font-size: 18px; justify-self: start; }
+.road-name { display: grid; line-height: 1.25; min-width: 0; }
+.road-name small { color: var(--muted); font-size: 12px; }
+.road-where { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.filmstrip { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.thumb { display: grid; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; }
+.thumb[aria-current="true"] { border-color: var(--accent); color: var(--ink); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.thumb .page { border-radius: 4px; box-shadow: none; }
+.palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.pal { position: relative; display: grid; justify-items: center; align-content: center; gap: 6px; min-height: 78px; padding: 10px 6px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); cursor: pointer; transition: border-color .15s, background .15s, transform .12s; }
+.pal .chip { font-size: 21px; }
+.pal small { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.pal:hover { border-color: color-mix(in srgb, var(--c) 50%, var(--line)); background: color-mix(in srgb, var(--c) 7%, var(--surface)); }
+.pal:hover .chip { transform: translateY(-2px) rotate(-2deg); }
+.pal:active { transform: scale(.96); }
+.pal:active .chip { transform: scale(.9); }
+.pal[aria-pressed="true"] { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, var(--surface)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent); }
+.pal[aria-pressed="true"]::after { content: "놓을 섹션"; position: absolute; top: -9px; right: 6px; padding: 1px 6px; border-radius: 6px; background: var(--c); color: var(--chip-ink); font-size: 11px; font-weight: 600; }
+.order { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.order-item { display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) auto auto; align-items: center; gap: 6px; border-radius: 10px; background: var(--surface); }
+.order-item.is-placeholder { opacity: .35; }
+.grip { width: 28px; height: 40px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: grab; touch-action: none; }
+.grip:hover { background: var(--surface-2); color: var(--ink); }
+.grip svg { width: 10px; height: 16px; }
+.order-pick { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; min-width: 0; }
+.order-pick:hover { background: var(--surface-2); }
+.order-pick[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.order-pick .chip { font-size: 17px; justify-self: start; }
+.order-pick span:last-child { min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order-pick small { color: var(--muted); }
+.where { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.where-btn { min-height: 32px; padding: 0 8px; border-radius: 8px; border: 1px dashed color-mix(in srgb, var(--accent) 60%, var(--line)); background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+.mini-x { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; }
+.mini-x:hover { background: var(--surface-2); color: var(--ink); }
+.mini-x svg { width: 16px; height: 16px; }
+.empty { margin: 0; padding: 14px; border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; color: var(--muted); text-align: center; }
+.kbd { display: inline-block; padding: 0 5px; border-radius: 5px; border: 1px solid var(--line); background: var(--surface-2); font: 600 11px/18px var(--font-ui); color: var(--ink); }
+
+/* Insert popover */
+.pop { position: fixed; z-index: 45; width: 264px; padding: 12px; border-radius: 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 22px 50px -20px rgb(0 0 0 / .5); display: grid; gap: 10px; }
+.pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
+.pop-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pop-grid button { display: grid; justify-items: center; gap: 4px; min-height: 56px; padding: 6px 4px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.pop-grid button:hover { background: var(--surface-2); }
+.pop-grid .chip { font-size: 18px; }
+.pop-grid small { font-size: 11px; color: var(--muted); }
+
+/* Spec sheet */
+.spec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.spec > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 0 18px; cursor: pointer; font-weight: 700; list-style: none; }
+.spec > summary::-webkit-details-marker { display: none; }
+.spec > summary::after { content: "펼치기"; font-size: 13px; font-weight: 600; color: var(--muted); }
+.spec[open] > summary::after { content: "접기"; }
+.spec-body { display: grid; gap: 18px; padding: 0 18px 18px; }
+.states { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.state { display: grid; gap: 8px; padding: 14px 12px 12px; border-radius: 12px; background: var(--paper); color: var(--paper-ink); border: 1px solid var(--line); }
+.state .swatch { display: flex; align-items: center; min-height: 44px; font-size: 22px; padding-left: 6px; }
+.state > b { font-size: 13px; }
+.state > span { font-size: 12px; color: #59625e; }
+.motion { width: 100%; border-collapse: collapse; font-size: 13px; }
+.motion th, .motion td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.motion th { font-size: 12px; color: var(--muted); font-weight: 600; }
+.motion td:nth-child(2) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table-box { overflow-x: auto; }
+
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); display: flex; align-items: center; gap: 12px; max-width: min(92vw, 560px); padding: 10px 10px 10px 18px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s, transform .25s; z-index: 50; }
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast button { min-height: 36px; padding: 0 12px; border-radius: 8px; border: 0; background: color-mix(in srgb, var(--bg) 18%, transparent); color: var(--bg); font-weight: 700; cursor: pointer; }
+.toast:not(:has(button:not([hidden]))) { padding-right: 18px; }
+.fly-layer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+
+::view-transition-old(sheet), ::view-transition-new(sheet), ::view-transition-old(rail), ::view-transition-new(rail) { animation-duration: .28s; }
+@media (prefers-reduced-motion: reduce) {
+  *, ::view-transition-old(*), ::view-transition-new(*) { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+</style>
+<!-- publish:head-end -->
+</head>
+<body>
+<!-- publish:body-start -->
+<div class="shell">
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">2차 시안 A · 악보 스티커</span>
+      <h1>송폼 마크업</h1>
+      <p class="song" id="songMeta">주의 길 · Key C · ♩ 68 · 2페이지</p>
+    </div>
+    <div class="top-tools">
+      <nav class="switch" aria-label="목업 선택">
+        <a href="#" aria-current="page">2차 A</a>
+        <a href="songform-b2.html">2차 B</a>
+        <a class="past" href="songform-a.html">1차 A</a>
+        <a class="past" href="songform-b.html">1차 B</a>
+      </nav>
+      <div class="seg" role="group" aria-label="기기 너비">
+        <button type="button" data-action="device" data-value="desktop" aria-pressed="true">데스크톱</button>
+        <button type="button" data-action="device" data-value="tablet" aria-pressed="false">태블릿</button>
+        <button type="button" data-action="device" data-value="phone" aria-pressed="false">휴대폰</button>
+      </div>
+      <label class="btn" for="upload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+        악보 올리기
+      </label>
+      <input class="sr-only" type="file" id="upload" accept="application/pdf,image/png,image/jpeg,image/webp" multiple>
+      <button type="button" class="btn quiet" data-action="reset">샘플 악보</button>
+    </div>
+  </header>
+
+  <div class="frame" id="frame" data-device="desktop">
+    <div class="frame-inner">
+      <div class="app-bar">
+        <div class="seg" role="group" aria-label="보기 방식">
+          <button type="button" data-action="view" data-view="preview" aria-pressed="true">미리보기</button>
+          <button type="button" data-action="view" data-view="detail" aria-pressed="false">자세히 보기</button>
+        </div>
+        <div class="app-tools" id="historyTools" hidden>
+          <button type="button" class="icon-btn" data-action="undo" aria-label="되돌리기 (⌘/Ctrl+Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></button>
+          <button type="button" class="icon-btn" data-action="redo" aria-label="다시 실행 (⌘/Ctrl+Shift+Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/></svg></button>
+        </div>
+      </div>
+      <main class="workspace" id="workspace" data-view="preview" data-mode="band">
+        <section class="stage" aria-label="악보">
+          <div class="stage-bar">
+            <span class="stage-caption" id="caption"></span>
+            <div class="pager">
+              <button type="button" class="icon-btn" data-action="prev" aria-label="이전 페이지"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+              <span id="pageLabel">1 / 2</span>
+              <button type="button" class="icon-btn" data-action="next" aria-label="다음 페이지"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+            </div>
+          </div>
+          <div class="sheet-wrap" id="sheet"></div>
+          <div class="roadbar" id="roadbar"></div>
+          <p class="hint" id="hint"></p>
+        </section>
+        <aside class="rail" id="rail" aria-label="송폼 패널"></aside>
+      </main>
+    </div>
+  </div>
+
+  <details class="spec">
+    <summary>칩 상태와 모션 사양</summary>
+    <div class="spec-body">
+      <div class="states" id="states"></div>
+      <div class="table-box">
+        <table class="motion">
+          <thead><tr><th>동작</th><th>시간</th><th>표현</th></tr></thead>
+          <tbody>
+            <tr><td>칩 붙이기</td><td>600ms + 340ms</td><td>팔레트에서 띠로 곡선을 그리며 날아가고, 붙는 순간 눌렸다 튀어 오르며 링이 퍼짐</td></tr>
+            <tr><td>끼워 넣기</td><td>180ms + 600ms</td><td>틈의 +를 누르면 작은 팔레트가 열리고, 고른 칩이 그 틈으로 날아감</td></tr>
+            <tr><td>칩 떼기</td><td>340ms</td><td>살짝 들리며 돌아가 떨어지고, 남은 칩이 420ms 동안 빈자리를 메움</td></tr>
+            <tr><td>순서 바꾸기</td><td>220ms</td><td>끄는 칩이 손가락을 따라오고 자리는 반투명으로 남음, 다른 칩이 비켜남</td></tr>
+            <tr><td>마디 연결</td><td>360ms</td><td>칩에 올리면 마디 표시까지 점선이 그려지고 표시가 커짐</td></tr>
+            <tr><td>마디로 이동</td><td>320ms + 1.5s</td><td>필요하면 페이지를 넘기고, 마디 주변만 밝게 남기는 스포트라이트</td></tr>
+            <tr><td>마디 표시 놓기</td><td>380ms</td><td>위에서 내려와 찍히듯 앉고 링이 퍼짐</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">단축키: <span class="kbd">⌘/Ctrl Z</span> 되돌리기 · <span class="kbd">⌘/Ctrl ⇧ Z</span> 다시 실행 · 칩을 고른 뒤 <span class="kbd">Alt ←/→</span> 순서 이동 · <span class="kbd">Delete</span> 빼기 · <span class="kbd">Esc</span> 선택 해제</p>
+    </div>
+  </details>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button type="button" id="toastAction" hidden></button></div>
+<div class="pop" id="pop" role="dialog" aria-label="섹션 끼워 넣기" hidden></div>
+
+<script>
+(() => {
+  const SECTIONS = [
+    { key: 'I', name: '전주', en: 'Intro', group: 'intro' },
+    { key: 'V1', name: '1절', en: 'Verse 1', group: 'verse' },
+    { key: 'V2', name: '2절', en: 'Verse 2', group: 'verse' },
+    { key: 'PC', name: '프리코러스', en: 'Pre-Chorus', group: 'pre' },
+    { key: 'C', name: '후렴', en: 'Chorus', group: 'chorus' },
+    { key: 'B', name: '브릿지', en: 'Bridge', group: 'bridge' },
+    { key: '간주', name: '간주', en: 'Interlude', group: 'inter' },
+    { key: 'Tag', name: '태그', en: 'Tag', group: 'tag' },
+    { key: 'O', name: '엔딩', en: 'Outro', group: 'intro' },
+  ];
+  const BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
+  const GROUP_VAR = { intro: '--sec-intro', verse: '--sec-verse', pre: '--sec-pre', chorus: '--sec-chorus', bridge: '--sec-bridge', inter: '--sec-inter', tag: '--sec-tag' };
+  const SIZES = [['S', '작게', 0.8], ['M', '보통', 1], ['L', '크게', 1.3], ['XL', '최대', 1.65]];
+  const LOOKS = [['solid', '진하게'], ['tint', '반투명'], ['outline', '외곽선']];
+  const PRESETS = [
+    ['기본', ['I', 'V1', 'C', 'V2', 'C', 'B', 'C×2', 'O']],
+    ['프리코러스', ['I', 'V1', 'PC', 'C', 'V2', 'PC', 'C', 'B', 'C×2', 'O']],
+    ['짧은 곡', ['I', 'V1', 'C×2', 'B', 'C', 'O']],
+  ];
+  const SYSTEM_TOPS = [360, 650, 940, 1230];
+  const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  const PLUS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  const GRIP_ICON = '<svg viewBox="0 0 10 16" fill="currentColor" aria-hidden="true"><circle cx="2.5" cy="3" r="1.5"/><circle cx="7.5" cy="3" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13" r="1.5"/><circle cx="7.5" cy="13" r="1.5"/></svg>';
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  let uid = 0;
+  const nid = () => `k${++uid}`;
+  const baseOf = (label) => label.replace(/×\d$/, '');
+  const repOf = (label) => Number(label.match(/×(\d)$/)?.[1] ?? 1);
+  const withRep = (label, n) => (n > 1 ? `${baseOf(label)}×${n}` : baseOf(label));
+  const sectionOf = (label) => BY_KEY[baseOf(label)] ?? { key: baseOf(label), name: baseOf(label), en: '', group: 'intro' };
+  const colorOf = (label) => `var(${GROUP_VAR[sectionOf(label).group]})`;
+  const fullName = (label) => { const s = sectionOf(label); const r = repOf(label); return `${s.name}${s.en ? ` (${s.en})` : ''}${r > 1 ? ` ${r}번` : ''}`; };
+  const chipInner = (label) => `<span>${esc(baseOf(label))}</span>${repOf(label) > 1 ? `<span class="chip-rep">×${repOf(label)}</span>` : ''}`;
+  const anim = (el, frames, opts) => (reduceMotion || !el ? null : el.animate(frames, opts));
+
+  /* ---------- Sample lead sheet ---------- */
+  const SAMPLE = [
+    [['C', 'G/B', 'Am7', 'Em7', '(피아노 아르페지오로 잔잔하게 시작)'], ['F', 'C/E', 'Dm7', 'G7sus4  G', '새벽 빛이 비추는 길 위에 주님 손을 잡고 걸어가네'], ['C', 'Em7', 'F', 'G', '주의 길 따라 걸으리 날마다 그 사랑 노래하리'], ['Am7', 'Em7', 'F  G7', 'C', '바람 불고 어두운 밤에도 주님 나의 등불 되시네']],
+    [['F', 'G/F', 'Em7', 'Am7', '내 모든 날 주께 드리리 내 모든 삶 주를 향하리'], ['Dm7', 'G7', 'C', 'C7', '주의 길 따라 걸으리 날마다 그 사랑 노래하리'], ['F', 'G/F', 'Em7', 'Am7', '주의 길 따라 걸으리 영원히 주 찬양하리'], ['Dm7', 'G7', 'Csus4', 'C', '주님 나의 길 되시네 (리타르단도)']],
+  ];
+  function drawSamplePage(index) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200; canvas.height = 1600;
+    const ctx = canvas.getContext('2d');
+    const sans = '"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+    ctx.fillStyle = '#fffefb'; ctx.fillRect(0, 0, 1200, 1600);
+    ctx.fillStyle = '#17201c'; ctx.textAlign = 'center';
+    if (index === 0) {
+      ctx.font = `700 54px ${sans}`; ctx.fillText('주의 길', 600, 170);
+      ctx.font = `500 21px ${sans}`; ctx.fillStyle = '#5b6560'; ctx.fillText('샘플 리드시트 · 4/4 · 따뜻하게', 600, 212);
+      ctx.textAlign = 'left'; ctx.font = `700 22px ${sans}`; ctx.fillStyle = '#17201c'; ctx.fillText('Key: C', 80, 256);
+      ctx.textAlign = 'right'; ctx.fillText('♩ = 68', 1120, 256);
+      ctx.fillRect(80, 272, 1040, 3); ctx.fillRect(80, 279, 1040, 1);
+    } else {
+      ctx.font = `600 20px ${sans}`; ctx.fillStyle = '#5b6560'; ctx.fillText('주의 길 (2/2)', 600, 140);
+      ctx.fillStyle = '#17201c'; ctx.fillRect(80, 160, 1040, 1);
+    }
+    const col = 1040 / 4;
+    SAMPLE[index].forEach((system, s) => {
+      const top = SYSTEM_TOPS[s];
+      ctx.textAlign = 'left'; ctx.font = `700 30px ${sans}`; ctx.fillStyle = '#1d3b8f';
+      system.slice(0, 4).forEach((chord, c) => ctx.fillText(chord, 80 + c * col + 14, top - 14));
+      ctx.strokeStyle = '#2a332f'; ctx.lineWidth = 1.6;
+      for (let l = 0; l < 5; l++) { ctx.beginPath(); ctx.moveTo(80, top + l * 16); ctx.lineTo(1120, top + l * 16); ctx.stroke(); }
+      ctx.lineWidth = 2.4;
+      [0, 1, 2, 3, 4].forEach((b) => { ctx.beginPath(); ctx.moveTo(80 + b * col, top); ctx.lineTo(80 + b * col, top + 64); ctx.stroke(); });
+      ctx.fillStyle = '#17201c';
+      for (let m = 0; m < 4; m++) {
+        [0.22, 0.47, 0.72].forEach((f, n) => {
+          const x = 80 + m * col + col * f; const y = top + ((m * 2 + n * 3 + s) % 5) * 8 + 16;
+          ctx.beginPath(); ctx.ellipse(x, y, 9, 6.5, -0.35, 0, Math.PI * 2); ctx.fill();
+          ctx.fillRect(x + 7, y - 36, 2.4, 36);
+        });
+      }
+      ctx.font = `500 23px ${sans}`; ctx.fillStyle = '#25302b';
+      ctx.fillText(system[4], 86, top + 108);
+    });
+    ctx.textAlign = 'center'; ctx.font = `500 15px ${sans}`; ctx.fillStyle = '#8b948f';
+    ctx.fillText(`${index + 1} / 2`, 600, 1560);
+    return { src: canvas.toDataURL('image/jpeg', 0.9), w: 1200, h: 1600 };
+  }
+  const markerY = (system) => (SYSTEM_TOPS[system] - 64) / 1600;
+  function sampleState() {
+    return {
+      sample: true, title: '주의 길', meta: 'Key C · ♩ 68',
+      pages: [drawSamplePage(0), drawSamplePage(1)],
+      bands: { 0: { x: 0.022, y: 0.014, items: PRESETS[0][1].map((label) => ({ id: nid(), label })) } },
+      markers: [
+        { id: nid(), page: 0, label: 'I', x: 0.11, y: markerY(0) },
+        { id: nid(), page: 0, label: 'V1', x: 0.11, y: markerY(1) },
+        { id: nid(), page: 0, label: 'C', x: 0.11, y: markerY(2) },
+        { id: nid(), page: 0, label: 'V2', x: 0.11, y: markerY(3) },
+        { id: nid(), page: 1, label: 'B', x: 0.11, y: markerY(0) },
+      ],
+    };
+  }
+  const state = { view: 'preview', device: 'desktop', page: 0, size: 'M', look: 'solid', mode: 'band', armed: null, selected: null, current: null, pending: null, ...sampleState() };
+
+  /* ---------- History ---------- */
+  const history = { past: [], future: [] };
+  const dataSnap = () => JSON.stringify({ bands: state.bands, markers: state.markers });
+  function restore(json) { const d = JSON.parse(json); state.bands = d.bands; state.markers = d.markers; }
+  function edit(message, fn, undoable = true) {
+    history.past.push(dataSnap());
+    if (history.past.length > 60) history.past.shift();
+    history.future.length = 0;
+    fn();
+    render();
+    if (message) toast(message, undoable ? { label: '되돌리기', run: undo } : null);
+  }
+  function undo() {
+    if (!history.past.length) return;
+    history.future.push(dataSnap());
+    restore(history.past.pop());
+    state.selected = null;
+    render();
+    toast('되돌렸습니다.', history.future.length ? { label: '다시 실행', run: redo } : null);
+  }
+  function redo() {
+    if (!history.future.length) return;
+    history.past.push(dataSnap());
+    restore(history.future.pop());
+    render();
+    toast('다시 실행했습니다.');
+  }
+
+  const sheet = $('#sheet'), rail = $('#rail'), workspace = $('#workspace'), roadbar = $('#roadbar');
+  const editing = () => state.view === 'detail';
+  const scaleOf = () => SIZES.find((s) => s[0] === state.size)[2];
+  const songBand = () => { const key = Object.keys(state.bands).sort((a, b) => a - b).find((k) => state.bands[k].items.length); return key === undefined ? null : { page: Number(key), band: state.bands[key] }; };
+  const allItems = () => Object.values(state.bands).flatMap((b) => b.items);
+  function findMarker(label, preferPage = state.page) {
+    const all = state.markers.filter((m) => baseOf(m.label) === baseOf(label));
+    return all.find((m) => m.page === preferPage) ?? all.sort((a, b) => a.page - b.page)[0] ?? null;
+  }
+  const lineOf = (m) => state.markers.filter((o) => o.page === m.page).sort((a, b) => a.y - b.y).indexOf(m) + 1;
+
+  /* ---------- Markup ---------- */
+  function pageMarkup(index, interactive) {
+    const p = state.pages[index];
+    const band = state.bands[index];
+    const edit = interactive && editing();
+    const pending = state.pending?.page === index ? state.pending : { x: 0.022, y: 0.014 };
+    return `<div class="page look-${state.look}" data-page="${index}" style="aspect-ratio:${p.w}/${p.h};--scale:${scaleOf()}">
+      <img src="${p.src}" alt="${esc(state.title)} 악보 ${index + 1}페이지" draggable="false">
+      <div class="overlay">
+        ${interactive ? '<svg class="links" aria-hidden="true"></svg>' : ''}
+        ${band?.items.length ? bandMarkup(band, index, interactive, edit) : ''}
+        ${state.markers.filter((m) => m.page === index).map((m) => markerMarkup(m, edit)).join('')}
+        ${edit && state.mode === 'band' && !band?.items.length ? `<div class="placeholder" style="left:${pending.x * 100}%;top:${pending.y * 100}%">칩을 누르면 여기에 송폼이 붙습니다</div>` : ''}
+        ${edit && state.mode === 'section' && state.armed ? `<div class="ghost" hidden><div class="marker-body"><span class="chip" style="--c:${colorOf(state.armed)}">${chipInner(state.armed)}</span></div></div>` : ''}
+      </div>
+    </div>`;
+  }
+  function bandMarkup(band, index, interactive, edit) {
+    const chips = band.items.map((item, i) => {
+      const style = `--c:${colorOf(item.label)}`;
+      if (interactive && !edit) {
+        return `<button type="button" class="chip${state.current === item.id ? ' is-current' : ''}" style="${style}" data-key="${item.id}" data-item="${item.id}" data-action="jump" data-id="${item.id}" aria-label="${esc(fullName(item.label))} 마디로 이동">${chipInner(item.label)}</button>`;
+      }
+      if (!edit) return `<span class="chip" style="${style}">${chipInner(item.label)}</span>`;
+      const marker = findMarker(item.label, index);
+      const badge = !marker ? '<span class="chip-flag" title="마디 표시 없음"></span>' : marker.page !== index ? `<span class="chip-page">${marker.page + 1}p</span>` : '';
+      return `<span class="chip${state.selected === item.id ? ' is-selected' : ''}" style="${style}" data-key="${item.id}" data-item="${item.id}" data-chip="${item.id}" data-id="${item.id}">${chipInner(item.label)}${badge}
+        <button type="button" class="ins" data-action="insert" data-index="${i}" aria-label="${i + 1}번째 앞에 끼워 넣기">${PLUS_ICON}</button>
+        <button type="button" class="chip-x" data-action="remove-chip" data-id="${item.id}" aria-label="${esc(baseOf(item.label))} 빼기">${X_ICON}</button></span>`;
+    }).join('');
+    const grip = edit ? `<button type="button" class="band-grip" aria-label="송폼 띠 옮기기">${GRIP_ICON}</button>` : '';
+    const tail = edit ? `<button type="button" class="ins ins-tail" data-action="insert" data-index="${band.items.length}" aria-label="끝에 추가">${PLUS_ICON}</button>` : '';
+    return `<div class="band${edit ? ' is-editing' : ''}" data-key="band-${index}" data-band="${index}" style="left:${band.x * 100}%;top:${band.y * 100}%;max-width:${(1 - band.x - 0.02) * 100}%" ${interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"'}>${grip}${chips}${tail}</div>`;
+  }
+  function markerMarkup(m, edit) {
+    const x = edit ? `<button type="button" class="chip-x" data-action="remove-marker" data-id="${m.id}" aria-label="${esc(baseOf(m.label))} 마디 표시 지우기">${X_ICON}</button>` : '';
+    return `<div class="marker${edit ? ' is-editing' : ''}" data-key="${m.id}" data-marker="${m.id}" data-label="${esc(baseOf(m.label))}" style="left:${m.x * 100}%;top:${m.y * 100}%"><div class="marker-body"><span class="chip" style="--c:${colorOf(m.label)}">${chipInner(m.label)}${x}</span></div></div>`;
+  }
+  function roadbarMarkup() {
+    const items = songBand()?.band.items ?? [];
+    if (!items.length) return '';
+    const idx = Math.max(0, items.findIndex((it) => it.id === state.current));
+    const cur = items[idx], next = items[idx + 1];
+    return `<div class="road-now"><small>${state.current ? '지금' : '처음'}</small><b>${esc(sectionOf(cur.label).name)}${next ? ` <span class="meta">다음 ${esc(sectionOf(next.label).name)}</span>` : ''}</b></div>
+      <div class="road-strip" role="group" aria-label="송폼 바로가기">${items.map((it) => `<button type="button" class="chip${it.id === state.current ? ' is-current' : ''}" style="--c:${colorOf(it.label)}" data-action="jump" data-id="${it.id}" aria-label="${esc(fullName(it.label))} 마디로 이동">${chipInner(it.label)}</button>`).join('')}</div>`;
+  }
+  function railPreview() {
+    const song = songBand();
+    const items = song?.band.items ?? [];
+    const road = items.length
+      ? `<ol class="roadmap">${items.map((item, i) => {
+          const m = findMarker(item.label);
+          return `<li><button type="button" class="road-item${state.current === item.id ? ' is-current' : ''}" data-action="jump" data-id="${item.id}" data-item="${item.id}">
+            <span class="road-step">${String(i + 1).padStart(2, '0')}</span>
+            <span class="chip" style="--c:${colorOf(item.label)}">${chipInner(item.label)}</span>
+            <span class="road-name"><b>${esc(sectionOf(item.label).name)}${repOf(item.label) > 1 ? ` ${repOf(item.label)}번` : ''}</b><small>${esc(sectionOf(item.label).en)}</small></span>
+            <span class="road-where">${m ? `${m.page + 1}p · ${lineOf(m)}줄` : '표시 없음'}</span>
+          </button></li>`;
+        }).join('')}</ol><p class="note">칩을 누르면 그 섹션이 시작되는 마디로 이동합니다. 올려 두면 마디까지 선이 이어집니다.</p>`
+      : '<p class="empty">아직 송폼이 없습니다. 자세히 보기에서 칩을 눌러 만드세요.</p>';
+    return `<section class="card"><div class="card-head"><h2>송폼</h2><span class="meta">${items.length}칸${song ? ` · ${song.page + 1}p 상단` : ''}</span></div>${road}</section>
+      <section class="card"><div class="card-head"><h2>페이지</h2><span class="meta">${state.pages.length}장</span></div>
+        <div class="filmstrip">${state.pages.map((_, i) => `<button type="button" class="thumb" data-action="page" data-page="${i}" aria-current="${i === state.page}" aria-label="${i + 1}페이지 보기">${pageMarkup(i, false)}<span>${i + 1}p</span></button>`).join('')}</div>
+      </section>`;
+  }
+  function railDetail() {
+    const band = state.bands[state.page];
+    const items = band?.items ?? [];
+    const target = items.find((it) => it.id === state.selected) ?? items[items.length - 1] ?? null;
+    const markers = state.markers.filter((m) => m.page === state.page).sort((a, b) => a.y - b.y || a.x - b.x);
+    const missing = [...new Set(items.map((it) => baseOf(it.label)))].filter((k) => !findMarker(k));
+    const seg = (action, value, current, label) => `<button type="button" data-action="${action}" data-value="${value}" aria-pressed="${value === current}">${label}</button>`;
+    return `<section class="card">
+        <div class="card-head"><h2>입력 방식</h2><span class="meta">${state.page + 1}p 편집 중</span></div>
+        <div class="seg" role="group" aria-label="입력 방식">${seg('mode', 'band', state.mode, '송폼 띠 (상단)')}${seg('mode', 'section', state.mode, '마디 섹션')}</div>
+        <p class="note">${state.mode === 'band' ? '칩을 누르면 띠 끝에 붙고, 틈의 +로 사이에 끼워 넣습니다. 칩을 끌면 순서가 바뀌고, 왼쪽 손잡이로 띠를 옮깁니다.' : '칩을 고르고 악보에서 그 섹션이 시작되는 마디를 누르세요. 놓은 표시는 끌어서 옮깁니다.'}</p>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>섹션 칩</h2><span class="meta">${state.mode === 'band' ? '누르면 바로 추가' : '눌러서 고르기'}</span></div>
+        <div class="palette">${SECTIONS.map((s) => `<button type="button" class="pal" style="--c:${colorOf(s.key)}" data-action="pick" data-label="${esc(s.key)}" ${state.mode === 'section' ? `aria-pressed="${state.armed === s.key}"` : ''} aria-label="${esc(s.name)} ${esc(s.en)} ${state.mode === 'band' ? '추가' : '고르기'}"><span class="chip" style="--c:${colorOf(s.key)}">${esc(s.key)}</span><small>${esc(s.name)}</small></button>`).join('')}</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>순서</h2><span class="meta">${items.length}칸 · 끌어서 바꾸기</span></div>
+        ${items.length ? `<ol class="order" id="order">${items.map((item, i) => {
+          const m = findMarker(item.label);
+          return `<li class="order-item" data-id="${item.id}">
+            <button type="button" class="grip" aria-label="${i + 1}번째 ${esc(baseOf(item.label))} 끌어서 옮기기">${GRIP_ICON}</button>
+            <span class="road-step">${String(i + 1).padStart(2, '0')}</span>
+            <button type="button" class="order-pick" data-action="select" data-id="${item.id}" data-item="${item.id}" aria-pressed="${state.selected === item.id}"><span class="chip" style="--c:${colorOf(item.label)}">${chipInner(item.label)}</span><span>${esc(sectionOf(item.label).name)} <small>${esc(sectionOf(item.label).en)}</small></span></button>
+            ${m ? `<span class="where">${m.page + 1}p · ${lineOf(m)}줄</span>` : `<button type="button" class="where-btn" data-action="place" data-label="${esc(baseOf(item.label))}">마디 놓기</button>`}
+            <button type="button" class="mini-x" data-action="remove-chip" data-id="${item.id}" aria-label="${i + 1}번째 ${esc(baseOf(item.label))} 빼기">${X_ICON}</button></li>`;
+        }).join('')}</ol>` : '<p class="empty">섹션 칩을 진행 순서대로 눌러 보세요.</p>'}
+        ${missing.length ? `<p class="note">마디 표시가 없는 섹션: ${missing.map(esc).join(', ')}. ‘마디 놓기’를 누르면 바로 놓을 수 있습니다.</p>` : ''}
+        <div class="row"><span class="label">반복${target ? ` · ${esc(baseOf(target.label))}` : ''}</span>
+          <div class="seg" role="group" aria-label="반복 횟수">${[1, 2, 3, 4].map((n) => `<button type="button" data-action="rep" data-value="${n}" aria-pressed="${target ? repOf(target.label) === n : false}" ${target ? '' : 'disabled'}>×${n}</button>`).join('')}</div>
+        </div>
+        <div class="row"><span class="label">프리셋</span>${PRESETS.map(([name], i) => `<button type="button" class="btn small" data-action="preset" data-value="${i}">${name}</button>`).join('')}${items.length ? '<button type="button" class="btn small quiet" data-action="clear-band">비우기</button>' : ''}</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>모양</h2></div>
+        <div class="row"><span class="label">크기</span><div class="seg" role="group" aria-label="크기">${SIZES.map(([v, l]) => seg('size', v, state.size, l)).join('')}</div></div>
+        <div class="row"><span class="label">스타일</span><div class="seg" role="group" aria-label="스타일">${LOOKS.map(([v, l]) => seg('look', v, state.look, l)).join('')}</div></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>이 페이지의 마디 표시</h2><span class="meta">${markers.length}개</span></div>
+        ${markers.length ? `<div class="row">${markers.map((m) => `<button type="button" class="chip" style="--c:${colorOf(m.label)};font-size:18px" data-action="remove-marker" data-id="${m.id}" aria-label="${esc(baseOf(m.label))} 마디 표시 지우기">${chipInner(m.label)}</button>`).join('')}</div><p class="note">목록의 칩을 누르면 그 표시가 지워집니다.</p>` : '<p class="empty">마디 섹션으로 바꾸고 악보를 눌러 표시를 놓으세요.</p>'}
+      </section>`;
+  }
+  function statesMarkup() {
+    const demo = (cls, label, extra = '') => `<span class="chip ${cls}" style="--c:${colorOf(label)}">${chipInner(label)}${extra}</span>`;
+    const cells = [
+      ['기본', demo('', 'V1'), '흰 테두리 스티커, 섹션 역할별 색'],
+      ['올림', demo('demo-hover', 'C', `<button type="button" class="chip-x" tabindex="-1" aria-hidden="true">${X_ICON}</button>`), '들리며 기울고 × 표시'],
+      ['누름', demo('demo-press', 'C'), '살짝 눌려 작아짐'],
+      ['선택', demo('is-selected', 'B'), '파란 바깥선 · Alt ←/→로 이동'],
+      ['지금 위치', demo('is-current', 'C×2'), '진한 바깥선, 하단 바와 동기'],
+      ['마디 표시 없음', demo('', 'PC', '<span class="chip-flag"></span>'), '오른쪽 아래 빈 점'],
+      ['다른 페이지', demo('', 'O', '<span class="chip-page">2p</span>'), '표시가 있는 페이지 번호'],
+      ['끌기 중', demo('is-placeholder', 'V2'), '자리는 흐리게 남음'],
+    ];
+    const looks = `<div class="state"><div class="swatch look-tint" style="gap:14px" aria-hidden="true">${demo('', 'V1')}${demo('', 'C')}</div><b>반투명</b><span>악보가 비치는 음영</span></div>
+      <div class="state"><div class="swatch look-outline" style="gap:14px" aria-hidden="true">${demo('', 'V1')}${demo('', 'C')}</div><b>외곽선</b><span>색 테두리만</span></div>`;
+    return cells.map(([t, chip, d]) => `<div class="state"><div class="swatch" aria-hidden="true">${chip}</div><b>${t}</b><span>${d}</span></div>`).join('') + looks;
+  }
+
+  function render() {
+    closePop();
+    workspace.dataset.view = state.view;
+    workspace.dataset.mode = state.mode;
+    $('#frame').dataset.device = state.device;
+    sheet.innerHTML = pageMarkup(state.page, true);
+    rail.innerHTML = editing() ? railDetail() : railPreview();
+    roadbar.innerHTML = editing() ? '' : roadbarMarkup();
+    roadbar.hidden = editing() || !roadbar.innerHTML;
+    document.querySelectorAll('[data-action="view"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
+    document.querySelectorAll('[data-action="device"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.value === state.device)));
+    $('#historyTools').hidden = !editing();
+    $('[data-action="undo"]').disabled = !history.past.length;
+    $('[data-action="redo"]').disabled = !history.future.length;
+    $('#pageLabel').textContent = `${state.page + 1} / ${state.pages.length}`;
+    $('[data-action="prev"]').disabled = state.page === 0;
+    $('[data-action="next"]').disabled = state.page >= state.pages.length - 1;
+    $('#songMeta').textContent = `${state.title} · ${state.meta} · ${state.pages.length}페이지`;
+    $('#caption').innerHTML = `<span class="dot" aria-hidden="true"></span>${state.view === 'preview' ? '<b>팀원이 보는 화면</b>칩을 누르면 해당 마디로' : `<b>인도자 편집 화면</b>${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
+    $('#hint').textContent = !editing() ? '' : state.mode === 'band'
+      ? '칩을 끌어 순서를 바꾸고, 틈의 +로 끼워 넣습니다. 띠는 왼쪽 손잡이로 옮깁니다.'
+      : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽에서 놓을 섹션 칩을 먼저 고르세요.';
+  }
+
+  /* ---------- Effects ---------- */
+  const isAnchor = (el) => el.classList.contains('marker');
+  function measure(el) {
+    const r = (isAnchor(el) ? el.firstElementChild : el).getBoundingClientRect();
+    return isAnchor(el) ? { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width } : { x: r.left, y: r.top, w: r.width };
+  }
+  function snapshot(selector) { const map = new Map(); sheet.querySelectorAll(selector).forEach((el) => map.set(el.dataset.key, measure(el))); return map; }
+  function flip(selector, before, scale = false) {
+    sheet.querySelectorAll(selector).forEach((el) => {
+      const a = before.get(el.dataset.key);
+      if (!a) return;
+      const b = measure(el);
+      const dx = a.x - b.x, dy = a.y - b.y, s = scale && a.w && b.w ? a.w / b.w : 1;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(s - 1) < 0.01) return;
+      anim(el, [{ transform: `translate(${dx}px, ${dy}px) scale(${s})`, transformOrigin: 'top left' }, { transform: 'none', transformOrigin: 'top left' }], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+  }
+  function ringAt(el, color) {
+    const page = sheet.querySelector('.page');
+    if (!page || !el || reduceMotion) return;
+    const pr = page.getBoundingClientRect(), r = el.getBoundingClientRect();
+    const ring = document.createElement('span');
+    ring.className = 'ring';
+    ring.style.cssText = `left:${((r.left + r.width / 2 - pr.left) / pr.width) * 100}%;top:${((r.top + r.height / 2 - pr.top) / pr.height) * 100}%;--c:${color}`;
+    page.querySelector('.overlay').append(ring);
+    ring.animate([{ transform: 'scale(.35)', opacity: 0.85 }, { transform: 'scale(1.9)', opacity: 0 }], { duration: 640, easing: 'cubic-bezier(.2,.7,.3,1)' }).finished.then(() => ring.remove());
+  }
+  const stick = (el) => anim(el, [{ transform: 'scale(1.22) rotate(-4deg)' }, { transform: 'scale(.9) rotate(1deg)', offset: 0.55 }, { transform: 'none' }], { duration: 340, easing: 'ease-out' });
+  // `from` is a rect measured BEFORE the re-render that detaches the source element.
+  function flyIn(from, toEl, color) {
+    if (!toEl) return;
+    if (reduceMotion || !from || !from.width) { stick(toEl); return; }
+    const a = from, b = toEl.getBoundingClientRect();
+    const layer = document.createElement('div');
+    layer.className = `fly-layer look-${state.look}`;
+    const ghost = toEl.cloneNode(true);
+    ghost.querySelectorAll('.chip-x, .ins, .chip-flag, .chip-page').forEach((n) => n.remove());
+    ghost.classList.remove('is-selected');
+    Object.assign(ghost.style, { position: 'fixed', left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px`, fontSize: getComputedStyle(toEl).fontSize, margin: '0' });
+    layer.append(ghost);
+    document.body.append(layer);
+    toEl.style.visibility = 'hidden';
+    const dx = a.left + a.width / 2 - (b.left + b.width / 2), dy = a.top + a.height / 2 - (b.top + b.height / 2), s = a.height / b.height;
+    ghost.animate([
+      { transform: `translate(${dx}px, ${dy}px) scale(${s}) rotate(-8deg)` },
+      { transform: `translate(${dx * 0.42}px, ${dy * 0.42 - 90}px) scale(${((s + 1) / 2) * 1.12}) rotate(10deg)`, offset: 0.5 },
+      { transform: 'none' },
+    ], { duration: 600, easing: 'cubic-bezier(.3,.75,.25,1)' }).finished.then(() => {
+      layer.remove();
+      toEl.style.visibility = '';
+      stick(toEl);
+      ringAt(toEl, color);
+    });
+  }
+  function peel(el) {
+    return anim(el, [
+      { transform: 'none', opacity: 1 },
+      { transform: 'translateY(-.5em) rotate(16deg) scale(1.06)', opacity: 0.95, offset: 0.35 },
+      { transform: 'translateY(1.2em) rotate(34deg) scale(.55)', opacity: 0 },
+    ], { duration: 340, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' })?.finished ?? Promise.resolve();
+  }
+  function spotlight(markerEl, color) {
+    const page = sheet.querySelector('.page');
+    if (!page || !markerEl) return;
+    const spot = document.createElement('span');
+    spot.className = 'spot';
+    spot.style.cssText = `left:${markerEl.style.left};top:${markerEl.style.top}`;
+    page.querySelector('.overlay').prepend(spot);
+    const run = anim(spot, [{ opacity: 0 }, { opacity: 1, offset: 0.18 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: 1500, easing: 'ease-in-out' });
+    (run?.finished ?? new Promise((r) => setTimeout(r, 900))).then(() => spot.remove());
+    anim(markerEl, [{ transform: 'scale(1)' }, { transform: 'scale(1.35)', offset: 0.3 }, { transform: 'scale(.95)', offset: 0.6 }, { transform: 'scale(1)' }], { duration: 620, easing: 'ease-out' });
+    ringAt(markerEl.querySelector('.chip'), color);
+    setTimeout(() => ringAt(markerEl.querySelector('.chip'), color), 260);
+  }
+  function turnTo(index) {
+    if (index === state.page || index < 0 || index >= state.pages.length) return;
+    const dir = index > state.page ? 1 : -1;
+    state.page = index;
+    state.selected = null;
+    render();
+    anim(sheet.querySelector('.page'), [{ transform: `translateX(${dir * 28}px) rotate(${dir * 0.6}deg)`, opacity: 0.2 }, { transform: 'none', opacity: 1 }], { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+  let toastTimer = 0, toastRun = null;
+  function toast(message, action = null) {
+    const el = $('#toast'), btn = $('#toastAction');
+    $('#toastMsg').textContent = message;
+    btn.hidden = !action;
+    btn.textContent = action?.label ?? '';
+    toastRun = action?.run ?? null;
+    el.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('is-on'), action ? 4200 : 2600);
+  }
+  $('#toastAction').addEventListener('click', () => { const run = toastRun; $('#toast').classList.remove('is-on'); run?.(); });
+
+  /* ---------- Chip ↔ marker link (hover or focus a chip) ---------- */
+  let linked = null;
+  function showLink(itemId) {
+    if (linked === itemId) return;
+    hideLink();
+    const item = allItems().find((it) => it.id === itemId);
+    const page = sheet.querySelector('.page');
+    if (!item || !page) return;
+    const marker = state.markers.find((m) => m.page === state.page && baseOf(m.label) === baseOf(item.label));
+    const markerEl = marker && sheet.querySelector(`[data-marker="${marker.id}"]`);
+    linked = itemId;
+    sheet.querySelectorAll(`.band [data-item="${itemId}"]`).forEach((el) => el.classList.add('is-linked'));
+    if (!markerEl) return;
+    markerEl.classList.add('is-linked');
+    const chipEl = sheet.querySelector(`.band [data-item="${itemId}"]`);
+    const svg = sheet.querySelector('.links');
+    if (!chipEl || !svg) return;
+    const pr = page.getBoundingClientRect(), a = chipEl.getBoundingClientRect(), b = markerEl.firstElementChild.getBoundingClientRect();
+    const x1 = a.left + a.width / 2 - pr.left, y1 = a.bottom - pr.top + 4, x2 = b.left + b.width / 2 - pr.left, y2 = b.top - pr.top - 4;
+    svg.setAttribute('viewBox', `0 0 ${pr.width} ${pr.height}`);
+    const mid = (y1 + y2) / 2;
+    svg.innerHTML = `<path d="M${x1} ${y1} C${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}" fill="none" stroke="${chipEl.style.getPropertyValue('--c')}" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="2 6"/><circle cx="${x2}" cy="${y2}" r="3.5" fill="${chipEl.style.getPropertyValue('--c')}"/>`;
+    const path = svg.querySelector('path');
+    const len = path.getTotalLength();
+    anim(path, [{ strokeDasharray: `0 ${len}` }, { strokeDasharray: `${len} 0` }], { duration: 360, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+  function hideLink() {
+    linked = null;
+    sheet.querySelectorAll('.is-linked').forEach((el) => el.classList.remove('is-linked'));
+    const svg = sheet.querySelector('.links');
+    if (svg) svg.innerHTML = '';
+  }
+  const linkTarget = (e) => (reorder || drag ? null : e.target.closest('.band [data-item], .road-item[data-item], .order-pick[data-item]'));
+  document.addEventListener('pointerover', (e) => { const t = linkTarget(e); if (t) showLink(t.dataset.item); });
+  document.addEventListener('pointerout', (e) => { const t = linkTarget(e); if (t && !t.contains(e.relatedTarget)) hideLink(); });
+  document.addEventListener('focusin', (e) => { const t = linkTarget(e); if (t) showLink(t.dataset.item); });
+  document.addEventListener('focusout', (e) => { if (linkTarget(e)) hideLink(); });
+
+  /* ---------- Actions ---------- */
+  function jump(id) {
+    const item = allItems().find((it) => it.id === id);
+    if (!item) return;
+    state.current = id;
+    const marker = findMarker(item.label);
+    if (!marker) { render(); toast(`아직 ‘${baseOf(item.label)}’ 마디 표시가 없습니다. 자세히 보기에서 놓을 수 있습니다.`); return; }
+    if (marker.page !== state.page) turnTo(marker.page); else render();
+    spotlight(sheet.querySelector(`[data-marker="${marker.id}"]`), colorOf(marker.label));
+    const strip = roadbar.querySelector('.road-strip'), cur = strip?.querySelector('.is-current');
+    if (cur) { const sr = strip.getBoundingClientRect(), cr = cur.getBoundingClientRect(); strip.scrollTo({ left: strip.scrollLeft + cr.left - sr.left - sr.width / 2 + cr.width / 2, behavior: reduceMotion ? 'auto' : 'smooth' }); }
+  }
+  function ensureBand() {
+    if (!state.bands[state.page]) {
+      const at = state.pending?.page === state.page ? state.pending : { x: 0.022, y: 0.014 };
+      state.bands[state.page] = { x: at.x, y: at.y, items: [] };
+    }
+    return state.bands[state.page];
+  }
+  function insertChip(label, index, fromEl) {
+    const count = state.bands[state.page]?.items.length ?? 0;
+    if (count >= 24) { toast('송폼은 24칸까지 붙일 수 있습니다.'); return; }
+    const item = { id: nid(), label };
+    const from = (fromEl?.querySelector('.chip') ?? fromEl)?.getBoundingClientRect();
+    edit(null, () => { const band = ensureBand(); band.items.splice(clamp(index, 0, band.items.length), 0, item); state.selected = null; });
+    flyIn(from, sheet.querySelector(`.band [data-key="${item.id}"]`), colorOf(label));
+  }
+  function removeChip(id) {
+    const band = state.bands[state.page];
+    const item = band?.items.find((it) => it.id === id);
+    if (!item) return;
+    const el = sheet.querySelector(`.band [data-key="${id}"]`);
+    const commit = () => {
+      const before = snapshot('.band > .chip');
+      edit(`‘${baseOf(item.label)}’를 뺐습니다.`, () => { band.items = band.items.filter((it) => it.id !== id); if (state.selected === id) state.selected = null; });
+      flip('.band > .chip', before);
+    };
+    if (el) { el.querySelectorAll('.chip-x, .ins').forEach((n) => n.remove()); peel(el).then(commit); } else commit();
+  }
+  function moveChip(id, delta) {
+    const band = state.bands[state.page];
+    const i = band?.items.findIndex((it) => it.id === id) ?? -1;
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= band.items.length) return;
+    const before = snapshot('.band > .chip');
+    edit(null, () => { const [it] = band.items.splice(i, 1); band.items.splice(j, 0, it); });
+    flip('.band > .chip', before);
+  }
+  function setRep(n) {
+    const items = state.bands[state.page]?.items ?? [];
+    const target = items.find((it) => it.id === state.selected) ?? items[items.length - 1];
+    if (!target) return;
+    edit(null, () => { target.label = withRep(target.label, n); });
+    stick(sheet.querySelector(`.band [data-key="${target.id}"]`));
+  }
+  function applyPreset(index) {
+    edit(`${PRESETS[index][0]} 프리셋을 붙였습니다.`, () => { ensureBand().items = PRESETS[index][1].map((label) => ({ id: nid(), label })); state.selected = null; });
+    sheet.querySelectorAll('.band > .chip').forEach((el, i) => anim(el, [{ transform: 'translateY(-1.2em) scale(.4) rotate(-12deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 380, delay: i * 45, easing: 'cubic-bezier(.3,.8,.3,1.4)', fill: 'backwards' }));
+  }
+  function clearBand() {
+    const chips = [...sheet.querySelectorAll('.band > .chip')];
+    Promise.all(chips.map((el, i) => anim(el, [{ transform: 'none', opacity: 1 }, { transform: `translateY(2em) rotate(${i % 2 ? 24 : -24}deg)`, opacity: 0 }], { duration: 300, delay: i * 25, easing: 'ease-in', fill: 'forwards' })?.finished)).then(() => {
+      edit('송폼 띠를 비웠습니다.', () => { delete state.bands[state.page]; state.selected = null; });
+    });
+  }
+  function addMarker(label, fx, fy) {
+    const marker = { id: nid(), page: state.page, label, x: clamp(fx, 0.02, 0.98), y: clamp(fy, 0.01, 0.99) };
+    edit(null, () => state.markers.push(marker));
+    const el = sheet.querySelector(`[data-marker="${marker.id}"]`);
+    anim(el, [{ transform: 'scale(1.7)', opacity: 0, filter: 'drop-shadow(0 18px 14px rgb(0 0 0 / .3))' }, { transform: 'scale(.9)', opacity: 1, offset: 0.6, filter: 'drop-shadow(0 2px 2px rgb(0 0 0 / .2))' }, { transform: 'none', opacity: 1 }], { duration: 380, easing: 'cubic-bezier(.3,.6,.3,1)' });
+    setTimeout(() => ringAt(el?.querySelector('.chip'), colorOf(label)), 200);
+  }
+  function removeMarker(id) {
+    const m = state.markers.find((x) => x.id === id);
+    if (!m) return;
+    const el = sheet.querySelector(`[data-marker="${id}"] .marker-body`);
+    const commit = () => edit(`${baseOf(m.label)} 마디 표시를 지웠습니다.`, () => { state.markers = state.markers.filter((x) => x.id !== id); });
+    if (el) peel(el).then(commit); else commit();
+  }
+  function setView(view) {
+    if (view === state.view) return;
+    const swap = () => { state.view = view; state.selected = null; state.current = null; render(); };
+    if (document.startViewTransition && !reduceMotion) document.startViewTransition(swap); else swap();
+  }
+
+  /* ---------- Insert popover ---------- */
+  const pop = $('#pop');
+  let popIndex = 0;
+  function openPop(anchor, index) {
+    popIndex = index;
+    pop.innerHTML = `<div class="pop-head"><span>${index === (state.bands[state.page]?.items.length ?? 0) ? '끝에 추가' : `${index + 1}번째 앞에 끼워 넣기`}</span><button type="button" class="mini-x" data-action="close-pop" aria-label="닫기">${X_ICON}</button></div>
+      <div class="pop-grid">${SECTIONS.map((s) => `<button type="button" data-action="pop-pick" data-label="${esc(s.key)}" style="--c:${colorOf(s.key)}"><span class="chip" style="--c:${colorOf(s.key)}">${esc(s.key)}</span><small>${esc(s.name)}</small></button>`).join('')}</div>`;
+    pop.hidden = false;
+    const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = `${clamp(r.left + r.width / 2 - w / 2, 8, innerWidth - w - 8)}px`;
+    pop.style.top = `${r.bottom + 10 + h > innerHeight ? Math.max(8, r.top - h - 10) : r.bottom + 10}px`;
+    anim(pop, [{ opacity: 0, transform: 'translateY(-6px) scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: 'ease-out' });
+    pop.querySelector('[data-action="pop-pick"]')?.focus();
+  }
+  function closePop() { pop.hidden = true; }
+  document.addEventListener('pointerdown', (e) => { if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('.ins')) closePop(); }, true);
+
+  document.addEventListener('click', (event) => {
+    const t = event.target.closest('[data-action]');
+    if (!t || t.disabled) return;
+    const { action, value, id } = t.dataset;
+    if (action === 'view') setView(t.dataset.view);
+    else if (action === 'device') { state.device = value; render(); }
+    else if (action === 'undo') undo();
+    else if (action === 'redo') redo();
+    else if (action === 'prev') turnTo(state.page - 1);
+    else if (action === 'next') turnTo(state.page + 1);
+    else if (action === 'page') turnTo(Number(t.dataset.page));
+    else if (action === 'jump') jump(id);
+    else if (action === 'mode') { state.mode = value; state.armed = value === 'section' ? state.armed ?? 'V1' : null; render(); }
+    else if (action === 'pick') {
+      if (state.mode === 'band') insertChip(t.dataset.label, state.bands[state.page]?.items.length ?? 0, t);
+      else { state.armed = t.dataset.label; render(); }
+    }
+    else if (action === 'place') { state.mode = 'section'; state.armed = t.dataset.label; render(); toast(`악보에서 ‘${t.dataset.label}’ 섹션이 시작되는 마디를 누르세요.`); }
+    else if (action === 'insert') openPop(t, Number(t.dataset.index));
+    else if (action === 'pop-pick') { const label = t.dataset.label; insertChip(label, popIndex, t); }
+    else if (action === 'close-pop') closePop();
+    else if (action === 'select') { state.selected = state.selected === id ? null : id; render(); }
+    else if (action === 'remove-chip') removeChip(id);
+    else if (action === 'remove-marker') removeMarker(id);
+    else if (action === 'rep') setRep(Number(value));
+    else if (action === 'preset') applyPreset(Number(value));
+    else if (action === 'clear-band') clearBand();
+    else if (action === 'size' || action === 'look') { const before = snapshot('.band, .marker'); state[action] = value; render(); flip('.band, .marker', before, true); }
+    else if (action === 'reset') { Object.assign(state, sampleState(), { page: 0, selected: null, current: null, pending: null }); history.past.length = 0; history.future.length = 0; render(); toast('샘플 악보로 되돌렸습니다.'); }
+  });
+
+  /* ---------- Reordering (sheet band and rail list share one routine) ---------- */
+  let reorder = null;
+  function beginReorder(e, el, container, selector, onDrop) {
+    const r = el.getBoundingClientRect();
+    const layer = document.createElement('div');
+    layer.className = `fly-layer look-${state.look}`;
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('.chip-x, .ins, .chip-flag, .chip-page').forEach((n) => n.remove());
+    Object.assign(clone.style, { position: 'fixed', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, margin: '0', fontSize: getComputedStyle(el).fontSize, boxShadow: '0 18px 30px -12px rgb(0 0 0 / .4)', transition: 'none' });
+    layer.append(clone);
+    document.body.append(layer);
+    el.classList.add('is-placeholder');
+    container.classList.add('is-reordering');
+    hideLink();
+    reorder = { el, container, selector, onDrop, clone, layer, offX: e.clientX - r.left, offY: e.clientY - r.top, x0: r.left, y0: r.top, order: [...container.querySelectorAll(selector)].map((n) => n.dataset.id).join() };
+    moveReorder(e);
+  }
+  function moveReorder(e) {
+    const { clone, el, container, selector, offX, offY, x0, y0 } = reorder;
+    clone.style.transform = `translate(${e.clientX - offX - x0}px, ${e.clientY - offY - y0}px) rotate(-3deg) scale(1.06)`;
+    const items = [...container.querySelectorAll(selector)].filter((n) => n !== el);
+    let best = null;
+    items.forEach((n) => {
+      const b = n.getBoundingClientRect();
+      const d = Math.hypot(e.clientX - (b.left + b.width / 2), (e.clientY - (b.top + b.height / 2)) * 1.8);
+      if (!best || d < best.d) best = { n, b, d };
+    });
+    if (!best) return;
+    const vertical = container.tagName === 'OL';
+    const before = vertical
+      ? e.clientY < best.b.top + best.b.height / 2
+      : e.clientY < best.b.top || (e.clientY <= best.b.bottom && e.clientX < best.b.left + best.b.width / 2);
+    if ((before && el.nextElementSibling === best.n) || (!before && best.n.nextElementSibling === el)) return;
+    const rects = new Map(items.map((n) => [n, n.getBoundingClientRect()]));
+    container.insertBefore(el, before ? best.n : best.n.nextSibling);
+    items.forEach((n) => {
+      const a = rects.get(n), b = n.getBoundingClientRect();
+      const dx = a.left - b.left, dy = a.top - b.top;
+      if (dx || dy) anim(n, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+  }
+  function endReorder(cancel) {
+    const { el, container, selector, onDrop, clone, layer, order } = reorder;
+    reorder = null;
+    const ids = [...container.querySelectorAll(selector)].map((n) => n.dataset.id);
+    const target = el.getBoundingClientRect();
+    const settle = anim(clone, [{ transform: clone.style.transform }, { transform: `translate(${target.left - parseFloat(clone.style.left)}px, ${target.top - parseFloat(clone.style.top)}px)` }], { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' });
+    (settle?.finished ?? Promise.resolve()).then(() => layer.remove());
+    container.classList.remove('is-reordering');
+    el.classList.remove('is-placeholder');
+    if (cancel || ids.join() === order) { render(); return; }
+    onDrop(ids, el.dataset.id);
+  }
+  const reorderBand = (ids, movedId) => {
+    const band = state.bands[state.page];
+    edit('순서를 바꿨습니다.', () => { band.items = ids.map((id) => band.items.find((it) => it.id === id)).filter(Boolean); });
+    anim(sheet.querySelector(`.band [data-key="${movedId}"]`), [{ transform: 'scale(1.14)' }, { transform: 'none' }], { duration: 280, easing: 'cubic-bezier(.3,.7,.3,1.5)' });
+  };
+
+  /* ---------- Pointer input on the sheet and rail (자세히 보기) ---------- */
+  let drag = null, pending = null;
+  sheet.addEventListener('pointerdown', (e) => {
+    if (!editing() || e.button > 0 || e.target.closest('.chip-x, .ins')) return;
+    const pageEl = e.target.closest('.page');
+    if (!pageEl) return;
+    closePop();
+    const r = pageEl.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    const chipEl = e.target.closest('.band [data-chip]');
+    if (chipEl) { pending = { el: chipEl, sx: e.clientX, sy: e.clientY }; e.preventDefault(); return; }
+    const bandEl = e.target.closest('.band'), markerEl = e.target.closest('.marker');
+    if (bandEl || markerEl) {
+      const obj = bandEl ? state.bands[state.page] : state.markers.find((m) => m.id === markerEl.dataset.marker);
+      drag = { el: bandEl || markerEl, obj, kind: bandEl ? 'band' : 'marker', r, sx: e.clientX, sy: e.clientY, ox: obj.x, oy: obj.y, nx: obj.x, ny: obj.y, moved: false };
+      e.preventDefault();
+      return;
+    }
+    if (state.mode === 'section') {
+      if (!state.armed) { toast('먼저 오른쪽에서 놓을 섹션 칩을 고르세요.'); return; }
+      addMarker(state.armed, fx, fy);
+      return;
+    }
+    if (!state.bands[state.page]?.items.length) { state.pending = { page: state.page, x: clamp(fx, 0, 0.8), y: clamp(fy - 0.015, 0, 0.95) }; render(); }
+    else if (state.selected) { state.selected = null; render(); }
+  });
+  rail.addEventListener('pointerdown', (e) => {
+    const grip = e.target.closest('.grip');
+    if (!grip || e.button > 0) return;
+    pending = { el: grip.closest('.order-item'), sx: e.clientX, sy: e.clientY, list: true };
+    e.preventDefault();
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (reorder) { moveReorder(e); return; }
+    if (pending) {
+      if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) < 5) return;
+      const p = pending;
+      pending = null;
+      if (p.list) beginReorder(e, p.el, $('#order'), '.order-item', reorderBand);
+      else beginReorder(e, p.el, p.el.closest('.band'), '[data-chip]', reorderBand);
+      return;
+    }
+    if (drag) {
+      if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+      if (!drag.moved) { drag.moved = true; drag.el.classList.add('is-grabbed'); hideLink(); }
+      const lim = drag.kind === 'band' ? [0, 0.8, 0, 0.95] : [0.02, 0.98, 0.01, 0.99];
+      drag.nx = clamp(drag.ox + (e.clientX - drag.sx) / drag.r.width, lim[0], lim[1]);
+      drag.ny = clamp(drag.oy + (e.clientY - drag.sy) / drag.r.height, lim[2], lim[3]);
+      drag.el.style.left = `${drag.nx * 100}%`;
+      drag.el.style.top = `${drag.ny * 100}%`;
+      if (drag.kind === 'band') drag.el.style.maxWidth = `${(1 - drag.nx - 0.02) * 100}%`;
+      return;
+    }
+    const ghost = sheet.querySelector('.ghost');
+    if (!ghost) return;
+    const pageEl = e.target.closest?.('#sheet .page');
+    if (!pageEl || e.target.closest('.band, .marker')) { ghost.hidden = true; return; }
+    const r = pageEl.getBoundingClientRect();
+    ghost.hidden = false;
+    ghost.style.left = `${((e.clientX - r.left) / r.width) * 100}%`;
+    ghost.style.top = `${((e.clientY - r.top) / r.height) * 100}%`;
+  });
+  const finish = (cancel) => {
+    if (reorder) { endReorder(cancel); return; }
+    if (pending) {
+      const p = pending;
+      pending = null;
+      if (!cancel && !p.list) { state.selected = state.selected === p.el.dataset.chip ? null : p.el.dataset.chip; render(); }
+      return;
+    }
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (d.moved && !cancel) {
+      edit(null, () => { d.obj.x = d.nx; d.obj.y = d.ny; });
+      const el = d.kind === 'band' ? sheet.querySelector('.band') : sheet.querySelector(`[data-marker="${d.obj.id}"]`);
+      anim(el, [{ transform: 'translateY(-4px) scale(1.03)' }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.3,.7,.3,1.5)' });
+    } else render();
+  };
+  document.addEventListener('pointerup', () => finish(false));
+  document.addEventListener('pointercancel', () => finish(true));
+
+  /* ---------- Keyboard ---------- */
+  document.addEventListener('keydown', (e) => {
+    if (e.target.closest('input, textarea')) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+    if (e.key === 'Escape') { if (!pop.hidden) closePop(); else if (state.selected || state.armed) { state.selected = null; if (state.mode === 'section') state.armed = null; render(); } return; }
+    if (!editing() || !state.selected) return;
+    if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowUp')) { e.preventDefault(); moveChip(state.selected, -1); }
+    else if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowDown')) { e.preventDefault(); moveChip(state.selected, 1); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeChip(state.selected); }
+  });
+
+  /* ---------- Upload ---------- */
+  async function imageToPage(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale); canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return { src: canvas.toDataURL('image/jpeg', 0.9), w: canvas.width, h: canvas.height };
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function pdfToPages(file) {
+    const base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/';
+    const pdfjs = await import(`${base}pdf.min.mjs`);
+    pdfjs.GlobalWorkerOptions.workerSrc = `${base}pdf.worker.min.mjs`;
+    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pages = [];
+    for (let n = 1; n <= Math.min(pdf.numPages, 12); n++) {
+      const page = await pdf.getPage(n);
+      const unit = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: Math.min(2, 1600 / Math.max(unit.width, unit.height)) });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      pages.push({ src: canvas.toDataURL('image/jpeg', 0.9), w: canvas.width, h: canvas.height });
+    }
+    await pdf.destroy();
+    return pages;
+  }
+  $('#upload').addEventListener('change', async (event) => {
+    const files = [...event.target.files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    event.target.value = '';
+    if (!files.length) return;
+    toast('악보를 불러오는 중입니다.');
+    try {
+      const pages = [];
+      for (const file of files) {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        pages.push(...(isPdf ? await pdfToPages(file) : [await imageToPage(file)]));
+      }
+      if (!pages.length) throw new Error('empty');
+      const items = songBand()?.band.items ?? PRESETS[0][1].map((label) => ({ id: nid(), label }));
+      Object.assign(state, { sample: false, pages: pages.slice(0, 12), page: 0, bands: { 0: { x: 0.022, y: 0.014, items } }, markers: [], selected: null, current: null, pending: null, title: files[0].name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
+      history.past.length = 0; history.future.length = 0;
+      render();
+      toast(`${state.pages.length}페이지를 불러왔습니다. 송폼 띠는 1페이지에 옮겼고, 마디 표시는 새로 놓아 주세요.`);
+    } catch {
+      toast('악보를 열지 못했습니다. PDF, PNG, JPG, WebP 파일인지 확인해 주세요.');
+    }
+  });
+
+  $('#states').innerHTML = statesMarkup();
+  render();
+  document.fonts?.ready.then(() => { if (!state.sample) return; state.pages = [drawSamplePage(0), drawSamplePage(1)]; render(); });
+})();
+</script>
+<!-- publish:body-end -->
+</body>
+</html>

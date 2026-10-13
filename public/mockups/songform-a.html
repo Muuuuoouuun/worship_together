@@ -46,6 +46,7 @@
   --accent: #93a6ff; --accent-ink: #0c1332; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; }
 .shell { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px; display: grid; gap: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -208,6 +209,7 @@ button.chip:active { transform: translateY(.04em) scale(.94); box-shadow: 0 0 0 
       <nav class="switch" aria-label="목업 선택">
         <a href="#" aria-current="page">A 스티커</a>
         <a href="songform-b.html">B 무대 HUD</a>
+        <a href="songform-a2.html">2차 시안</a>
       </nav>
       <div class="seg view-toggle" role="group" aria-label="보기 방식">
         <button type="button" data-action="view" data-view="preview" aria-pressed="true">미리보기</button>
@@ -509,10 +511,11 @@ button.chip:active { transform: translateY(.04em) scale(.94); box-shadow: 0 0 0 
   function stick(el) {
     anim(el, [{ transform: 'scale(1.22) rotate(-4deg)' }, { transform: 'scale(.9) rotate(1deg)', offset: 0.55 }, { transform: 'none' }], { duration: 340, easing: 'ease-out' });
   }
-  function flyIn(fromEl, toEl, color) {
+  // `from` is a rect measured BEFORE the re-render that detaches the source element.
+  function flyIn(from, toEl, color) {
     if (!toEl) return;
-    if (reduceMotion || !fromEl) { stick(toEl); return; }
-    const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
+    if (reduceMotion || !from || !from.width) { stick(toEl); return; }
+    const a = from, b = toEl.getBoundingClientRect();
     const layer = document.createElement('div');
     layer.className = `fly-layer look-${state.look}`;
     const ghost = toEl.cloneNode(true);
@@ -601,10 +604,11 @@ button.chip:active { transform: translateY(.04em) scale(.94); box-shadow: 0 0 0 
     const band = ensureBand();
     if (band.items.length >= 24) { toast('송폼은 24칸까지 붙일 수 있습니다.'); return; }
     const item = { id: nid(), label };
+    const from = fromEl?.querySelector('.chip')?.getBoundingClientRect();
     band.items.push(item);
     state.selected = null;
     render();
-    flyIn(fromEl?.querySelector('.chip'), sheet.querySelector(`.band [data-key="${item.id}"]`), colorOf(label));
+    flyIn(from, sheet.querySelector(`.band [data-key="${item.id}"]`), colorOf(label));
   }
   function removeChip(id) {
     const band = state.bands[state.page];
