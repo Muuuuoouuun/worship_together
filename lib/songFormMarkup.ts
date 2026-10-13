@@ -77,6 +77,55 @@ export function abbreviateSectionLabel(raw: string): string {
     return `${base}${suffix}`;
 }
 
+/** Words people type for sections in team chats (lower-cased), on top of the chip labels themselves. */
+const SECTION_WORDS: Readonly<Record<string, string>> = {
+    전주: 'I', 인트로: 'I', intro: 'I', in: 'I',
+    '1절': 'V1', '2절': 'V2', '3절': 'V3', 절: 'V1', verse: 'V1', verse1: 'V1', verse2: 'V2', verse3: 'V3',
+    프리코러스: 'PC', 프리: 'PC', pre: 'PC', prechorus: 'PC',
+    후렴: 'C', 코러스: 'C', chorus: 'C', 후렴2: 'C2', chorus2: 'C2',
+    브릿지: 'B', 브리지: 'B', bridge: 'B',
+    인터: '간주', inter: '간주', interlude: '간주',
+    태그: 'Tag', 엔딩: 'O', 아웃트로: 'O', 후주: 'O', outro: 'O', ending: 'O', out: 'O',
+};
+
+function sectionLabelFor(token: string): string | null {
+    const chip = SONG_FORM_CHIPS.find((c) => c.label.toLowerCase() === token.toLowerCase());
+    if (chip) return chip.label;
+    if (/^(v|c|pc|b)\d$/i.test(token)) return token.toUpperCase();
+    return SECTION_WORDS[token.toLowerCase()] ?? null;
+}
+
+/**
+ * Reads a song form typed or pasted as text — "I - V1 - C×2 - O", "전주 1절 후렴 x2 브릿지" — into chip
+ * labels. A repeat can ride on the section (C×2, Cx2, C*2) or follow it (x2, 2번, 2회). Words it can't
+ * map stay as their own chips, cut to the label limit, and are listed in `custom` so the caller can say so.
+ */
+export function parseSongFormText(text: string): { sections: string[]; custom: string[] } {
+    const sections: string[] = [];
+    const custom: string[] = [];
+    const withRepeat = (label: string, times: number) => {
+        const suffix = times > 1 ? `×${times}` : '';
+        return `${label.slice(0, SONG_FORM_LABEL_MAX - suffix.length)}${suffix}`;
+    };
+    for (const raw of text.replace(/[()[\]{}]/g, ' ').split(/[\s,·•→>|/–—-]+/).filter(Boolean)) {
+        const trailing = raw.match(/^(?:[×xX*](\d)|(\d)(?:회|번))$/);
+        if (trailing) {
+            if (sections.length) sections[sections.length - 1] = withRepeat(splitRepeat(sections[sections.length - 1]).base, Number(trailing[1] ?? trailing[2]));
+            continue;
+        }
+        const [, name, times] = raw.match(/^(.+?)(?:[×xX*](\d))?$/) ?? [raw, raw];
+        const label = sectionLabelFor(name);
+        if (!label) custom.push(name);
+        sections.push(withRepeat(label ?? name, times ? Number(times) : 1));
+    }
+    return { sections: sections.slice(0, SONG_FORM_MAX_SECTIONS), custom };
+}
+
+/** The band as one line of text, the way song forms get shared in team chats. */
+export function formatSongFormText(sections: readonly string[]): string {
+    return sections.join(' - ');
+}
+
 export function isValidSongFormSections(value: unknown): value is string[] {
     return (
         Array.isArray(value) &&

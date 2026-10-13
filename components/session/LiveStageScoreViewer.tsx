@@ -13,6 +13,7 @@ import {
     EyeOff,
     FileText,
     History,
+    Footprints,
     Keyboard,
     ListMusic,
     Maximize2,
@@ -27,6 +28,7 @@ import {
     Zap,
 } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
+import { useSongFormStepper } from '@/hooks/useSongFormStepper';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
@@ -298,6 +300,24 @@ export default function LiveStageScoreViewer({
         flashTimeoutRef.current = window.setTimeout(() => setPageTurnFlash(null), 300);
     };
 
+    // Pedal 섹션 이동 mode: walk the song form band, turning to each section marker's page.
+    const stepper = useSongFormStepper({
+        pages: sheet?.pages,
+        page,
+        canTurnPage,
+        onPageChange: (next) => {
+            showPageTurnFlash(next > page ? 'next' : 'prev');
+            onPageChange(next);
+        },
+        resetKey: songId,
+    });
+    const stepSection = (direction: 1 | -1) => {
+        if (!stepper.step(direction)) return false;
+        setIsFollowLeader(false);
+        triggerHaptic(15);
+        return true;
+    };
+
     const handleSendStageCue = (message: string) => {
         triggerHaptic([20, 30]);
         const cat = getCueCategory(message);
@@ -395,6 +415,7 @@ export default function LiveStageScoreViewer({
     // Bluetooth Foot Pedal & Keyboard Navigation
     usePageTurner({
         onNext: () => {
+            if (stepSection(1)) return;
             const step = isDualPage ? 2 : 1;
             if (canTurnPage && totalPages > 0) {
                 if (page + step <= totalPages) {
@@ -410,6 +431,7 @@ export default function LiveStageScoreViewer({
             }
         },
         onPrev: () => {
+            if (stepSection(-1)) return;
             const step = isDualPage ? 2 : 1;
             if (canTurnPage && page > 1) {
                 setIsFollowLeader(false);
@@ -513,13 +535,29 @@ export default function LiveStageScoreViewer({
 
             if (mark.kind === 'songform') {
                 return (
-                    <SongFormMarkup key={mark.id} sections={mark.sections ?? []} anchor={point} ratio={ratio} fontSize={mark.fontSize} opacity={mark.opacity} />
+                    <SongFormMarkup
+                        key={mark.id}
+                        sections={mark.sections ?? []}
+                        anchor={point}
+                        ratio={ratio}
+                        fontSize={mark.fontSize}
+                        opacity={mark.opacity}
+                        currentIndex={stepper.active && stepper.route?.bandId === mark.id ? stepper.index : null}
+                    />
                 );
             }
 
             if (mark.kind === 'section') {
                 return (
-                    <SongFormSectionMarker key={mark.id} label={mark.text ?? ''} anchor={point} ratio={ratio} fontSize={mark.fontSize} opacity={mark.opacity} />
+                    <SongFormSectionMarker
+                        key={mark.id}
+                        label={mark.text ?? ''}
+                        anchor={point}
+                        ratio={ratio}
+                        fontSize={mark.fontSize}
+                        opacity={mark.opacity}
+                        current={stepper.active && stepper.stop?.markId === mark.id}
+                    />
                 );
             }
 
@@ -938,6 +976,27 @@ export default function LiveStageScoreViewer({
 
                 {/* Right: Essential 3 Actions (Dark Invert, Zen Mode, Fullscreen) + Settings Popover */}
                 <div className="flex items-center gap-1.5 sm:gap-2">
+                    {/* Pedal mode: turn pages, or walk the song form section by section */}
+                    {stepper.available && (
+                        <button
+                            type="button"
+                            aria-pressed={stepper.sectionMode}
+                            aria-label={`페달: ${stepper.sectionMode ? '섹션 이동' : '페이지 넘김'}`}
+                            onClick={() => stepper.setSectionMode(!stepper.sectionMode)}
+                            className={`tap-target inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
+                                stepper.sectionMode
+                                    ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
+                                    : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10'
+                            }`}
+                            title="페달·방향키가 페이지를 넘길지, 송폼 순서대로 섹션 표시를 따라갈지 바꿉니다"
+                        >
+                            <Footprints size={14} />
+                            <span className="hidden sm:inline">
+                                {!stepper.sectionMode ? '페이지 넘김' : stepper.active && stepper.stop ? `${stepper.stop.label} · ${(stepper.index ?? 0) + 1}/${stepper.total}` : '섹션 이동'}
+                            </span>
+                        </button>
+                    )}
+
                     {/* Dark Inversion Toggle */}
                     <button
                         type="button"
@@ -2030,7 +2089,7 @@ export default function LiveStageScoreViewer({
                             {sheetSource === 'published' ? '팀 공유본' : '내 필기본'}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-medium">
-                            ⌨️ 페달 넘김 가능
+                            {stepper.sectionMode && stepper.available ? '🦶 페달로 섹션 이동' : '⌨️ 페달 넘김 가능'}
                         </span>
                     </div>
                 </div>
@@ -2270,6 +2329,29 @@ export default function LiveStageScoreViewer({
                                         <span>다음 페이지 (끝페이지에서 누르면 다음 곡)</span>
                                     </div>
                                 </div>
+                                {stepper.available && (
+                                    <div className="space-y-1.5 border-t border-white/10 pt-2 text-[11px] text-white/80">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="font-bold text-white">페달 동작</span>
+                                            <span className="inline-flex gap-1" role="group" aria-label="페달 동작">
+                                                {([false, true] as const).map((on) => (
+                                                    <button
+                                                        key={String(on)}
+                                                        type="button"
+                                                        aria-pressed={stepper.sectionMode === on}
+                                                        onClick={() => stepper.setSectionMode(on)}
+                                                        className="rounded-lg border border-white/15 px-2 py-0.5 font-bold aria-pressed:bg-amber-400 aria-pressed:text-black"
+                                                    >
+                                                        {on ? '섹션 이동' : '페이지 넘김'}
+                                                    </button>
+                                                ))}
+                                            </span>
+                                        </div>
+                                        <p className="text-white/60">
+                                            섹션 이동: 악보에 얹은 송폼 순서대로 다음 섹션의 마디 표시로 넘어가고, 그 표시가 있는 페이지를 엽니다. 송폼 끝에서는 다시 페이지를 넘깁니다.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">

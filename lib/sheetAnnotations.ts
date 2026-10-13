@@ -124,7 +124,8 @@ export function validateSheet(value: unknown): SheetDocument {
     return doc;
 }
 
-export async function importSheetPages(file: File): Promise<SheetPage[]> {
+/** `onPage` reports PDF progress (pages done, page count) so a long import can show where it is. */
+export async function importSheetPages(file: File, onPage?: (done: number, total: number) => void): Promise<SheetPage[]> {
     if (file.size > 20 * 1024 * 1024) throw new Error('20MB 이하의 파일을 선택해주세요.');
     if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         // Legacy build: bundles polyfills (e.g. Map.prototype.getOrInsertComputed, native only in
@@ -155,6 +156,7 @@ export async function importSheetPages(file: File): Promise<SheetPage[]> {
                 pages.push({ image: canvas.toDataURL('image/jpeg', 0.9), width: canvas.width, height: canvas.height, marks: [] });
                 canvas.width = canvas.height = 0;
                 page.cleanup();
+                onPage?.(i, pdf.numPages);
             }
             return pages;
         } finally { await task.destroy(); }
