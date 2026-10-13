@@ -10,6 +10,7 @@ import { applyPlanningCommand, parsePlanningState, planningForViewer } from '@/l
 import { getTeamServerSnapshot, getTeamSnapshot, parseTeamSnapshot, subscribeToTeams } from '@/lib/teamPrototype';
 import { emptyPlanningState, planningDate, type PlanningCommand, type PlanningState } from '@/types/planning';
 import type { OnlineTeam, TeamMember } from '@/types/team';
+import { demoMembers, readLocalActor, writeLocalActor } from '@/lib/planningDemo';
 import RequestsPanel from './RequestsPanel';
 import SchedulePanel from './SchedulePanel';
 import RotationPanel from './RotationPanel';
@@ -17,12 +18,6 @@ import RotationPanel from './RotationPanel';
 const field = 'mt-2 min-h-11 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring';
 const button = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98] disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
 type Props = { teams: OnlineTeam[]; userId?: string; initialTeamId?: string; initialTab?: string; initialSetlist?: { id: string; title: string } };
-const demoMembers: TeamMember[] = [
-    { userId: 'demo-leader', name: '예시 인도자', role: 'leader', permission: 'owner' },
-    { userId: 'demo-vocal', name: '예시 보컬', role: 'vocal', permission: 'member' },
-    { userId: 'demo-drums', name: '예시 드럼', role: 'drums', permission: 'member' },
-    { userId: 'demo-guitar', name: '예시 기타', role: 'guitar', permission: 'member' },
-];
 
 export default function PlanningWorkspace(props: Props) {
     return props.teams.length && props.userId ? <OnlinePlanning {...props} /> : <LocalPlanning {...props} />;
@@ -37,14 +32,16 @@ function LocalPlanning(props: Props) {
     const [selected, setSelected] = useState(props.initialTeamId ?? '');
     const [actor, setActor] = useState('');
     const parsed = useMemo(() => { try { return { value: parseTeamSnapshot(raw), error: '' }; } catch (error) { return { value: null, error: error instanceof Error ? error.message : '팀 자료를 읽지 못했습니다.' }; } }, [raw]);
-    if (!parsed.value) return <p role="alert">{parsed.error}</p>;
-    const teams = parsed.value.teams;
+    const teams = parsed.value?.teams ?? [];
     const team = teams.find(item => item.id === selected) ?? teams.find(item => item.id === parsed.value?.activeTeamId) ?? teams[0];
     const teamId = team?.id ?? DEMO_TEAM_ID;
+    // 콘티·악보 화면에서 고른 '보는 사람'을 이어받습니다 (같은 브라우저 저장소).
+    useEffect(() => { setActor(readLocalActor(teamId)); }, [teamId]);
+    if (!parsed.value) return <p role="alert">{parsed.error}</p>;
     const members: TeamMember[] = team ? team.members.map((member, index) => ({ userId: member.id, name: member.name, role: member.role, permission: index === 0 ? 'owner' : 'member' })) : demoMembers;
     const userId = members.some(member => member.userId === actor) ? actor : members[0].userId;
     return <div className="space-y-5">
-        <section className="rounded-2xl border border-border bg-muted p-5"><p className="font-bold">로그인 없이 일정·요청 체험</p><p className="mt-2 text-sm leading-6 text-muted-foreground">이 브라우저에만 저장됩니다. 체험할 팀원을 바꾸면 요청 수신과 대체 지원을 확인할 수 있습니다. 실제 팀에 알림을 보내지 않습니다.</p><Link className="mt-3 inline-flex min-h-12 items-center text-sm font-bold underline underline-offset-4" href="/dashboard/team">로그인하고 온라인 팀 준비하기</Link><div className="mt-2 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold">체험 팀<select className={field} value={teamId} onChange={event => { setSelected(event.target.value); setActor(''); }}>{teams.length ? teams.map(item => <option key={item.id} value={item.id}>{item.name}</option>) : <option value={DEMO_TEAM_ID}>예시 예배팀</option>}</select></label><label className="text-sm font-semibold">체험할 팀원<select className={field} value={userId} onChange={event => setActor(event.target.value)}>{members.map(member => <option key={member.userId} value={member.userId}>{member.name}{member.permission === 'owner' ? ' · 관리자' : ''}</option>)}</select></label></div></section>
+        <section className="rounded-2xl border border-border bg-muted p-5"><p className="font-bold">로그인 없이 일정·요청 체험</p><p className="mt-2 text-sm leading-6 text-muted-foreground">이 브라우저에만 저장됩니다. 체험할 팀원을 바꾸면 요청 수신과 대체 지원을 확인할 수 있습니다. 실제 팀에 알림을 보내지 않습니다.</p><Link className="mt-3 inline-flex min-h-12 items-center text-sm font-bold underline underline-offset-4" href="/dashboard/team">로그인하고 온라인 팀 준비하기</Link><div className="mt-2 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold">체험 팀<select className={field} value={teamId} onChange={event => { setSelected(event.target.value); setActor(''); }}>{teams.length ? teams.map(item => <option key={item.id} value={item.id}>{item.name}</option>) : <option value={DEMO_TEAM_ID}>예시 예배팀</option>}</select></label><label className="text-sm font-semibold">체험할 팀원<select className={field} value={userId} onChange={event => { setActor(event.target.value); writeLocalActor(teamId, event.target.value); }}>{members.map(member => <option key={member.userId} value={member.userId}>{member.name}{member.permission === 'owner' ? ' · 관리자' : ''}</option>)}</select></label></div></section>
         <Board key={`${teamId}:${userId}`} teamId={teamId} members={members} userId={userId} online={false} initialTab={props.initialTab} initialSetlist={!props.initialTeamId || teamId === props.initialTeamId ? props.initialSetlist : undefined} />
     </div>;
 }

@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from 'react';
 import type { ContiSetlist } from './model';
+import type { PlanningView } from './planningBridge';
 
 /** 순서 화면에서 곡 하나를 편집할 때의 값 */
 export interface SongDraft {
@@ -46,10 +47,10 @@ export interface ContiData {
     /** 이번 주(다가오는) 콘티 */
     thisWeekId: string | null;
     editor: ContiEditor | null;
-    /** 팀 배치·일정·요청·팀 소식이 아직 샘플인지 */
-    sampleSections: boolean;
     /** 담당자·리드 입력 추천 이름 */
     roster: string[];
+    /** 팀 배치·일정·요청·팀 소식 (일정·요청 화면과 같은 데이터) */
+    planning: PlanningView;
 }
 
 const ContiContext = createContext<ContiData | null>(null);

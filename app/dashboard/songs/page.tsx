@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import LiveContiWorkspace from '@/components/conti/LiveContiWorkspace';
-import type { ScreenId } from '@/components/conti/model';
+import { resolveScreen } from '@/components/conti/model';
 import { getCurrentUser } from '@/lib/auth';
 import { DEMO_TEAM_ID } from '@/lib/constants';
 import { getSetlistsByTeam, getSongsByTeam } from '@/lib/data';
@@ -16,14 +16,12 @@ interface SongsPageProps {
     searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const SCREENS: ScreenId[] = ['week', 'conti', 'order', 'team', 'requests', 'alerts'];
-
 export default async function SongsPage({ searchParams }: SongsPageProps) {
     const params = await searchParams;
     const tab = typeof params.tab === 'string' ? params.tab : '';
     const setlist = typeof params.setlist === 'string' && params.setlist ? params.setlist : undefined;
     const team = typeof params.team === 'string' && params.team ? params.team : undefined;
-    const screen = SCREENS.find((item) => item === tab) ?? 'week';
+    const { screen, setlistId } = resolveScreen(tab, setlist);
 
     // 곡 보관함과 같은 데이터를 같은 규칙으로 읽습니다.
     const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID), getCurrentUser()]);
@@ -41,8 +39,9 @@ export default async function SongsPage({ searchParams }: SongsPageProps) {
                 onlineTeams={onlineTeams}
                 onlineTeamId={team}
                 viewerName={user?.name ?? null}
-                initialScreen={screen === 'order' && !setlist ? 'conti' : screen}
-                initialSetlistId={setlist}
+                viewerId={user?.id ?? null}
+                initialScreen={screen}
+                initialSetlistId={setlistId}
             />
         </DashboardLayout>
     );

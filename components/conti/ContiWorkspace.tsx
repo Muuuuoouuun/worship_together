@@ -3,8 +3,7 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { CalendarPlus, House, Inbox, ListMusic, MessageSquarePlus, Plus, UsersRound, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NOTICES, REQUESTS } from './mockData';
-import type { ScreenId } from './model';
+import { resolveScreen, type ScreenId } from './model';
 import { ContiProvider, type ContiData } from './context';
 import { ink, line, selected } from './ui';
 import WeekScreen from './WeekScreen';
@@ -48,6 +47,17 @@ const PAGE_TABS: { id: Exclude<ScreenId, 'order'>; label: string }[] = [
  */
 export type WorkspaceMode = 'embedded' | 'app' | 'framed';
 
+/** 페이지 안에서는 탭을 바꿀 때 URL 만 바꾸므로, 다시 마운트될 때는 서버가 준 값 대신 지금 URL 을 따릅니다. */
+function fromLocation(fallback: { screen: ScreenId; setlistId?: string }): { screen: ScreenId; setlistId?: string } {
+    if (typeof window === 'undefined') return fallback;
+    const params = new URLSearchParams(window.location.search);
+    const one = (name: string) => {
+        const all = params.getAll(name);
+        return all.length === 1 ? all[0] : '';
+    };
+    return resolveScreen(one('tab'), one('setlist'));
+}
+
 export default function ContiWorkspace({
     data,
     initialScreen = 'week',
@@ -61,14 +71,14 @@ export default function ContiWorkspace({
 }) {
     const framed = mode === 'framed';
     const embedded = mode === 'embedded';
-    const [screen, setScreen] = useState<ScreenId>(initialScreen);
-    const [setlistId, setSetlistId] = useState(initialSetlistId ?? data.thisWeekId ?? data.setlists[0]?.id ?? '');
-    const [requests, setRequests] = useState(REQUESTS);
-    const [notices, setNotices] = useState(NOTICES);
+    const [initial] = useState(() => (embedded ? fromLocation({ screen: initialScreen, setlistId: initialSetlistId }) : { screen: initialScreen, setlistId: initialSetlistId }));
+    const [screen, setScreen] = useState<ScreenId>(initial.screen);
+    const [setlistId, setSetlistId] = useState(initial.setlistId ?? data.thisWeekId ?? data.setlists[0]?.id ?? '');
     const [sheetOpen, setSheetOpen] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const activeNav = screen === 'order' ? 'conti' : screen === 'alerts' ? 'week' : screen;
-    const openCount = requests.filter((request) => !request.done).length;
+    const openCount = data.planning.openRequestCount;
+    const unread = data.planning.unreadCount;
 
     function syncUrl(next: ScreenId, nextSetlistId: string) {
         if (!embedded) return;
@@ -97,31 +107,18 @@ export default function ContiWorkspace({
         syncUrl('order', id);
     }
 
-    function toggleRequest(id: string) {
-        setRequests((list) => list.map((request) => (request.id === id ? { ...request, done: !request.done } : request)));
-    }
-
-    function readNotice(id: string) {
-        setNotices((list) => list.map((notice) => (notice.id === id ? { ...notice, unread: false } : notice)));
-    }
-
-    function readAllNotices() {
-        setNotices((list) => list.map((notice) => ({ ...notice, unread: false })));
-    }
-
     const screens = (
         <ContiProvider value={data}>
-            {screen === 'week' && <WeekScreen requests={requests} notices={notices} go={go} openOrder={openOrder} />}
+            {screen === 'week' && <WeekScreen go={go} openOrder={openOrder} />}
             {screen === 'conti' && <ContiScreen openOrder={openOrder} />}
             {screen === 'order' && <OrderScreen setlistId={setlistId} onBack={() => go('conti')} onSelect={selectSetlist} />}
-            {screen === 'team' && <TeamScreen />}
-            {screen === 'requests' && <RequestScreen requests={requests} onToggle={toggleRequest} />}
-            {screen === 'alerts' && <AlertsScreen notices={notices} onRead={readNotice} onReadAll={readAllNotices} onBack={() => go('week')} />}
+            {screen === 'team' && <TeamScreen openOrder={openOrder} />}
+            {screen === 'requests' && <RequestScreen />}
+            {screen === 'alerts' && <AlertsScreen onBack={() => go('week')} openOrder={openOrder} go={go} />}
         </ContiProvider>
     );
 
     if (embedded) {
-        const unread = notices.filter((notice) => notice.unread).length;
         const activeTab = screen === 'order' ? 'conti' : screen;
         return (
             <div className="relative isolate -mx-3 break-keep bg-white ring-black/5 dark:bg-neutral-900 dark:ring-white/10 sm:mx-0 sm:rounded-[2rem] sm:shadow-sm sm:ring-1">
