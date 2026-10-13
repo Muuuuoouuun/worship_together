@@ -131,7 +131,15 @@ export async function importSheetPages(file: File): Promise<SheetPage[]> {
         // Chrome 145+/Safari 26.2+/Firefox 144+) that the modern build calls directly.
         const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
         pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-        const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+        const task = pdfjs.getDocument({
+            data: await file.arrayBuffer(),
+            // Copied to /public/pdfjs by scripts/prepare-pdf-worker.mjs.
+            cMapUrl: '/pdfjs/cmaps/',
+            cMapPacked: true,
+            standardFontDataUrl: '/pdfjs/standard_fonts/',
+            wasmUrl: '/pdfjs/wasm/',
+            iccUrl: '/pdfjs/iccs/',
+        });
         const pdf = await task.promise;
         try {
             if (pdf.numPages > 20) throw new Error('악보는 최대 20페이지까지 불러올 수 있습니다.');
