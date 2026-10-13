@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/Badge';
 import type { LibrarySong } from '@/lib/libraryPrototypeStorage';
 import { COMMON_KEYS, saveSetlistDetails, type SongSetlistOverride } from '@/lib/setlistDetailsStorage';
+import { createClientId } from '@/lib/clientId';
 import {
     ArrowDown,
     ArrowUp,
@@ -107,16 +108,17 @@ export default function SetlistComposer({
     };
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        // await 이후에는 event.currentTarget 이 비므로 먼저 잡아둡니다.
+        const form = event.currentTarget;
+        // 새 콘티 id 를 미리 정해 두어 곡별 Key·BPM·메모를 같은 id 로 저장합니다.
+        const setlistId = createClientId();
+        const idInput = form.elements.namedItem('setlistId');
+        if (idInput instanceof HTMLInputElement) idInput.value = setlistId;
         if (saveAction !== createSetlist) {
             event.preventDefault();
-            const formData = new FormData(event.currentTarget);
-            await saveAction(formData);
+            await saveAction(new FormData(form));
         }
-        // 임시 ID 또는 제목 기반으로 오버라이드 메타데이터 저장
-        const form = event.currentTarget;
-        const titleInput = form.elements.namedItem('title') as HTMLInputElement | null;
-        const setlistTitle = titleInput?.value || '새 콘티';
-        saveSetlistDetails(teamId, setlistTitle, overrides);
+        saveSetlistDetails(teamId, setlistId, overrides);
     };
 
     return (
@@ -138,6 +140,7 @@ export default function SetlistComposer({
                 onSubmit={handleSubmit}
                 className="mt-4"
             >
+                <input type="hidden" name="setlistId" defaultValue="" />
                 <fieldset disabled={disabled} className="space-y-4">
                     <div className="grid gap-3 sm:grid-cols-2">
                         <label className="block text-sm font-semibold text-foreground">

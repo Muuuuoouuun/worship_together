@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 export async function createSong(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
+    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const title = getString(formData, 'title');
     const artist = getNullableString(formData, 'artist');
@@ -19,11 +19,11 @@ export async function createSong(formData: FormData) {
     const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
     if (!title) {
-        redirect('/dashboard/songs?error=missing-song-title');
+        redirect('/dashboard/songs/library?error=missing-song-title');
     }
 
     if (bpmValue && (parsedBpm === null || !Number.isInteger(parsedBpm) || parsedBpm < 20 || parsedBpm > 300)) {
-        redirect('/dashboard/songs?error=invalid-bpm');
+        redirect('/dashboard/songs/library?error=invalid-bpm');
     }
 
     const { error } = await supabase
@@ -40,16 +40,16 @@ export async function createSong(formData: FormData) {
 
     if (error) {
         console.error('Failed to create song:', error);
-        redirect('/dashboard/songs?error=create-song');
+        redirect('/dashboard/songs/library?error=create-song');
     }
 
     revalidatePath('/dashboard');
-    revalidatePath('/dashboard/songs');
-    redirect('/dashboard/songs?created=song');
+    revalidatePath('/dashboard/songs/library');
+    redirect('/dashboard/songs/library?created=song');
 }
 
 export async function createSetlist(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
+    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
     const title = getString(formData, 'title');
@@ -61,28 +61,33 @@ export async function createSetlist(formData: FormData) {
         .filter(Boolean);
 
     if (!title) {
-        redirect('/dashboard/songs?error=missing-setlist-title');
+        redirect('/dashboard/songs/library?error=missing-setlist-title');
     }
 
     if (!worshipDateInput) {
-        redirect('/dashboard/songs?error=missing-worship-date');
+        redirect('/dashboard/songs/library?error=missing-worship-date');
     }
 
     const worshipDate = new Date(worshipDateInput);
 
     if (Number.isNaN(worshipDate.getTime())) {
-        redirect('/dashboard/songs?error=invalid-worship-date');
+        redirect('/dashboard/songs/library?error=invalid-worship-date');
     }
 
-    if (!songIds.length) redirect('/dashboard/songs?error=invalid-setlist-songs');
+    if (!songIds.length) redirect('/dashboard/songs/library?error=invalid-setlist-songs');
     const { data: teamSongs, error: songsError } = await supabase.from('songs').select('id').eq('team_id', teamId).in('id', [...new Set(songIds)]);
     if (songsError || !teamSongs || songIds.some(id => !teamSongs.some(song => song.id === id))) {
-        redirect('/dashboard/songs?error=invalid-setlist-songs');
+        redirect('/dashboard/songs/library?error=invalid-setlist-songs');
     }
+
+    // 콘티 만들기 화면이 미리 정한 id 를 쓰면 곡별 세부 정보(Key·BPM·메모)와 같은 id 로 이어집니다.
+    const requestedId = getString(formData, 'setlistId');
+    const id = UUID_PATTERN.test(requestedId) ? requestedId : undefined;
 
     const { error } = await supabase
         .from('setlists')
         .insert({
+            ...(id ? { id } : {}),
             team_id: teamId,
             title,
             theme,
@@ -92,22 +97,22 @@ export async function createSetlist(formData: FormData) {
 
     if (error) {
         console.error('Failed to create setlist:', error);
-        redirect('/dashboard/songs?error=create-setlist');
+        redirect('/dashboard/songs/library?error=create-setlist');
     }
 
     revalidatePath('/dashboard');
-    revalidatePath('/dashboard/songs');
-    redirect('/dashboard/songs?created=setlist');
+    revalidatePath('/dashboard/songs/library');
+    redirect('/dashboard/songs/library?created=setlist');
 }
 
 export async function duplicateSetlistFromTemplate(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
+    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const setlistId = getString(formData, 'setlistId');
     const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
     if (!setlistId) {
-        redirect('/dashboard/songs?error=missing-setlist-id');
+        redirect('/dashboard/songs/library?error=missing-setlist-id');
     }
 
     const { data: setlist, error: fetchError } = await supabase
@@ -119,14 +124,14 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
 
     if (fetchError || !setlist) {
         console.error('Failed to load setlist template:', fetchError);
-        redirect('/dashboard/songs?error=duplicate-setlist');
+        redirect('/dashboard/songs/library?error=duplicate-setlist');
     }
 
     const sourceDate = new Date(setlist.worship_date);
     const nextWorshipDate = Number.isNaN(sourceDate.getTime()) ? new Date() : sourceDate;
     nextWorshipDate.setDate(nextWorshipDate.getDate() + 7);
     const songOrder = normalizeSetlistSongOrder(setlist.song_order);
-    if (!songOrder.length) redirect('/dashboard/songs?error=invalid-setlist-songs');
+    if (!songOrder.length) redirect('/dashboard/songs/library?error=invalid-setlist-songs');
 
     const { error } = await supabase
         .from('setlists')
@@ -140,21 +145,21 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
 
     if (error) {
         console.error('Failed to duplicate setlist template:', error);
-        redirect('/dashboard/songs?error=duplicate-setlist');
+        redirect('/dashboard/songs/library?error=duplicate-setlist');
     }
 
     revalidatePath('/dashboard');
-    revalidatePath('/dashboard/songs');
-    redirect('/dashboard/songs?created=template');
+    revalidatePath('/dashboard/songs/library');
+    redirect('/dashboard/songs/library?created=template');
 }
 
 export async function deleteSong(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
+    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const songId = getString(formData, 'songId');
     const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
-    if (!songId) redirect('/dashboard/songs?error=missing-song-id');
+    if (!songId) redirect('/dashboard/songs/library?error=missing-song-id');
 
     const { error } = await supabase
         .from('songs')
@@ -164,21 +169,21 @@ export async function deleteSong(formData: FormData) {
 
     if (error) {
         console.error('Failed to delete song:', error);
-        redirect('/dashboard/songs?error=delete-song');
+        redirect('/dashboard/songs/library?error=delete-song');
     }
 
     revalidatePath('/dashboard');
-    revalidatePath('/dashboard/songs');
-    redirect('/dashboard/songs?deleted=song');
+    revalidatePath('/dashboard/songs/library');
+    redirect('/dashboard/songs/library?deleted=song');
 }
 
 export async function deleteSetlist(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
+    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const setlistId = getString(formData, 'setlistId');
     const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
-    if (!setlistId) redirect('/dashboard/songs?error=missing-setlist-id');
+    if (!setlistId) redirect('/dashboard/songs/library?error=missing-setlist-id');
 
     const { error } = await supabase
         .from('setlists')
@@ -188,16 +193,16 @@ export async function deleteSetlist(formData: FormData) {
 
     if (error) {
         console.error('Failed to delete setlist:', error);
-        redirect('/dashboard/songs?error=delete-setlist');
+        redirect('/dashboard/songs/library?error=delete-setlist');
     }
 
     revalidatePath('/dashboard');
-    revalidatePath('/dashboard/songs');
-    redirect('/dashboard/songs?deleted=setlist');
+    revalidatePath('/dashboard/songs/library');
+    redirect('/dashboard/songs/library?deleted=setlist');
 }
 
 export async function updateSongBpmPreset(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs?error=backend-unavailable');
+    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
     const supabase = getSupabaseClient();
     const songId = getString(formData, 'songId');
     const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
@@ -205,11 +210,11 @@ export async function updateSongBpmPreset(formData: FormData) {
     const parsedBpm = bpmValue ? Number(bpmValue) : null;
 
     if (!songId) {
-        redirect('/dashboard/songs?error=missing-song-id');
+        redirect('/dashboard/songs/library?error=missing-song-id');
     }
 
     if (bpmValue && (parsedBpm === null || !Number.isInteger(parsedBpm) || parsedBpm < 20 || parsedBpm > 300)) {
-        redirect('/dashboard/songs?error=invalid-bpm');
+        redirect('/dashboard/songs/library?error=invalid-bpm');
     }
 
     const { error } = await supabase
@@ -220,13 +225,15 @@ export async function updateSongBpmPreset(formData: FormData) {
 
     if (error) {
         console.error('Failed to update song BPM preset:', error);
-        redirect('/dashboard/songs?error=update-song-bpm');
+        redirect('/dashboard/songs/library?error=update-song-bpm');
     }
 
     revalidatePath('/dashboard');
-    revalidatePath('/dashboard/songs');
-    redirect('/dashboard/songs?created=bpm');
+    revalidatePath('/dashboard/songs/library');
+    redirect('/dashboard/songs/library?created=bpm');
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function getString(formData: FormData, key: string): string {
     return String(formData.get(key) ?? '').trim();
