@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- publish:start -->
+<title>송폼 마크업 목업 B</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: arranger timeline across the top, dark stage sheet below, live/console column on the right. One deliberate dark stage look. */
+:root {
+  color-scheme: dark;
+  --bg: #0a0c11;
+  --surface: #121620;
+  --raised: #192030;
+  --line: #262e40;
+  --ink: #e8ecf4;
+  --muted: #929cb0;
+  --stage: #ffcd78;
+  --stage-ink: #1b1306;
+  --sheet-dark: #0d1015;
+  --sec-intro: #a7b1c2;
+  --sec-verse: #6f96ff;
+  --sec-pre: #bb87ff;
+  --sec-chorus: #ff6a7b;
+  --sec-bridge: #44d79d;
+  --sec-inter: #ff9f4a;
+  --sec-tag: #3fd6c9;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-pad: "Chakra Petch", "IBM Plex Sans KR", ui-monospace, sans-serif;
+  --beat: 0.88s;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; }
+.shell { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px; display: grid; gap: 16px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+button, input, label { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--stage); outline-offset: 2px; }
+
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; }
+.brand { display: grid; gap: 2px; flex: 1 1 260px; min-width: 0; }
+.eyebrow { font: 600 12px/1.2 var(--font-pad); letter-spacing: .14em; color: var(--stage); text-transform: uppercase; }
+.brand h1 { margin: 0; font: 700 26px/1.2 var(--font-ui); }
+.song { margin: 0; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.top-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.switch { display: inline-flex; gap: 4px; }
+.switch a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px; color: var(--muted); text-decoration: none; font-weight: 600; font-size: 14px; border: 1px solid transparent; }
+.switch a[aria-current="page"] { color: var(--ink); border-color: var(--line); background: var(--surface); }
+.switch a:hover { color: var(--ink); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-weight: 600; font-size: 14px; cursor: pointer; transition: border-color .15s, background .15s, transform .12s; }
+.btn:hover { border-color: #3a4560; background: var(--raised); }
+.btn:active { transform: scale(.97); }
+.btn.primary { background: var(--stage); color: var(--stage-ink); border-color: var(--stage); }
+.btn svg { width: 18px; height: 18px; }
+.seg { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 2px; border-radius: 11px; background: #0e121a; border: 1px solid var(--line); }
+.seg button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px #3a4560, 0 0 12px -4px var(--stage); }
+.seg button:disabled { opacity: .4; cursor: default; }
+.view-toggle button { min-width: 108px; }
+
+/* Arranger timeline */
+.arranger { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.arranger-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.arranger-head h2 { margin: 0; font: 600 13px/1 var(--font-pad); letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+.arranger-meta { font: 500 13px/1 var(--font-pad); color: var(--muted); font-variant-numeric: tabular-nums; }
+.track-scroll { overflow-x: auto; padding-block: 10px 4px; }
+.track { position: relative; display: flex; gap: 4px; min-width: 100%; width: max-content; }
+.track-item { position: relative; display: flex; min-width: 54px; }
+.lane-btn { --c: var(--sec-intro); position: relative; flex: 1; display: grid; align-content: start; gap: 2px; min-height: 56px; padding: 10px 10px 8px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--c) 13%, #0d1119); color: var(--ink); text-align: left; cursor: pointer; overflow: hidden; transition: background .2s, box-shadow .2s; }
+.lane-btn::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--c); opacity: .55; transition: opacity .2s, box-shadow .2s; }
+.lane-btn:hover { background: color-mix(in srgb, var(--c) 22%, #0d1119); }
+.lane-btn:hover::before { opacity: 1; }
+.lane-label { font: 700 18px/1 var(--font-pad); color: var(--c); }
+.lane-sub { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.lane-rep { position: absolute; right: 8px; top: 9px; font: 700 12px/1 var(--font-pad); color: var(--c); }
+.lane-btn.is-live { background: color-mix(in srgb, var(--c) 30%, #0d1119); box-shadow: 0 0 0 1px var(--c), 0 0 22px -6px var(--c); }
+.lane-btn.is-live::before { opacity: 1; box-shadow: 0 0 10px var(--c); animation: beat var(--beat) infinite; }
+.lane-btn.is-selected { box-shadow: 0 0 0 2px var(--stage); }
+.lane-btn.is-done { opacity: .5; }
+.lane-x { position: absolute; top: -9px; right: -7px; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 1px solid #3a4560; background: #070a10; color: var(--ink); cursor: pointer; opacity: 0; transform: scale(.5); transition: opacity .15s, transform .2s cubic-bezier(.3,.7,.3,1.6); z-index: 2; }
+.lane-x svg { width: 11px; height: 11px; }
+.track-item:hover .lane-x, .track-item:focus-within .lane-x { opacity: 1; transform: none; }
+@media (hover: none) { .lane-x { opacity: 1; transform: none; } }
+.track-item.is-new .lane-btn::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 0 35%, color-mix(in srgb, var(--c) 55%, transparent) 50%, transparent 65% 100%); animation: sweep .7s ease-out forwards; }
+.playhead { position: absolute; top: -6px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--stage); box-shadow: 0 0 10px var(--stage); pointer-events: none; border-radius: 2px; }
+.playhead::before { content: ""; position: absolute; top: -2px; left: -5px; border: 6px solid transparent; border-top: 7px solid var(--stage); border-bottom: 0; }
+.empty { margin: 0; padding: 16px; border: 1px dashed var(--line); border-radius: 10px; text-align: center; font-size: 13px; color: var(--muted); }
+
+/* Workspace */
+.workspace { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 980px) { .workspace { grid-template-columns: minmax(0, 1fr) 360px; } }
+.stage { display: grid; gap: 10px; min-width: 0; }
+.stage-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.stage-caption { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.stage-caption b { color: var(--ink); font-weight: 600; }
+.rec { width: 8px; height: 8px; border-radius: 50%; background: var(--sec-bridge); box-shadow: 0 0 8px var(--sec-bridge); }
+.workspace[data-view="detail"] .rec { background: var(--stage); box-shadow: 0 0 8px var(--stage); }
+.pager { display: inline-flex; align-items: center; gap: 6px; font: 600 15px/1 var(--font-pad); font-variant-numeric: tabular-nums; }
+.icon-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+.icon-btn:disabled { opacity: .35; cursor: default; }
+.icon-btn svg { width: 18px; height: 18px; }
+.sheet-wrap { max-width: 760px; width: 100%; margin-inline: auto; }
+.hint { margin: 0; text-align: center; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+
+.page { position: relative; container-type: inline-size; width: 100%; max-width: 100%; border-radius: 6px; overflow: hidden; background: #fffefb; box-shadow: 0 0 0 1px var(--line), 0 30px 60px -30px #000; --scale: 1; }
+.page.is-dark { background: var(--sheet-dark); }
+.page > img { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.page.is-dark > img { filter: invert(.93) hue-rotate(180deg) contrast(1.06) brightness(.94); }
+.overlay { position: absolute; inset: 0; }
+.workspace[data-view="detail"] .stage .overlay { cursor: crosshair; }
+
+/* HUD chips on the sheet */
+.hud-chip { --c: var(--sec-intro); position: relative; display: inline-flex; align-items: center; gap: .32em; padding: .32em .55em .3em .42em; border: 0; border-radius: .32em; background: var(--c); color: #0a0c11; font: 700 1em/1 var(--font-pad); letter-spacing: .03em; white-space: nowrap; box-shadow: 0 0 .7em -.1em color-mix(in srgb, var(--c) 75%, transparent), inset 0 -.12em 0 rgb(0 0 0 / .28); }
+.hud-chip::before { content: ""; width: .34em; height: .34em; border-radius: 50%; background: #fff; box-shadow: 0 0 .35em #fff; opacity: .85; flex: none; }
+.hud-chip .rep { font-size: .66em; opacity: .85; }
+.look-glass .hud-chip { background: color-mix(in srgb, var(--c) 20%, rgb(8 10 15 / .3)); color: var(--c); box-shadow: inset 0 0 0 .08em color-mix(in srgb, var(--c) 75%, transparent), 0 0 .8em -.2em color-mix(in srgb, var(--c) 55%, transparent); backdrop-filter: blur(2px); }
+.look-glass .hud-chip::before { background: var(--c); box-shadow: 0 0 .35em var(--c); }
+.look-line .hud-chip { background: transparent; color: var(--c); box-shadow: inset 0 0 0 .12em var(--c); }
+.look-line .hud-chip::before { background: var(--c); box-shadow: none; }
+.page:not(.is-dark).look-glass .hud-chip, .page:not(.is-dark).look-line .hud-chip { color: color-mix(in srgb, var(--c) 70%, #000); }
+button.hud-chip { cursor: pointer; transition: transform .15s; }
+button.hud-chip:hover { transform: translateY(-.06em); }
+button.hud-chip:active { transform: scale(.94); }
+.hud-chip.is-live { animation: beatChip var(--beat) infinite; }
+.hud-chip.is-selected { outline: .12em solid var(--stage); outline-offset: .14em; }
+
+.band { position: absolute; display: flex; flex-wrap: wrap; align-items: center; gap: .3em .22em; padding: .42em .5em; border-radius: .5em; background: rgb(8 10 15 / .84); border: .06em solid rgb(255 255 255 / .1); font-size: calc(var(--scale) * 2.2cqw); }
+.page:not(.is-dark) .band { background: rgb(8 10 15 / .9); }
+.look-glass .band { background: rgb(8 10 15 / .28); }
+.band.is-editing { cursor: grab; touch-action: none; box-shadow: 0 0 0 .08em var(--stage); }
+.band.is-grabbed { cursor: grabbing; box-shadow: 0 0 0 .1em var(--stage), 0 1em 2em -.6em #000; }
+.tick { width: .5em; height: .1em; background: rgb(255 255 255 / .35); flex: none; border-radius: .1em; }
+
+/* Margin tab: points right at the measure where the section starts */
+.tab { position: absolute; width: 0; height: 0; font-size: calc(var(--scale) * 2.1cqw); }
+.tab-body { position: absolute; right: 0; top: 0; transform: translateY(-50%); display: flex; align-items: center; }
+.tab-body::after { content: ""; width: 0; height: 0; border-top: .42em solid transparent; border-bottom: .42em solid transparent; border-left: .5em solid var(--c); margin-left: -.02em; }
+.look-glass .tab-body::after, .look-line .tab-body::after { border-left-color: color-mix(in srgb, var(--c) 80%, transparent); }
+.tab.is-editing { cursor: grab; touch-action: none; }
+.tab.is-grabbed { cursor: grabbing; }
+.tab.is-live::before { content: ""; position: absolute; left: 0; top: -1.9em; width: 86cqw; height: 3.8em; border-radius: .3em; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 34%, transparent), transparent 92%); pointer-events: none; transform-origin: left center; animation: wash 1.2s ease-out; }
+.tab.is-live .hud-chip { animation: beatChip var(--beat) infinite; }
+
+.chip-x { position: absolute; top: -.6em; right: -.6em; width: 1.25em; height: 1.25em; padding: 0; display: grid; place-items: center; border-radius: 50%; border: .08em solid #3a4560; background: #070a10; color: #fff; font-size: .72em; cursor: pointer; opacity: 0; transform: scale(.4); transition: opacity .15s, transform .2s cubic-bezier(.3,.7,.3,1.6); z-index: 2; }
+.chip-x svg { width: .6em; height: .6em; }
+.hud-chip:hover > .chip-x, .hud-chip:focus-within > .chip-x { opacity: 1; transform: none; }
+@media (hover: none) { .chip-x { opacity: 1; transform: none; } }
+.ghost { position: absolute; width: 0; height: 0; pointer-events: none; font-size: calc(var(--scale) * 2.1cqw); }
+.ghost .tab-body { opacity: .7; }
+.ghost::after { content: ""; position: absolute; left: -.3em; top: -.3em; width: .6em; height: .6em; border-radius: 50%; border: .1em solid var(--stage); }
+.impact { position: absolute; width: 0; height: 0; pointer-events: none; font-size: calc(var(--scale) * 2.1cqw); }
+.impact::before { content: ""; position: absolute; left: -1.4em; top: -1.4em; width: 2.8em; height: 2.8em; border-radius: 50%; border: .14em solid var(--c, var(--stage)); }
+
+/* Right column */
+.side { display: grid; gap: 14px; min-width: 0; }
+.card { display: grid; gap: 12px; padding: 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.card h2 { margin: 0; font: 600 13px/1.2 var(--font-pad); letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+.meta { font: 500 13px/1 var(--font-pad); color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.label { min-width: 52px; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+.now { --c: var(--sec-intro); position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px; padding: 16px; border-radius: 12px; background: color-mix(in srgb, var(--c) 14%, #0d1119); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); overflow: hidden; }
+.now-pad { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 12px; background: var(--c); color: #0a0c11; font: 700 30px/1 var(--font-pad); box-shadow: 0 0 26px -6px var(--c); }
+.is-playing .now-pad { animation: beatChip var(--beat) infinite; }
+.now-name { font: 700 20px/1.2 var(--font-ui); }
+.now-sub { font: 500 13px/1.4 var(--font-pad); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar-meter { grid-column: 1 / -1; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; }
+.bar-meter span { height: 6px; border-radius: 2px; background: rgb(255 255 255 / .1); }
+.bar-meter span.is-on { background: var(--c); box-shadow: 0 0 8px -1px var(--c); }
+.next { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+.next .hud-chip { font-size: 15px; }
+.transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.minimap { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.thumb { display: grid; gap: 6px; padding: 6px; border-radius: 10px; border: 1px solid var(--line); background: #0d1119; color: var(--muted); font: 600 12px/1 var(--font-pad); text-align: center; cursor: pointer; }
+.thumb[aria-current="true"] { border-color: var(--stage); color: var(--ink); box-shadow: 0 0 14px -6px var(--stage); }
+.thumb .page { box-shadow: none; border-radius: 3px; }
+
+.pads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pad { --c: var(--sec-intro); --hold: 0; position: relative; display: grid; justify-items: start; align-content: end; gap: 3px; min-height: 84px; padding: 12px 12px 10px; border: 1px solid #222a3b; border-radius: 10px; background: linear-gradient(180deg, #1b2232, #131826); text-align: left; cursor: pointer; overflow: hidden; touch-action: manipulation; user-select: none; box-shadow: 0 3px 0 #070a10, inset 0 1px 0 rgb(255 255 255 / .05); transition: transform .08s, box-shadow .08s, border-color .15s; }
+.pad::before { content: ""; position: absolute; left: 10px; right: 10px; top: 8px; height: 4px; border-radius: 2px; background: var(--c); opacity: .35; transition: opacity .12s, box-shadow .12s; }
+.pad:hover { border-color: color-mix(in srgb, var(--c) 45%, #222a3b); }
+.pad:hover::before { opacity: .7; }
+.pad.is-down { transform: translateY(3px); box-shadow: 0 0 0 #070a10, inset 0 0 22px -6px var(--c); }
+.pad.is-down::before { opacity: 1; box-shadow: 0 0 12px var(--c); }
+.pad[aria-pressed="true"] { border-color: var(--c); box-shadow: 0 3px 0 #070a10, 0 0 18px -6px var(--c); }
+.pad[aria-pressed="true"]::before { opacity: 1; }
+.pad-label { font: 700 24px/1 var(--font-pad); color: var(--c); }
+.pad-name { font-size: 12px; color: var(--muted); }
+.pad-hold { position: absolute; right: 10px; bottom: 10px; width: 26px; height: 26px; }
+.pad-hold circle { fill: none; stroke-width: 3; }
+.pad-hold .track-c { stroke: rgb(255 255 255 / .08); }
+.pad-hold .fill-c { stroke: var(--c); stroke-dasharray: 69.1; stroke-dashoffset: calc(69.1 * (1 - var(--hold))); transform: rotate(-90deg); transform-origin: 50% 50%; }
+.pad-badge { position: absolute; right: 8px; top: 16px; font: 700 13px/1 var(--font-pad); color: var(--c); opacity: 0; transform: scale(.6); transition: opacity .12s, transform .18s cubic-bezier(.3,.7,.3,1.8); }
+.pad-badge.is-on { opacity: 1; transform: none; }
+.ripple { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--c) 70%, #fff) 0, transparent 70%); pointer-events: none; }
+
+.inspector { display: grid; gap: 10px; }
+.insp-title { display: flex; align-items: center; gap: 10px; }
+.insp-title .hud-chip { font-size: 20px; }
+.insp-title b { font-size: 16px; }
+.stepper { display: inline-flex; align-items: center; gap: 6px; font: 700 16px/1 var(--font-pad); font-variant-numeric: tabular-nums; }
+.stepper button { width: 44px; height: 40px; border-radius: 9px; border: 1px solid var(--line); background: #0e121a; cursor: pointer; font-size: 18px; }
+.stepper output { min-width: 4.5em; text-align: center; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; cursor: pointer; }
+.toggle input { width: 20px; height: 20px; accent-color: var(--stage); }
+
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); max-width: min(92vw, 520px); padding: 12px 18px; border-radius: 10px; background: var(--stage); color: var(--stage-ink); font-size: 14px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s, transform .25s; z-index: 30; }
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+@keyframes beat { 0%, 100% { opacity: .55; } 8% { opacity: 1; } }
+@keyframes beatChip { 0%, 100% { filter: brightness(1); } 8% { filter: brightness(1.45) drop-shadow(0 0 .35em var(--c)); } }
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes wash { from { opacity: 0; transform: scaleX(.2); } to { opacity: 1; transform: none; } }
+@keyframes flicker { 0% { opacity: 0; } 12% { opacity: .9; } 20% { opacity: .15; } 34% { opacity: 1; } 44% { opacity: .45; } 60%, 100% { opacity: 1; } }
+.flicker { animation: flicker .55s linear; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+</style>
+<!-- publish:head-end -->
+</head>
+<body>
+<!-- publish:body-start -->
+<div class="shell">
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">Mockup B · 무대 HUD</span>
+      <h1>송폼 마크업</h1>
+      <p class="song" id="songMeta">주의 길 · Key C · ♩ 68 · 2페이지 (샘플 악보)</p>
+    </div>
+    <div class="top-tools">
+      <nav class="switch" aria-label="목업 선택">
+        <a href="songform-a.html">A 스티커</a>
+        <a href="#" aria-current="page">B 무대 HUD</a>
+        <a href="songform-b2.html">2차 시안</a>
+      </nav>
+      <div class="seg view-toggle" role="group" aria-label="보기 방식">
+        <button type="button" data-action="view" data-view="preview" aria-pressed="true">미리보기</button>
+        <button type="button" data-action="view" data-view="detail" aria-pressed="false">자세히 보기</button>
+      </div>
+      <label class="btn" for="upload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+        악보 올리기
+      </label>
+      <input class="sr-only" type="file" id="upload" accept="application/pdf,image/png,image/jpeg,image/webp" multiple>
+      <button type="button" class="btn" data-action="reset">샘플 악보</button>
+    </div>
+  </header>
+
+  <section class="arranger" aria-label="송폼 타임라인">
+    <div class="arranger-head">
+      <h2>Song Form</h2>
+      <span class="arranger-meta" id="arrangerMeta"></span>
+    </div>
+    <div class="track-scroll"><div class="track" id="track"></div></div>
+  </section>
+
+  <main class="workspace" id="workspace" data-view="preview" data-mode="band">
+    <section class="stage" aria-label="악보">
+      <div class="stage-bar">
+        <span class="stage-caption" id="caption"></span>
+        <div class="pager">
+          <button type="button" class="icon-btn" data-action="prev" aria-label="이전 페이지"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <span id="pageLabel">1 / 2</span>
+          <button type="button" class="icon-btn" data-action="next" aria-label="다음 페이지"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+      </div>
+      <div class="sheet-wrap" id="sheet"></div>
+      <p class="hint" id="hint"></p>
+    </section>
+    <aside class="side" id="side" aria-label="무대 패널"></aside>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const SECTIONS = [
+    { key: 'I', name: '전주', en: 'Intro', group: 'intro', bars: 4 },
+    { key: 'V1', name: '1절', en: 'Verse 1', group: 'verse', bars: 8 },
+    { key: 'V2', name: '2절', en: 'Verse 2', group: 'verse', bars: 8 },
+    { key: 'PC', name: '프리코러스', en: 'Pre-Chorus', group: 'pre', bars: 4 },
+    { key: 'C', name: '후렴', en: 'Chorus', group: 'chorus', bars: 8 },
+    { key: 'B', name: '브릿지', en: 'Bridge', group: 'bridge', bars: 8 },
+    { key: '간주', name: '간주', en: 'Interlude', group: 'inter', bars: 4 },
+    { key: 'Tag', name: '태그', en: 'Tag', group: 'tag', bars: 2 },
+    { key: 'O', name: '엔딩', en: 'Outro', group: 'intro', bars: 4 },
+  ];
+  const BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
+  const GROUP_VAR = { intro: '--sec-intro', verse: '--sec-verse', pre: '--sec-pre', chorus: '--sec-chorus', bridge: '--sec-bridge', inter: '--sec-inter', tag: '--sec-tag' };
+  const SIZES = [['S', '작게', 0.8], ['M', '보통', 1], ['L', '크게', 1.3], ['XL', '최대', 1.65]];
+  const LOOKS = [['neon', '네온'], ['glass', '글래스'], ['line', '라인']];
+  const PRESETS = [
+    ['기본', [['I', 1], ['V1', 1], ['C', 1], ['V2', 1], ['C', 1], ['B', 1], ['C', 2], ['O', 1]]],
+    ['프리코러스', [['I', 1], ['V1', 1], ['PC', 1], ['C', 1], ['V2', 1], ['PC', 1], ['C', 1], ['B', 2], ['C', 2], ['O', 1]]],
+    ['짧은 곡', [['I', 1], ['V1', 1], ['C', 2], ['B', 1], ['C', 1], ['O', 1]]],
+  ];
+  const BPM = 68;
+  const SYSTEM_TOPS = [360, 650, 940, 1230];
+  const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  let uid = 0;
+  const nid = () => `s${++uid}`;
+  const sec = (key) => BY_KEY[key] ?? { key, name: key, en: '', group: 'intro', bars: 4 };
+  const colorOf = (key) => `var(${GROUP_VAR[sec(key).group]})`;
+  const chipInner = (key, rep = 1) => `${esc(key)}${rep > 1 ? `<span class="rep">×${rep}</span>` : ''}`;
+  const anim = (el, frames, opts) => (reduceMotion || !el ? null : el.animate(frames, opts));
+
+  /* ---------- Sample lead sheet (same score as mockup A) ---------- */
+  const SAMPLE = [
+    [['C', 'G/B', 'Am7', 'Em7', '(피아노 아르페지오로 잔잔하게 시작)'], ['F', 'C/E', 'Dm7', 'G7sus4  G', '새벽 빛이 비추는 길 위에 주님 손을 잡고 걸어가네'], ['C', 'Em7', 'F', 'G', '주의 길 따라 걸으리 날마다 그 사랑 노래하리'], ['Am7', 'Em7', 'F  G7', 'C', '바람 불고 어두운 밤에도 주님 나의 등불 되시네']],
+    [['F', 'G/F', 'Em7', 'Am7', '내 모든 날 주께 드리리 내 모든 삶 주를 향하리'], ['Dm7', 'G7', 'C', 'C7', '주의 길 따라 걸으리 날마다 그 사랑 노래하리'], ['F', 'G/F', 'Em7', 'Am7', '주의 길 따라 걸으리 영원히 주 찬양하리'], ['Dm7', 'G7', 'Csus4', 'C', '주님 나의 길 되시네 (리타르단도)']],
+  ];
+  function drawSamplePage(index) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200; canvas.height = 1600;
+    const ctx = canvas.getContext('2d');
+    const sans = '"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+    ctx.fillStyle = '#fffefb'; ctx.fillRect(0, 0, 1200, 1600);
+    ctx.fillStyle = '#17201c'; ctx.textAlign = 'center';
+    if (index === 0) {
+      ctx.font = `700 54px ${sans}`; ctx.fillText('주의 길', 600, 170);
+      ctx.font = `500 21px ${sans}`; ctx.fillStyle = '#5b6560'; ctx.fillText('샘플 리드시트 · 4/4 · 따뜻하게', 600, 212);
+      ctx.textAlign = 'left'; ctx.font = `700 22px ${sans}`; ctx.fillStyle = '#17201c'; ctx.fillText('Key: C', 80, 256);
+      ctx.textAlign = 'right'; ctx.fillText('♩ = 68', 1120, 256);
+      ctx.fillRect(80, 272, 1040, 3); ctx.fillRect(80, 279, 1040, 1);
+    } else {
+      ctx.font = `600 20px ${sans}`; ctx.fillStyle = '#5b6560'; ctx.fillText('주의 길 (2/2)', 600, 140);
+      ctx.fillStyle = '#17201c'; ctx.fillRect(80, 160, 1040, 1);
+    }
+    const col = 1040 / 4;
+    SAMPLE[index].forEach((system, s) => {
+      const top = SYSTEM_TOPS[s];
+      ctx.textAlign = 'left'; ctx.font = `700 30px ${sans}`; ctx.fillStyle = '#1d3b8f';
+      system.slice(0, 4).forEach((chord, c) => ctx.fillText(chord, 80 + c * col + 14, top - 14));
+      ctx.strokeStyle = '#2a332f'; ctx.lineWidth = 1.6;
+      for (let l = 0; l < 5; l++) { ctx.beginPath(); ctx.moveTo(80, top + l * 16); ctx.lineTo(1120, top + l * 16); ctx.stroke(); }
+      ctx.lineWidth = 2.4;
+      [0, 1, 2, 3, 4].forEach((b) => { ctx.beginPath(); ctx.moveTo(80 + b * col, top); ctx.lineTo(80 + b * col, top + 64); ctx.stroke(); });
+      ctx.fillStyle = '#17201c';
+      for (let m = 0; m < 4; m++) {
+        [0.22, 0.47, 0.72].forEach((f, n) => {
+          const x = 80 + m * col + col * f; const y = top + ((m * 2 + n * 3 + s) % 5) * 8 + 16;
+          ctx.beginPath(); ctx.ellipse(x, y, 9, 6.5, -0.35, 0, Math.PI * 2); ctx.fill();
+          ctx.fillRect(x + 7, y - 36, 2.4, 36);
+        });
+      }
+      ctx.font = `500 23px ${sans}`; ctx.fillStyle = '#25302b';
+      ctx.fillText(system[4], 86, top + 108);
+    });
+    ctx.textAlign = 'center'; ctx.font = `500 15px ${sans}`; ctx.fillStyle = '#8b948f';
+    ctx.fillText(`${index + 1} / 2`, 600, 1560);
+    return { src: canvas.toDataURL('image/jpeg', 0.9), w: 1200, h: 1600 };
+  }
+  const tabAt = (page, system, key) => ({ id: nid(), page, key, x: 78 / 1200, y: (SYSTEM_TOPS[system] + 32) / 1600 });
+  const makeItem = (key, rep = 1) => ({ id: nid(), key, rep, bars: sec(key).bars });
+  function sampleState() {
+    return {
+      sample: true, title: '주의 길', meta: 'Key C · ♩ 68',
+      pages: [drawSamplePage(0), drawSamplePage(1)],
+      band: { page: 0, x: 0.022, y: 0.014 },
+      items: PRESETS[0][1].map(([k, r]) => makeItem(k, r)),
+      tabs: [tabAt(0, 0, 'I'), tabAt(0, 1, 'V1'), tabAt(0, 2, 'C'), tabAt(0, 3, 'V2'), tabAt(1, 0, 'B'), tabAt(1, 3, 'O')],
+    };
+  }
+  const state = { view: 'preview', page: 0, size: 'M', look: 'neon', dark: true, mode: 'band', armed: null, selected: null, playing: false, pos: 0, speed: 4, ...sampleState() };
+
+  const sheet = $('#sheet'), side = $('#side'), track = $('#track'), workspace = $('#workspace');
+  const editing = () => state.view === 'detail';
+  const scaleOf = () => SIZES.find((s) => s[0] === state.size)[2];
+  const totalBars = () => state.items.reduce((sum, it) => sum + it.bars * it.rep, 0);
+  function locate(pos) {
+    let start = 0;
+    for (let i = 0; i < state.items.length; i++) {
+      const len = state.items[i].bars * state.items[i].rep;
+      if (pos < start + len || i === state.items.length - 1) return { index: i, start, len, within: clamp(pos - start, 0, len) };
+      start += len;
+    }
+    return { index: -1, start: 0, len: 0, within: 0 };
+  }
+  const startOf = (index) => state.items.slice(0, index).reduce((sum, it) => sum + it.bars * it.rep, 0);
+  const findTab = (key) => { const all = state.tabs.filter((t) => t.key === key); return all.find((t) => t.page === state.page) ?? all.sort((a, b) => a.page - b.page)[0] ?? null; };
+  let liveIndex = -1;
+
+  /* ---------- Markup ---------- */
+  function trackMarkup() {
+    if (!state.items.length) return '<p class="empty">아직 송폼이 없습니다. 자세히 보기에서 패드를 눌러 만드세요.</p>';
+    const loc = locate(state.pos);
+    return state.items.map((it, i) => {
+      const s = sec(it.key);
+      const cls = [i === liveIndex && state.view === 'preview' ? 'is-live' : '', state.selected === it.id && editing() ? 'is-selected' : '', state.view === 'preview' && state.pos > 0 && i < loc.index ? 'is-done' : ''].filter(Boolean).join(' ');
+      return `<div class="track-item" data-key="${it.id}" style="flex:${it.bars * it.rep} 1 0">
+        <button type="button" class="lane-btn ${cls}" style="--c:${colorOf(it.key)}" data-action="${editing() ? 'select' : 'seek'}" data-id="${it.id}" aria-label="${esc(s.name)} ${it.bars}마디${it.rep > 1 ? ` ${it.rep}번` : ''} ${editing() ? '선택' : '부터 진행'}">
+          <span class="lane-label">${esc(it.key)}</span>
+          <span class="lane-sub">${esc(s.name)} · ${it.bars}마디</span>
+          ${it.rep > 1 ? `<span class="lane-rep">×${it.rep}</span>` : ''}
+        </button>
+        ${editing() ? `<button type="button" class="lane-x" data-action="remove" data-id="${it.id}" aria-label="${esc(s.name)} 빼기">${X_ICON}</button>` : ''}
+      </div>`;
+    }).join('') + '<span class="playhead" id="playhead" aria-hidden="true"></span>';
+  }
+  function pageMarkup(index, interactive) {
+    const p = state.pages[index];
+    const edit = interactive && editing();
+    const live = state.items[liveIndex];
+    const liveTab = state.view === 'preview' && live ? findTab(live.key) : null;
+    const showBand = state.band.page === index && state.items.length;
+    return `<div class="page look-${state.look}${state.dark ? ' is-dark' : ''}" data-page="${index}" style="aspect-ratio:${p.w}/${p.h};--scale:${scaleOf()}">
+      <img src="${p.src}" alt="${esc(state.title)} 악보 ${index + 1}페이지" draggable="false">
+      <div class="overlay">
+        ${showBand ? bandMarkup(interactive, edit) : ''}
+        ${state.tabs.filter((t) => t.page === index).map((t) => tabMarkup(t, edit, liveTab?.id === t.id)).join('')}
+        ${edit && state.mode === 'section' && state.armed ? `<div class="ghost" hidden><div class="tab-body" style="--c:${colorOf(state.armed)}"><span class="hud-chip" style="--c:${colorOf(state.armed)}">${chipInner(state.armed)}</span></div></div>` : ''}
+      </div>
+    </div>`;
+  }
+  function bandMarkup(interactive, edit) {
+    const chips = state.items.map((it, i) => {
+      const tick = i ? '<span class="tick" aria-hidden="true"></span>' : '';
+      const live = i === liveIndex && state.view === 'preview' ? ' is-live' : '';
+      if (interactive && !edit) return `${tick}<button type="button" class="hud-chip${live}" style="--c:${colorOf(it.key)}" data-key="${it.id}" data-action="seek" data-id="${it.id}" aria-label="${esc(sec(it.key).name)}부터 진행">${chipInner(it.key, it.rep)}</button>`;
+      const x = edit ? `<button type="button" class="chip-x" data-action="remove" data-id="${it.id}" aria-label="${esc(sec(it.key).name)} 빼기">${X_ICON}</button>` : '';
+      return `${tick}<span class="hud-chip${edit && state.selected === it.id ? ' is-selected' : ''}" style="--c:${colorOf(it.key)}" data-key="${it.id}" data-chip="${it.id}">${chipInner(it.key, it.rep)}${x}</span>`;
+    }).join('');
+    const b = state.band;
+    return `<div class="band${edit ? ' is-editing' : ''}" data-band style="left:${b.x * 100}%;top:${b.y * 100}%;max-width:${(1 - b.x - 0.02) * 100}%" ${interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"'}>${chips}</div>`;
+  }
+  function tabMarkup(t, edit, live) {
+    const x = edit ? `<button type="button" class="chip-x" data-action="remove-tab" data-id="${t.id}" aria-label="${esc(sec(t.key).name)} 마디 표시 지우기">${X_ICON}</button>` : '';
+    return `<div class="tab${edit ? ' is-editing' : ''}${live ? ' is-live' : ''}" data-tab="${t.id}" style="left:${t.x * 100}%;top:${t.y * 100}%;--c:${colorOf(t.key)}"><div class="tab-body"><span class="hud-chip" style="--c:${colorOf(t.key)}">${chipInner(t.key)}${x}</span></div></div>`;
+  }
+
+  function sidePreview() {
+    const loc = locate(state.pos);
+    const cur = state.items[loc.index];
+    const next = state.items[loc.index + 1];
+    const barNow = cur ? Math.min(cur.bars, Math.floor(loc.within % cur.bars) + 1) : 0;
+    const passNow = cur ? Math.min(cur.rep, Math.floor(loc.within / cur.bars) + 1) : 0;
+    const tab = cur ? findTab(cur.key) : null;
+    return `<section class="card${state.playing ? ' is-playing' : ''}" aria-live="off">
+        <div class="card-head"><h2>Now</h2><span class="meta" id="clock">${formatClock()}</span></div>
+        ${cur ? `<div class="now" style="--c:${colorOf(cur.key)}">
+          <span class="now-pad">${esc(cur.key)}</span>
+          <div><div class="now-name">${esc(sec(cur.key).name)}${cur.rep > 1 ? ` <span class="meta">${passNow}/${cur.rep}회</span>` : ''}</div>
+          <div class="now-sub" id="nowSub">마디 ${barNow} / ${cur.bars} · ${tab ? `${tab.page + 1}p 표시` : '마디 표시 없음'}</div></div>
+          <div class="bar-meter" id="barMeter">${Array.from({ length: cur.bars }, (_, i) => `<span class="${i < barNow ? 'is-on' : ''}"></span>`).join('')}</div>
+        </div>
+        <div class="next">다음 ${next ? `<span class="hud-chip" style="--c:${colorOf(next.key)}">${chipInner(next.key, next.rep)}</span> ${esc(sec(next.key).name)}` : '없음 · 마지막 섹션'}</div>` : '<p class="empty">송폼이 없습니다.</p>'}
+        <div class="transport">
+          <button type="button" class="btn primary" data-action="play" ${state.items.length ? '' : 'disabled'}>${state.playing ? '일시정지' : state.pos > 0 && state.pos < totalBars() ? '이어서 진행' : '처음부터 진행'}</button>
+          <button type="button" class="btn" data-action="rewind">처음으로</button>
+          <div class="seg" role="group" aria-label="시연 배속">${[1, 4, 8].map((n) => `<button type="button" data-action="speed" data-value="${n}" aria-pressed="${state.speed === n}">×${n}</button>`).join('')}</div>
+        </div>
+        <p class="note">♩ ${BPM} 기준 진행 시연입니다. 배속은 확인용이며 섹션이 바뀌면 그 마디가 있는 페이지로 넘어갑니다.</p>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Pages</h2><label class="toggle"><input type="checkbox" id="darkToggle" ${state.dark ? 'checked' : ''}> 다크 악보</label></div>
+        <div class="minimap">${state.pages.map((_, i) => `<button type="button" class="thumb" data-action="page" data-page="${i}" aria-current="${i === state.page}" aria-label="${i + 1}페이지 보기">${pageMarkup(i, false)}<span>${i + 1}P</span></button>`).join('')}</div>
+      </section>`;
+  }
+  function sideDetail() {
+    const it = state.items.find((x) => x.id === state.selected) ?? null;
+    const seg = (action, value, current, label) => `<button type="button" data-action="${action}" data-value="${value}" aria-pressed="${String(value) === String(current)}">${label}</button>`;
+    const tab = it ? findTab(it.key) : null;
+    return `<section class="card">
+        <div class="card-head"><h2>Input</h2><span class="meta">${state.page + 1}P 편집 중</span></div>
+        <div class="seg" role="group" aria-label="입력 방식">${seg('mode', 'band', state.mode, '송폼 띠')}${seg('mode', 'section', state.mode, '마디 섹션')}</div>
+        <p class="note">${state.mode === 'band' ? '패드를 누르면 타임라인 끝에 붙습니다. 길게 누르면 ×2, 더 길게 누르면 ×3으로 들어갑니다.' : '패드로 섹션을 고르고, 악보에서 그 섹션이 시작되는 마디를 누르세요. 탭이 왼쪽에서 마디를 가리킵니다.'}</p>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Pads</h2><span class="meta">${state.mode === 'band' ? '탭 추가 · 길게 반복' : '눌러서 고르기'}</span></div>
+        <div class="pads">${SECTIONS.map((s) => `<button type="button" class="pad" style="--c:${colorOf(s.key)}" data-pad="${esc(s.key)}" ${state.mode === 'section' ? `aria-pressed="${state.armed === s.key}"` : ''} aria-label="${esc(s.name)} ${esc(s.en)} ${state.mode === 'band' ? '추가' : '고르기'}">
+            <span class="pad-label">${esc(s.key)}</span><span class="pad-name">${esc(s.name)} · ${s.bars}마디</span>
+            <span class="pad-badge" aria-hidden="true"></span>
+            ${state.mode === 'band' ? '<svg class="pad-hold" viewBox="0 0 26 26" aria-hidden="true"><circle class="track-c" cx="13" cy="13" r="11"/><circle class="fill-c" cx="13" cy="13" r="11"/></svg>' : ''}
+          </button>`).join('')}</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Section</h2><span class="meta">${it ? `${state.items.indexOf(it) + 1}번째` : '타임라인에서 선택'}</span></div>
+        ${it ? `<div class="inspector">
+          <div class="insp-title"><span class="hud-chip" style="--c:${colorOf(it.key)}">${chipInner(it.key, it.rep)}</span><b>${esc(sec(it.key).name)}</b><span class="meta">${esc(sec(it.key).en)}</span></div>
+          <div class="row"><span class="label">마디 수</span><div class="stepper"><button type="button" data-action="bars" data-value="-1" aria-label="마디 줄이기">−</button><output>${it.bars}마디</output><button type="button" data-action="bars" data-value="1" aria-label="마디 늘리기">+</button></div></div>
+          <div class="row"><span class="label">반복</span><div class="seg" role="group" aria-label="반복">${[1, 2, 3, 4].map((n) => seg('rep', n, it.rep, `×${n}`)).join('')}</div></div>
+          <div class="row"><span class="label">마디 표시</span><span class="note">${tab ? `${tab.page + 1}페이지에 있음` : '아직 없음 · 마디 섹션에서 놓기'}</span></div>
+          <div class="row"><button type="button" class="btn" data-action="remove" data-id="${it.id}">이 섹션 빼기</button></div>
+        </div>` : '<p class="empty">타임라인이나 악보 위 칩을 누르면 마디 수와 반복을 바꿀 수 있습니다.</p>'}
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Look</h2></div>
+        <div class="row"><span class="label">크기</span><div class="seg" role="group" aria-label="크기">${SIZES.map(([v, l]) => seg('size', v, state.size, l)).join('')}</div></div>
+        <div class="row"><span class="label">스타일</span><div class="seg" role="group" aria-label="스타일">${LOOKS.map(([v, l]) => seg('look', v, state.look, l)).join('')}</div></div>
+        <div class="row"><label class="toggle"><input type="checkbox" id="darkToggle" ${state.dark ? 'checked' : ''}> 다크 악보</label>
+          <button type="button" class="btn" data-action="band-here" ${state.band.page === state.page ? 'disabled' : ''}>송폼 띠를 ${state.page + 1}P로</button></div>
+        <div class="row"><span class="label">프리셋</span>${PRESETS.map(([name], i) => `<button type="button" class="btn" data-action="preset" data-value="${i}">${name}</button>`).join('')}</div>
+      </section>`;
+  }
+  function formatClock() {
+    const secPerBar = (60 / BPM) * 4;
+    const f = (bars) => { const s = Math.round(bars * secPerBar); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+    return `${f(state.pos)} / ${f(totalBars())}`;
+  }
+
+  function render() {
+    workspace.dataset.view = state.view;
+    workspace.dataset.mode = state.mode;
+    document.documentElement.style.setProperty('--beat', `${(60 / BPM) / state.speed}s`);
+    liveIndex = state.items.length && state.view === 'preview' ? locate(state.pos).index : -1;
+    track.innerHTML = trackMarkup();
+    sheet.innerHTML = pageMarkup(state.page, true);
+    side.innerHTML = editing() ? sideDetail() : sidePreview();
+    document.querySelectorAll('[data-action="view"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
+    $('#pageLabel').textContent = `${state.page + 1} / ${state.pages.length}`;
+    $('[data-action="prev"]').disabled = state.page === 0;
+    $('[data-action="next"]').disabled = state.page >= state.pages.length - 1;
+    $('#songMeta').textContent = `${state.title} · ${state.meta} · ${state.pages.length}페이지`;
+    $('#arrangerMeta').textContent = `${state.items.length}섹션 · ${totalBars()}마디 · 띠 ${state.band.page + 1}P`;
+    $('#caption').innerHTML = `<span class="rec" aria-hidden="true"></span>${state.view === 'preview' ? '<b>무대 미리보기</b> 칩을 누르면 그 섹션부터' : `<b>편집 콘솔</b> ${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
+    $('#hint').textContent = !editing() ? '' : state.mode === 'band' ? '띠와 탭은 끌어서 옮깁니다. 칩에 마우스를 올리면 ×가 나옵니다.' : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽 패드에서 놓을 섹션을 먼저 고르세요.';
+    $('#darkToggle')?.addEventListener('change', (e) => { state.dark = e.target.checked; render(); });
+    keepTabsOnPage();
+    placePlayhead();
+  }
+  // A margin tab sits left of the measure it points at; near the page edge (or at large sizes) slide it back inside.
+  function keepTabsOnPage() {
+    document.querySelectorAll('.page').forEach((pageEl) => {
+      const left = pageEl.getBoundingClientRect().left;
+      pageEl.querySelectorAll('.tab-body').forEach((body) => {
+        body.style.right = '0px';
+        const overflow = left + 2 - body.getBoundingClientRect().left;
+        if (overflow > 0) body.style.right = `${-overflow}px`;
+      });
+    });
+  }
+  function placePlayhead() {
+    const head = $('#playhead');
+    if (!head) return;
+    const visible = state.view === 'preview' && liveIndex >= 0 && (state.playing || state.pos > 0);
+    head.hidden = !visible;
+    if (!visible) return;
+    const loc = locate(state.pos);
+    const el = track.querySelectorAll('.track-item')[loc.index];
+    if (!el) return;
+    head.style.left = `${el.offsetLeft + (loc.len ? loc.within / loc.len : 0) * el.offsetWidth}px`;
+  }
+
+  /* ---------- Live run (미리보기) ---------- */
+  let raf = 0, last = 0;
+  function liveUpdate(force = false) {
+    const loc = locate(state.pos);
+    if (force || loc.index !== liveIndex) {
+      const prevPage = state.page;
+      const cur = state.items[loc.index];
+      const tab = cur ? findTab(cur.key) : null;
+      if (tab && tab.page !== state.page) state.page = tab.page;
+      render();
+      if (state.page !== prevPage) anim(sheet.querySelector('.page'), [{ opacity: 0.25, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 360, easing: 'ease-out' });
+      const liveTab = sheet.querySelector('.tab.is-live');
+      if (liveTab) impact(liveTab, liveTab.style.getPropertyValue('--c'));
+      revealLane(track.querySelector('.lane-btn.is-live')?.parentElement, 'center');
+      return;
+    }
+    placePlayhead();
+    const cur = state.items[loc.index];
+    if (!cur) return;
+    const barNow = Math.min(cur.bars, Math.floor(loc.within % cur.bars) + 1);
+    const sub = $('#nowSub');
+    if (sub) sub.textContent = sub.textContent.replace(/^마디 \d+/, `마디 ${barNow}`);
+    $('#barMeter')?.querySelectorAll('span').forEach((s, i) => s.classList.toggle('is-on', i < barNow));
+    const clock = $('#clock');
+    if (clock) clock.textContent = formatClock();
+  }
+  function tick(now) {
+    if (!state.playing) return;
+    state.pos += ((now - last) / 1000) * (BPM / 60 / 4) * state.speed;
+    last = now;
+    if (state.pos >= totalBars()) { state.pos = totalBars(); state.playing = false; liveUpdate(true); toast('송폼 끝까지 진행했습니다.'); return; }
+    liveUpdate();
+    raf = requestAnimationFrame(tick);
+  }
+  function play() {
+    if (state.playing) { state.playing = false; cancelAnimationFrame(raf); render(); return; }
+    if (state.pos >= totalBars()) state.pos = 0;
+    state.playing = true;
+    last = performance.now();
+    liveUpdate(true);
+    raf = requestAnimationFrame(tick);
+  }
+  function seek(id) {
+    const index = state.items.findIndex((it) => it.id === id);
+    if (index < 0) return;
+    state.pos = startOf(index) + 0.001;
+    liveUpdate(true);
+    const cur = state.items[index];
+    if (!findTab(cur.key)) toast(`아직 ‘${cur.key}’ 마디 표시가 없습니다. 자세히 보기의 마디 섹션에서 놓을 수 있습니다.`);
+  }
+
+  /* ---------- Effects ---------- */
+  function impact(el, color) {
+    const page = sheet.querySelector('.page');
+    if (!page || !el || reduceMotion) return;
+    const ring = document.createElement('span');
+    ring.className = 'impact';
+    ring.style.cssText = `left:${el.style.left};top:${el.style.top};--c:${color}`;
+    page.querySelector('.overlay').append(ring);
+    ring.animate([{ transform: 'scale(.3)', opacity: 0.9 }, { transform: 'scale(2)', opacity: 0 }], { duration: 600, easing: 'cubic-bezier(.2,.7,.3,1)' }).finished.then(() => ring.remove());
+  }
+  // Scroll the timeline sideways only; never move the page under the reader.
+  function revealLane(el, align) {
+    if (!el) return;
+    const box = track.parentElement;
+    const left = align === 'end' ? el.offsetLeft + el.offsetWidth - box.clientWidth + 8 : el.offsetLeft - box.clientWidth / 2 + el.offsetWidth / 2;
+    box.scrollTo({ left: Math.max(0, left), behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+  function flickerOn(el) { if (!el || reduceMotion) return; el.classList.add('flicker'); el.addEventListener('animationend', () => el.classList.remove('flicker'), { once: true }); }
+  function ripple(pad, e) {
+    if (reduceMotion) return;
+    const r = pad.getBoundingClientRect();
+    const dot = document.createElement('span');
+    dot.className = 'ripple';
+    dot.style.left = `${e.clientX - r.left}px`; dot.style.top = `${e.clientY - r.top}px`;
+    pad.append(dot);
+    dot.animate([{ transform: 'scale(1)', opacity: 0.9 }, { transform: `scale(${Math.max(r.width, r.height) / 4})`, opacity: 0 }], { duration: 520, easing: 'cubic-bezier(.2,.7,.3,1)' }).finished.then(() => dot.remove());
+  }
+  let toastTimer = 0;
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('is-on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('is-on'), 2600); }
+
+  /* ---------- Edits ---------- */
+  function addItem(key, rep) {
+    if (state.items.length >= 24) { toast('송폼은 24칸까지 넣을 수 있습니다.'); return; }
+    const item = makeItem(key, rep);
+    state.items.push(item);
+    state.selected = item.id;
+    render();
+    const lane = track.querySelector(`.track-item[data-key="${item.id}"]`);
+    if (lane) {
+      lane.classList.add('is-new');
+      anim(lane, [{ transform: 'scaleX(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, easing: 'cubic-bezier(.2,.8,.2,1)', transformOrigin: 'left' });
+      lane.style.transformOrigin = 'left';
+      revealLane(lane, 'end');
+    }
+    flickerOn(sheet.querySelector(`.band [data-key="${item.id}"]`));
+  }
+  function removeItem(id) {
+    const lane = track.querySelector(`.track-item[data-key="${id}"]`);
+    const chip = sheet.querySelector(`.band [data-key="${id}"]`);
+    const commit = () => { state.items = state.items.filter((it) => it.id !== id); if (state.selected === id) state.selected = null; render(); };
+    if (!lane || reduceMotion) { commit(); return; }
+    const w = lane.offsetWidth;
+    chip && chip.animate([{ opacity: 1, filter: 'brightness(1)' }, { opacity: 0.2, filter: 'brightness(2)', offset: 0.2 }, { opacity: 0 }], { duration: 260, fill: 'forwards' });
+    lane.animate([{ minWidth: `${w}px`, maxWidth: `${w}px`, opacity: 1 }, { minWidth: '0px', maxWidth: '0px', opacity: 0, marginRight: '-4px' }], { duration: 260, easing: 'cubic-bezier(.5,0,.4,1)', fill: 'forwards' }).finished.then(commit);
+  }
+  function addTab(key, fx, fy) {
+    const t = { id: nid(), page: state.page, key, x: clamp(fx, 0.06, 0.98), y: clamp(fy, 0.01, 0.99) };
+    state.tabs.push(t);
+    render();
+    const el = sheet.querySelector(`[data-tab="${t.id}"]`);
+    anim(el?.querySelector('.tab-body'), [{ transform: 'translate(-1.6em, -50%)', opacity: 0 }, { transform: 'translate(.2em, -50%)', opacity: 1, offset: 0.7 }, { transform: 'translate(0, -50%)', opacity: 1 }], { duration: 340, easing: 'cubic-bezier(.2,.8,.3,1.2)' });
+    setTimeout(() => impact(el, colorOf(key)), 180);
+  }
+  function removeTab(id) {
+    const body = sheet.querySelector(`[data-tab="${id}"] .tab-body`);
+    const commit = () => { state.tabs = state.tabs.filter((t) => t.id !== id); render(); };
+    const run = anim(body, [{ opacity: 1, transform: 'translate(0, -50%)' }, { opacity: 0, transform: 'translate(-1.4em, -50%)' }], { duration: 220, easing: 'ease-in', fill: 'forwards' });
+    run ? run.finished.then(commit) : commit();
+  }
+  function setView(view) {
+    if (view === state.view) return;
+    state.playing = false;
+    cancelAnimationFrame(raf);
+    const swap = () => { state.view = view; state.selected = null; render(); };
+    if (document.startViewTransition && !reduceMotion) document.startViewTransition(swap); else swap();
+  }
+  function turnTo(index) {
+    if (index < 0 || index >= state.pages.length || index === state.page) return;
+    const dir = index > state.page ? 1 : -1;
+    state.page = index;
+    render();
+    anim(sheet.querySelector('.page'), [{ transform: `translateX(${dir * 24}px)`, opacity: 0.2 }, { transform: 'none', opacity: 1 }], { duration: 300, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-action]');
+    if (!t || t.disabled) return;
+    const { action, value, id } = t.dataset;
+    if (action === 'view') setView(t.dataset.view);
+    else if (action === 'prev') turnTo(state.page - 1);
+    else if (action === 'next') turnTo(state.page + 1);
+    else if (action === 'page') turnTo(Number(t.dataset.page));
+    else if (action === 'play') play();
+    else if (action === 'rewind') { state.playing = false; cancelAnimationFrame(raf); state.pos = 0; liveUpdate(true); }
+    else if (action === 'speed') { state.speed = Number(value); render(); }
+    else if (action === 'seek') seek(id);
+    else if (action === 'select') { state.selected = state.selected === id ? null : id; render(); }
+    else if (action === 'remove') removeItem(id);
+    else if (action === 'remove-tab') removeTab(id);
+    else if (action === 'mode') { state.mode = value; state.armed = value === 'section' ? state.armed ?? 'V1' : null; render(); }
+    else if (action === 'bars' || action === 'rep') {
+      const it = state.items.find((x) => x.id === state.selected);
+      if (!it) return;
+      if (action === 'bars') it.bars = clamp(it.bars + Number(value), 1, 32); else it.rep = Number(value);
+      render();
+      flickerOn(sheet.querySelector(`.band [data-key="${it.id}"]`));
+      anim(track.querySelector(`.track-item[data-key="${it.id}"] .lane-btn`), [{ filter: 'brightness(1.8)' }, { filter: 'none' }], { duration: 400 });
+    }
+    else if (action === 'size' || action === 'look') { state[action] = value; render(); sheet.querySelectorAll('.band .hud-chip, .tab .hud-chip').forEach(flickerOn); }
+    else if (action === 'band-here') { state.band = { page: state.page, x: 0.022, y: 0.014 }; render(); flickerOn(sheet.querySelector('.band')); }
+    else if (action === 'preset') {
+      state.items = PRESETS[Number(value)][1].map(([k, r]) => makeItem(k, r));
+      state.selected = null;
+      render();
+      track.querySelectorAll('.track-item').forEach((el, i) => anim(el, [{ transform: 'scaleX(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 300, delay: i * 50, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
+      sheet.querySelectorAll('.band .hud-chip').forEach((el, i) => setTimeout(() => flickerOn(el), i * 50));
+    }
+    else if (action === 'reset') { state.playing = false; cancelAnimationFrame(raf); Object.assign(state, sampleState(), { page: 0, pos: 0, selected: null }); render(); toast('샘플 악보로 되돌렸습니다.'); }
+  });
+
+  /* ---------- Pads: tap adds, hold 0.45s = ×2, hold 0.9s = ×3 ---------- */
+  // Pointer input is handled here end to end; `click` below only serves keyboard activation.
+  let hold = null;
+  side.addEventListener('pointerdown', (e) => {
+    const pad = e.target.closest('.pad');
+    if (!pad || e.button > 0) return;
+    pad.classList.add('is-down');
+    ripple(pad, e);
+    pad.setPointerCapture(e.pointerId);
+    hold = { pad, key: pad.dataset.pad, t0: performance.now(), rep: 1 };
+    if (state.mode !== 'band') return;
+    const badge = pad.querySelector('.pad-badge');
+    const step = () => {
+      if (!hold || hold.pad !== pad) return;
+      const held = performance.now() - hold.t0;
+      pad.style.setProperty('--hold', String(Math.min(1, held / 900)));
+      const rep = held >= 900 ? 3 : held >= 450 ? 2 : 1;
+      if (rep !== hold.rep) { hold.rep = rep; badge.textContent = `×${rep}`; badge.classList.add('is-on'); anim(pad, [{ filter: 'brightness(1.5)' }, { filter: 'none' }], { duration: 220 }); }
+      if (held < 900) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+  const usePad = (key, rep) => {
+    if (state.mode === 'band') addItem(key, rep);
+    else { state.armed = key; render(); }
+  };
+  const endHold = (commit) => {
+    document.querySelectorAll('.pad.is-down').forEach((p) => p.classList.remove('is-down'));
+    if (!hold) return;
+    const h = hold;
+    hold = null;
+    h.pad.style.setProperty('--hold', '0');
+    h.pad.querySelector('.pad-badge')?.classList.remove('is-on');
+    if (commit) usePad(h.key, h.rep);
+  };
+  side.addEventListener('pointerup', (e) => { if (e.target.closest('.pad')) endHold(true); });
+  side.addEventListener('pointercancel', () => endHold(false));
+  side.addEventListener('click', (e) => {
+    const pad = e.target.closest('.pad');
+    // e.detail is 0 only for keyboard (Enter/Space) activation; pointer taps were already handled.
+    if (pad && e.detail === 0) usePad(pad.dataset.pad, 1);
+  });
+
+  /* ---------- Direct manipulation on the sheet (자세히 보기) ---------- */
+  let drag = null;
+  sheet.addEventListener('pointerdown', (e) => {
+    if (!editing() || e.button > 0 || e.target.closest('.chip-x')) return;
+    const pageEl = e.target.closest('.page');
+    if (!pageEl) return;
+    const r = pageEl.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    const bandEl = e.target.closest('.band'), tabEl = e.target.closest('.tab');
+    if (bandEl || tabEl) {
+      const obj = bandEl ? state.band : state.tabs.find((t) => t.id === tabEl.dataset.tab);
+      drag = { el: bandEl || tabEl, obj, kind: bandEl ? 'band' : 'tab', r, sx: e.clientX, sy: e.clientY, ox: obj.x, oy: obj.y, nx: obj.x, ny: obj.y, moved: false, chipId: e.target.closest('[data-chip]')?.dataset.chip ?? null };
+      drag.el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
+    if (state.mode === 'section') {
+      if (!state.armed) { toast('먼저 오른쪽 패드에서 섹션을 고르세요.'); return; }
+      addTab(state.armed, fx, fy);
+      return;
+    }
+    toast('송폼 띠는 끌어서 옮기세요. 마디에 섹션을 표시하려면 마디 섹션으로 바꾸세요.');
+  });
+  sheet.addEventListener('pointermove', (e) => {
+    if (drag) {
+      if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+      if (!drag.moved) { drag.moved = true; drag.el.classList.add('is-grabbed'); }
+      const lim = drag.kind === 'band' ? [0, 0.8, 0, 0.95] : [0.06, 0.98, 0.01, 0.99];
+      drag.nx = clamp(drag.ox + (e.clientX - drag.sx) / drag.r.width, lim[0], lim[1]);
+      drag.ny = clamp(drag.oy + (e.clientY - drag.sy) / drag.r.height, lim[2], lim[3]);
+      drag.el.style.left = `${drag.nx * 100}%`;
+      drag.el.style.top = `${drag.ny * 100}%`;
+      if (drag.kind === 'band') drag.el.style.maxWidth = `${(1 - drag.nx - 0.02) * 100}%`;
+      return;
+    }
+    const ghost = sheet.querySelector('.ghost');
+    const pageEl = e.target.closest('.page');
+    if (!ghost || !pageEl || e.target.closest('.band, .tab')) { if (ghost) ghost.hidden = true; return; }
+    const r = pageEl.getBoundingClientRect();
+    ghost.hidden = false;
+    ghost.style.left = `${((e.clientX - r.left) / r.width) * 100}%`;
+    ghost.style.top = `${((e.clientY - r.top) / r.height) * 100}%`;
+  });
+  sheet.addEventListener('pointerleave', () => { const g = sheet.querySelector('.ghost'); if (g) g.hidden = true; });
+  const endDrag = (cancel) => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (d.moved && !cancel) { d.obj.x = d.nx; d.obj.y = d.ny; render(); impact(d.kind === 'tab' ? sheet.querySelector(`[data-tab="${d.obj.id}"]`) : null, 'var(--stage)'); }
+    else if (!d.moved && d.chipId && !cancel) { state.selected = state.selected === d.chipId ? null : d.chipId; render(); }
+    else render();
+  };
+  sheet.addEventListener('pointerup', () => endDrag(false));
+  sheet.addEventListener('pointercancel', () => endDrag(true));
+
+  /* ---------- Upload ---------- */
+  async function imageToPage(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale); canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return { src: canvas.toDataURL('image/jpeg', 0.9), w: canvas.width, h: canvas.height };
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function pdfToPages(file) {
+    const base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/';
+    const pdfjs = await import(`${base}pdf.min.mjs`);
+    pdfjs.GlobalWorkerOptions.workerSrc = `${base}pdf.worker.min.mjs`;
+    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pages = [];
+    for (let n = 1; n <= Math.min(pdf.numPages, 12); n++) {
+      const page = await pdf.getPage(n);
+      const unit = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: Math.min(2, 1600 / Math.max(unit.width, unit.height)) });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      pages.push({ src: canvas.toDataURL('image/jpeg', 0.9), w: canvas.width, h: canvas.height });
+    }
+    await pdf.destroy();
+    return pages;
+  }
+  $('#upload').addEventListener('change', async (event) => {
+    const files = [...event.target.files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    event.target.value = '';
+    if (!files.length) return;
+    toast('악보를 불러오는 중입니다.');
+    try {
+      const pages = [];
+      for (const file of files) {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        pages.push(...(isPdf ? await pdfToPages(file) : [await imageToPage(file)]));
+      }
+      if (!pages.length) throw new Error('empty');
+      state.playing = false;
+      cancelAnimationFrame(raf);
+      Object.assign(state, { sample: false, pages: pages.slice(0, 12), page: 0, pos: 0, tabs: [], selected: null, band: { page: 0, x: 0.022, y: 0.014 }, title: files[0].name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
+      render();
+      toast(`${state.pages.length}페이지를 불러왔습니다. 마디 섹션 탭은 새로 놓아 주세요.`);
+    } catch {
+      toast('악보를 열지 못했습니다. PDF, PNG, JPG, WebP 파일인지 확인해 주세요.');
+    }
+  });
+
+  window.addEventListener('resize', placePlayhead);
+  render();
+  document.fonts?.ready.then(() => { if (!state.sample) return; state.pages = [drawSamplePage(0), drawSamplePage(1)]; render(); });
+})();
+</script>
+<!-- publish:body-end -->
+</body>
+</html>

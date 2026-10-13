@@ -1,4 +1,7 @@
-export type SheetMarkKind = 'pen' | 'highlighter' | 'stamp' | 'text' | 'rect';
+import { isValidSongFormSections, layoutSectionMarker, layoutSongFormMarkup } from './songFormMarkup';
+
+/** 'songform' = song form band (I → V1 → C …); 'section' = one section chip placed at a measure (text = label). */
+export type SheetMarkKind = 'pen' | 'highlighter' | 'stamp' | 'text' | 'rect' | 'songform' | 'section';
 
 export type SheetMark = {
     id: string;
@@ -9,6 +12,8 @@ export type SheetMark = {
     strokeWidth?: number;
     opacity?: number;
     fontSize?: number;
+    /** kind 'songform' only: ordered chip labels, e.g. ['I', 'V1', 'C×2']. */
+    sections?: string[];
 };
 
 export type SheetPage = { image: string; width: number; height: number; marks: SheetMark[] };
@@ -100,7 +105,7 @@ export function validateSheet(value: unknown): SheetDocument {
                 HIGHLIGHTER_COLORS.includes(mark.color) ||
                 /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(mark.color) ||
                 /^rgba?\([^)]+\)$/.test(mark.color);
-            const isValidKind = ['pen', 'highlighter', 'stamp', 'text', 'rect'].includes(mark.kind);
+            const isValidKind = ['pen', 'highlighter', 'stamp', 'text', 'rect', 'songform', 'section'].includes(mark.kind);
             const isValidWidth = mark.strokeWidth === undefined || (Number.isFinite(mark.strokeWidth) && mark.strokeWidth >= 0.5 && mark.strokeWidth <= 60);
             const isValidOpacity = mark.opacity === undefined || (Number.isFinite(mark.opacity) && mark.opacity >= 0 && mark.opacity <= 1);
             const isValidFontSize = mark.fontSize === undefined || (Number.isFinite(mark.fontSize) && mark.fontSize >= 8 && mark.fontSize <= 72);
@@ -109,7 +114,9 @@ export function validateSheet(value: unknown): SheetDocument {
                 !isValidWidth || !isValidOpacity || !isValidFontSize ||
                 !Array.isArray(mark.points) || mark.points.length < 1 || mark.points.length > 5000 ||
                 mark.points.some((point) => !Array.isArray(point) || point.length !== 2 || point.some((n) => !Number.isFinite(n) || n < 0 || n > 1000)) ||
-                ((mark.kind === 'stamp' || mark.kind === 'text') && (typeof mark.text !== 'string' || mark.text.length > 100))) {
+                ((mark.kind === 'stamp' || mark.kind === 'text') && (typeof mark.text !== 'string' || mark.text.length > 100)) ||
+                (mark.kind === 'songform' && !isValidSongFormSections(mark.sections)) ||
+                (mark.kind === 'section' && !isValidSongFormSections([mark.text]))) {
                 throw new Error('필기 데이터가 올바르지 않습니다.');
             }
         }
@@ -120,9 +127,19 @@ export function validateSheet(value: unknown): SheetDocument {
 export async function importSheetPages(file: File): Promise<SheetPage[]> {
     if (file.size > 20 * 1024 * 1024) throw new Error('20MB 이하의 파일을 선택해주세요.');
     if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        const pdfjs = await import('pdfjs-dist');
+        // Legacy build: bundles polyfills (e.g. Map.prototype.getOrInsertComputed, native only in
+        // Chrome 145+/Safari 26.2+/Firefox 144+) that the modern build calls directly.
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
         pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-        const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+        const task = pdfjs.getDocument({
+            data: await file.arrayBuffer(),
+            // Copied to /public/pdfjs by scripts/prepare-pdf-worker.mjs.
+            cMapUrl: '/pdfjs/cmaps/',
+            cMapPacked: true,
+            standardFontDataUrl: '/pdfjs/standard_fonts/',
+            wasmUrl: '/pdfjs/wasm/',
+            iccUrl: '/pdfjs/iccs/',
+        });
         const pdf = await task.promise;
         try {
             if (pdf.numPages > 20) throw new Error('악보는 최대 20페이지까지 불러올 수 있습니다.');
@@ -263,6 +280,20 @@ export function isPointNearMark(
             return true;
         }
         return Math.hypot(targetX - textX, targetY - textY) <= (threshold ?? 30);
+    }
+
+    if (mark.kind === 'songform' || mark.kind === 'section') {
+        const origin: [number, number] = [mark.points[0][0], mark.points[0][1] * ratio];
+        const box = mark.kind === 'songform'
+            ? layoutSongFormMarkup(mark.sections ?? [], origin, mark.fontSize).plate
+            : layoutSectionMarker(mark.text ?? '', origin, mark.fontSize);
+        const tolerance = threshold ?? 6;
+        return (
+            targetX >= box.x - tolerance &&
+            targetX <= box.x + box.width + tolerance &&
+            targetY >= box.y - tolerance &&
+            targetY <= box.y + box.height + tolerance
+        );
     }
 
     if (mark.kind === 'rect') {

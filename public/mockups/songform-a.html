@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- publish:start -->
+<title>송폼 마크업 목업</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: sheet stage (paper page) + side rail; 미리보기 = roadmap & filmstrip, 자세히 보기 = sticker inspector. Stacks under 960px. */
+:root {
+  --bg: #eceeea;
+  --surface: #ffffff;
+  --surface-2: #f4f5f2;
+  --ink: #1b211e;
+  --muted: #59625e;
+  --line: #d6dad5;
+  --accent: #2b4ed4;
+  --accent-ink: #ffffff;
+  /* The score page is paper in both themes, so its tokens never flip. */
+  --paper: #fffefb;
+  --paper-ink: #17201c;
+  --paper-mark: #2b4ed4;
+  --chip-ink: #ffffff;
+  --sec-intro: #4a5361;
+  --sec-verse: #2d59cf;
+  --sec-pre: #8636cc;
+  --sec-chorus: #c4343a;
+  --sec-bridge: #17754a;
+  --sec-inter: #9c560a;
+  --sec-tag: #0e7068;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-chip: "Barlow Condensed", "Arial Narrow", "IBM Plex Sans KR", sans-serif;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111513; --surface: #191e1c; --surface-2: #202624; --ink: #e6eae8; --muted: #a0a9a5; --line: #303734;
+    --accent: #93a6ff; --accent-ink: #0c1332; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111513; --surface: #191e1c; --surface-2: #202624; --ink: #e6eae8; --muted: #a0a9a5; --line: #303734;
+  --accent: #93a6ff; --accent-ink: #0c1332; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased; }
+.shell { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px; display: grid; gap: 18px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+button, input, label { font: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; }
+.brand { display: grid; gap: 2px; flex: 1 1 260px; min-width: 0; }
+.eyebrow { font: 600 12px/1.2 var(--font-ui); letter-spacing: .08em; color: var(--muted); }
+.brand h1 { margin: 0; font: 700 26px/1.2 var(--font-ui); text-wrap: balance; }
+.song { margin: 0; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.top-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.switch { display: inline-flex; gap: 4px; }
+.switch a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px; color: var(--muted); text-decoration: none; font-weight: 600; font-size: 14px; border: 1px solid transparent; }
+.switch a[aria-current="page"] { color: var(--ink); border-color: var(--line); background: var(--surface); }
+.switch a:hover { color: var(--ink); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 600; font-size: 14px; cursor: pointer; transition: background .15s, border-color .15s, transform .12s; }
+.btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.btn:active { transform: scale(.97); }
+.btn.quiet { background: transparent; }
+.btn svg { width: 18px; height: 18px; }
+
+/* Segmented control */
+.seg { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 2px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.seg button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .14), 0 0 0 1px var(--line); }
+.view-toggle button { min-width: 108px; }
+
+/* Workspace */
+.workspace { display: grid; gap: 18px; align-items: start; }
+@media (min-width: 960px) { .workspace { grid-template-columns: minmax(0, 1fr) 360px; } }
+.stage { display: grid; gap: 12px; min-width: 0; }
+.stage-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.stage-caption { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.stage-caption b { color: var(--ink); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sec-bridge); flex: none; }
+.workspace[data-view="detail"] .dot { background: var(--accent); }
+.pager { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.icon-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.icon-btn:disabled { opacity: .4; cursor: default; }
+.icon-btn svg { width: 18px; height: 18px; }
+.sheet-wrap { max-width: 780px; width: 100%; margin-inline: auto; view-transition-name: sheet; }
+.hint { margin: 0; text-align: center; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+
+/* Paper page and its overlay */
+.page { position: relative; container-type: inline-size; width: 100%; max-width: 100%; background: var(--paper); border-radius: 6px; overflow: hidden; box-shadow: 0 1px 0 rgb(0 0 0 / .04), 0 18px 40px -22px rgb(18 28 22 / .55); --scale: 1; }
+.page > img { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+.overlay { position: absolute; inset: 0; }
+.workspace[data-view="detail"] .stage .overlay { cursor: crosshair; }
+.workspace[data-view="detail"][data-mode="band"] .stage .overlay { cursor: copy; }
+
+/* Sticker chip: die-cut white rim + soft drop, color-coded by section role */
+.chip { --c: var(--sec-intro); position: relative; display: inline-flex; align-items: baseline; gap: .08em; padding: .27em .5em .23em; border: 0; border-radius: .4em; background: var(--c); color: var(--chip-ink); font: 700 1em/1 var(--font-chip); letter-spacing: .02em; white-space: nowrap; box-shadow: 0 0 0 .12em #fff, 0 .14em 0 .12em rgb(0 0 0 / .13), 0 .45em .9em -.15em rgb(16 24 20 / .32); transition: transform .2s cubic-bezier(.3, .7, .3, 1.5), box-shadow .2s; }
+.chip-rep { font-size: .62em; font-weight: 600; opacity: .92; }
+button.chip { cursor: pointer; }
+button.chip:hover, .is-editing .chip:hover { transform: translateY(-.1em) rotate(-1.6deg); box-shadow: 0 0 0 .12em #fff, 0 .3em 0 .12em rgb(0 0 0 / .1), 0 .8em 1.2em -.2em rgb(16 24 20 / .34); }
+button.chip:active { transform: translateY(.04em) scale(.94); box-shadow: 0 0 0 .12em #fff, 0 .05em 0 .12em rgb(0 0 0 / .14); }
+.look-tint .chip { background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); box-shadow: inset 0 0 0 .09em color-mix(in srgb, var(--c) 72%, transparent); text-shadow: 0 0 .22em #fff, 0 0 .1em #fff; }
+.look-outline .chip { background: rgb(255 255 255 / .94); color: var(--c); box-shadow: inset 0 0 0 .12em var(--c), 0 .25em .5em -.15em rgb(0 0 0 / .22); }
+.chip.is-selected { outline: .13em solid var(--paper-mark); outline-offset: .16em; }
+.chip.is-current { outline: .13em solid var(--paper-ink); outline-offset: .14em; }
+
+.band { position: absolute; display: flex; flex-wrap: wrap; align-items: center; gap: .34em .26em; padding: .46em .52em; border-radius: .72em; background: rgb(255 255 255 / .88); box-shadow: 0 .12em .6em rgb(0 0 0 / .08); font-size: calc(var(--scale) * 2.5cqw); }
+.look-tint .band { background: rgb(255 255 255 / .32); box-shadow: none; }
+.band.is-editing { outline: .1em dashed color-mix(in srgb, var(--paper-mark) 70%, transparent); outline-offset: .16em; cursor: grab; touch-action: none; }
+.band.is-grabbed, .marker.is-grabbed { cursor: grabbing; }
+.band.is-grabbed { box-shadow: 0 .8em 1.8em -.2em rgb(0 0 0 / .28); }
+.sep { width: .34em; height: .34em; flex: none; border-top: .12em solid #86908b; border-right: .12em solid #86908b; transform: rotate(45deg); margin-inline: 0 .1em; }
+
+.marker { position: absolute; width: 0; height: 0; font-size: calc(var(--scale) * 2.5cqw); }
+.marker-body { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); display: flex; }
+.marker.is-editing { cursor: grab; touch-action: none; }
+.marker.is-grabbed .chip { box-shadow: 0 0 0 .12em #fff, 0 .9em 1.4em -.2em rgb(0 0 0 / .35); }
+
+.chip-x { position: absolute; top: -.52em; right: -.52em; width: 1.2em; height: 1.2em; padding: 0; display: grid; place-items: center; border-radius: 50%; border: .1em solid #fff; background: var(--paper-ink); color: #fff; font-size: .74em; cursor: pointer; opacity: 0; transform: scale(.4); transition: opacity .15s, transform .22s cubic-bezier(.3, .7, .3, 1.6); }
+.chip-x svg { width: .62em; height: .62em; }
+.chip:hover > .chip-x, .chip:focus-within > .chip-x { opacity: 1; transform: none; }
+@media (hover: none) { .chip-x { opacity: 1; transform: none; } }
+
+.ghost { position: absolute; width: 0; height: 0; pointer-events: none; font-size: calc(var(--scale) * 2.5cqw); }
+.ghost .marker-body { opacity: .72; transform: translate(-50%, -50%) rotate(-5deg) scale(1.06); filter: drop-shadow(0 .5em .6em rgb(0 0 0 / .25)); }
+.placeholder { position: absolute; display: flex; align-items: center; gap: .4em; padding: .55em .8em; border-radius: .72em; border: .1em dashed var(--paper-mark); background: rgb(43 78 212 / .07); color: var(--paper-mark); font: 600 calc(var(--scale) * 1.7cqw)/1.2 var(--font-ui); pointer-events: none; }
+.ring { position: absolute; width: 0; height: 0; pointer-events: none; font-size: calc(var(--scale) * 2.5cqw); }
+.ring::before { content: ""; position: absolute; left: -1.6em; top: -1.6em; width: 3.2em; height: 3.2em; border-radius: 50%; border: .16em solid var(--c, var(--paper-mark)); }
+.spot { position: absolute; width: 0; height: 0; pointer-events: none; font-size: calc(var(--scale) * 2.5cqw); }
+.spot::before { content: ""; position: absolute; left: -3.4em; top: -3.4em; width: 6.8em; height: 6.8em; border-radius: 50%; box-shadow: 0 0 0 300vmax rgb(12 18 15 / .36); }
+
+/* Rail */
+.rail { display: grid; gap: 14px; min-width: 0; view-transition-name: rail; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.card h2 { margin: 0; font: 700 15px/1.3 var(--font-ui); }
+.meta { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: .06em; color: var(--muted); }
+
+.roadmap { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.road-item { width: 100%; display: grid; grid-template-columns: 34px 3.2em minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 48px; padding: 4px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; transition: background .15s; }
+.road-item:hover { background: var(--surface-2); }
+.road-item.is-current { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.road-step { font: 600 13px/1 var(--font-chip); color: var(--muted); font-variant-numeric: tabular-nums; }
+.road-item .chip { font-size: 18px; justify-self: start; }
+.road-name { display: grid; line-height: 1.25; min-width: 0; }
+.road-name small { color: var(--muted); font-size: 12px; }
+.road-where { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.filmstrip { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+.thumb { display: grid; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; }
+.thumb[aria-current="true"] { border-color: var(--accent); color: var(--ink); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.thumb .page { border-radius: 4px; box-shadow: none; }
+
+.palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.pal { position: relative; display: grid; justify-items: center; align-content: center; gap: 6px; min-height: 80px; padding: 10px 6px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); cursor: pointer; transition: border-color .15s, background .15s, transform .12s; }
+.pal .chip { font-size: 21px; }
+.pal small { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.pal:hover { border-color: color-mix(in srgb, var(--c) 50%, var(--line)); background: color-mix(in srgb, var(--c) 7%, var(--surface)); }
+.pal:hover .chip { transform: translateY(-2px) rotate(-2deg); }
+.pal:active { transform: scale(.96); }
+.pal:active .chip { transform: scale(.9); }
+.pal[aria-pressed="true"] { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, var(--surface)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent); }
+.pal[aria-pressed="true"]::after { content: "놓을 섹션"; position: absolute; top: -9px; right: 6px; padding: 1px 6px; border-radius: 6px; background: var(--c); color: var(--chip-ink); font-size: 11px; font-weight: 600; }
+
+.order { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.order-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.order-pick { display: grid; grid-template-columns: 3.4em minmax(0, 1fr); align-items: center; gap: 10px; min-height: 44px; padding: 4px 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.order-pick:hover { background: var(--surface-2); }
+.order-pick[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.order-pick .chip { font-size: 17px; justify-self: start; }
+.order-pick span:last-child { min-width: 0; font-size: 13px; }
+.order-pick small { color: var(--muted); }
+.mini-x { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; }
+.mini-x:hover { background: var(--surface-2); color: var(--ink); }
+.mini-x svg { width: 16px; height: 16px; }
+.empty { margin: 0; padding: 14px; border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; color: var(--muted); text-align: center; }
+
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); max-width: min(92vw, 520px); padding: 12px 18px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s, transform .25s; z-index: 30; }
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+.fly-layer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+
+::view-transition-old(sheet), ::view-transition-new(sheet), ::view-transition-old(rail), ::view-transition-new(rail) { animation-duration: .28s; }
+@media (prefers-reduced-motion: reduce) {
+  *, ::view-transition-old(*), ::view-transition-new(*) { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+</style>
+<!-- publish:head-end -->
+</head>
+<body>
+<!-- publish:body-start -->
+<div class="shell">
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">목업 A · 악보 스티커</span>
+      <h1>송폼 마크업</h1>
+      <p class="song" id="songMeta">주의 길 · Key C · ♩ 68 · 2페이지 (샘플 악보)</p>
+    </div>
+    <div class="top-tools">
+      <nav class="switch" aria-label="목업 선택">
+        <a href="#" aria-current="page">A 스티커</a>
+        <a href="songform-b.html">B 무대 HUD</a>
+        <a href="songform-a2.html">2차 시안</a>
+      </nav>
+      <div class="seg view-toggle" role="group" aria-label="보기 방식">
+        <button type="button" data-action="view" data-view="preview" aria-pressed="true">미리보기</button>
+        <button type="button" data-action="view" data-view="detail" aria-pressed="false">자세히 보기</button>
+      </div>
+      <label class="btn" for="upload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+        악보 올리기
+      </label>
+      <input class="sr-only" type="file" id="upload" accept="application/pdf,image/png,image/jpeg,image/webp" multiple>
+      <button type="button" class="btn quiet" data-action="reset">샘플 악보</button>
+    </div>
+  </header>
+
+  <main class="workspace" id="workspace" data-view="preview" data-mode="band">
+    <section class="stage" aria-label="악보">
+      <div class="stage-bar">
+        <span class="stage-caption" id="caption"><span class="dot" aria-hidden="true"></span><b>팀원이 보는 화면</b></span>
+        <div class="pager">
+          <button type="button" class="icon-btn" data-action="prev" aria-label="이전 페이지"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <span id="pageLabel">1 / 2</span>
+          <button type="button" class="icon-btn" data-action="next" aria-label="다음 페이지"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+      </div>
+      <div class="sheet-wrap" id="sheet"></div>
+      <p class="hint" id="hint"></p>
+    </section>
+    <aside class="rail" id="rail" aria-label="송폼 패널"></aside>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const SECTIONS = [
+    { key: 'I', name: '전주', en: 'Intro', group: 'intro' },
+    { key: 'V1', name: '1절', en: 'Verse 1', group: 'verse' },
+    { key: 'V2', name: '2절', en: 'Verse 2', group: 'verse' },
+    { key: 'PC', name: '프리코러스', en: 'Pre-Chorus', group: 'pre' },
+    { key: 'C', name: '후렴', en: 'Chorus', group: 'chorus' },
+    { key: 'B', name: '브릿지', en: 'Bridge', group: 'bridge' },
+    { key: '간주', name: '간주', en: 'Interlude', group: 'inter' },
+    { key: 'Tag', name: '태그', en: 'Tag', group: 'tag' },
+    { key: 'O', name: '엔딩', en: 'Outro', group: 'intro' },
+  ];
+  const BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
+  const GROUP_VAR = { intro: '--sec-intro', verse: '--sec-verse', pre: '--sec-pre', chorus: '--sec-chorus', bridge: '--sec-bridge', inter: '--sec-inter', tag: '--sec-tag' };
+  const SIZES = [['S', '작게', 0.8], ['M', '보통', 1], ['L', '크게', 1.3], ['XL', '최대', 1.65]];
+  const LOOKS = [['solid', '진하게'], ['tint', '반투명'], ['outline', '외곽선']];
+  const PRESETS = [
+    ['기본', ['I', 'V1', 'C', 'V2', 'C', 'B', 'C×2', 'O']],
+    ['프리코러스', ['I', 'V1', 'PC', 'C', 'V2', 'PC', 'C', 'B', 'C×2', 'O']],
+    ['짧은 곡', ['I', 'V1', 'C×2', 'B', 'C', 'O']],
+  ];
+  const SYSTEM_TOPS = [360, 650, 940, 1230];
+  const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  let uid = 0;
+  const nid = () => `k${++uid}`;
+  const baseOf = (label) => label.replace(/×\d$/, '');
+  const repOf = (label) => Number(label.match(/×(\d)$/)?.[1] ?? 1);
+  const withRep = (label, n) => (n > 1 ? `${baseOf(label)}×${n}` : baseOf(label));
+  const sectionOf = (label) => BY_KEY[baseOf(label)] ?? { key: baseOf(label), name: baseOf(label), en: '', group: 'intro' };
+  const colorOf = (label) => `var(${GROUP_VAR[sectionOf(label).group]})`;
+  const fullName = (label) => { const s = sectionOf(label); const r = repOf(label); return `${s.name}${s.en ? ` (${s.en})` : ''}${r > 1 ? ` ${r}번` : ''}`; };
+  const chipInner = (label) => `<span>${esc(baseOf(label))}</span>${repOf(label) > 1 ? `<span class="chip-rep">×${repOf(label)}</span>` : ''}`;
+
+  /* ---------- Sample lead sheet, drawn once on canvas ---------- */
+  const SAMPLE = [
+    [
+      ['C', 'G/B', 'Am7', 'Em7', '(피아노 아르페지오로 잔잔하게 시작)'],
+      ['F', 'C/E', 'Dm7', 'G7sus4  G', '새벽 빛이 비추는 길 위에 주님 손을 잡고 걸어가네'],
+      ['C', 'Em7', 'F', 'G', '주의 길 따라 걸으리 날마다 그 사랑 노래하리'],
+      ['Am7', 'Em7', 'F  G7', 'C', '바람 불고 어두운 밤에도 주님 나의 등불 되시네'],
+    ],
+    [
+      ['F', 'G/F', 'Em7', 'Am7', '내 모든 날 주께 드리리 내 모든 삶 주를 향하리'],
+      ['Dm7', 'G7', 'C', 'C7', '주의 길 따라 걸으리 날마다 그 사랑 노래하리'],
+      ['F', 'G/F', 'Em7', 'Am7', '주의 길 따라 걸으리 영원히 주 찬양하리'],
+      ['Dm7', 'G7', 'Csus4', 'C', '주님 나의 길 되시네 (리타르단도)'],
+    ],
+  ];
+  function drawSamplePage(index) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200; canvas.height = 1600;
+    const ctx = canvas.getContext('2d');
+    const sans = '"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+    ctx.fillStyle = '#fffefb'; ctx.fillRect(0, 0, 1200, 1600);
+    ctx.fillStyle = '#17201c'; ctx.textAlign = 'center';
+    if (index === 0) {
+      ctx.font = `700 54px ${sans}`; ctx.fillText('주의 길', 600, 170);
+      ctx.font = `500 21px ${sans}`; ctx.fillStyle = '#5b6560'; ctx.fillText('샘플 리드시트 · 4/4 · 따뜻하게', 600, 212);
+      ctx.textAlign = 'left'; ctx.font = `700 22px ${sans}`; ctx.fillStyle = '#17201c'; ctx.fillText('Key: C', 80, 256);
+      ctx.textAlign = 'right'; ctx.fillText('♩ = 68', 1120, 256);
+      ctx.fillRect(80, 272, 1040, 3); ctx.fillRect(80, 279, 1040, 1);
+    } else {
+      ctx.font = `600 20px ${sans}`; ctx.fillStyle = '#5b6560'; ctx.fillText('주의 길 (2/2)', 600, 140);
+      ctx.fillStyle = '#17201c'; ctx.fillRect(80, 160, 1040, 1);
+    }
+    const col = 1040 / 4;
+    SAMPLE[index].forEach((system, s) => {
+      const top = SYSTEM_TOPS[s];
+      ctx.textAlign = 'left'; ctx.font = `700 30px ${sans}`; ctx.fillStyle = '#1d3b8f';
+      system.slice(0, 4).forEach((chord, c) => ctx.fillText(chord, 80 + c * col + 14, top - 14));
+      ctx.strokeStyle = '#2a332f'; ctx.lineWidth = 1.6;
+      for (let l = 0; l < 5; l++) { ctx.beginPath(); ctx.moveTo(80, top + l * 16); ctx.lineTo(1120, top + l * 16); ctx.stroke(); }
+      ctx.lineWidth = 2.4;
+      [0, 1, 2, 3, 4].forEach((b) => { ctx.beginPath(); ctx.moveTo(80 + b * col, top); ctx.lineTo(80 + b * col, top + 64); ctx.stroke(); });
+      ctx.fillStyle = '#17201c';
+      for (let m = 0; m < 4; m++) {
+        [0.22, 0.47, 0.72].forEach((f, n) => {
+          const x = 80 + m * col + col * f; const y = top + ((m * 2 + n * 3 + s) % 5) * 8 + 16;
+          ctx.beginPath(); ctx.ellipse(x, y, 9, 6.5, -0.35, 0, Math.PI * 2); ctx.fill();
+          ctx.fillRect(x + 7, y - 36, 2.4, 36);
+        });
+      }
+      ctx.font = `500 23px ${sans}`; ctx.fillStyle = '#25302b';
+      ctx.fillText(system[4], 86, top + 108);
+    });
+    ctx.textAlign = 'center'; ctx.font = `500 15px ${sans}`; ctx.fillStyle = '#8b948f';
+    ctx.fillText(`${index + 1} / 2`, 600, 1560);
+    return { src: canvas.toDataURL('image/jpeg', 0.9), w: 1200, h: 1600 };
+  }
+  const markerY = (system) => (SYSTEM_TOPS[system] - 64) / 1600;
+  function sampleState() {
+    return {
+      pages: [drawSamplePage(0), drawSamplePage(1)],
+      bands: { 0: { x: 0.022, y: 0.014, items: PRESETS[0][1].map((label) => ({ id: nid(), label })) } },
+      markers: [
+        { id: nid(), page: 0, label: 'I', x: 0.11, y: markerY(0) },
+        { id: nid(), page: 0, label: 'V1', x: 0.11, y: markerY(1) },
+        { id: nid(), page: 0, label: 'C', x: 0.11, y: markerY(2) },
+        { id: nid(), page: 0, label: 'V2', x: 0.11, y: markerY(3) },
+        { id: nid(), page: 1, label: 'B', x: 0.11, y: markerY(0) },
+        { id: nid(), page: 1, label: 'O', x: 0.11, y: markerY(3) },
+      ],
+      title: '주의 길', meta: 'Key C · ♩ 68', sample: true,
+    };
+  }
+
+  const state = {
+    view: 'preview', page: 0, size: 'M', look: 'solid', mode: 'band', armed: null, selected: null, current: null, pending: null,
+    ...sampleState(),
+  };
+
+  const sheet = $('#sheet');
+  const rail = $('#rail');
+  const workspace = $('#workspace');
+  const editing = () => state.view === 'detail';
+  const scaleOf = () => SIZES.find((s) => s[0] === state.size)[2];
+  const songBand = () => { const key = Object.keys(state.bands).sort((a, b) => a - b).find((k) => state.bands[k].items.length); return key === undefined ? null : { page: Number(key), band: state.bands[key] }; };
+
+  /* ---------- Markup ---------- */
+  function pageMarkup(index, interactive) {
+    const p = state.pages[index];
+    const band = state.bands[index];
+    const edit = interactive && editing();
+    const markers = state.markers.filter((m) => m.page === index);
+    const pending = state.pending?.page === index ? state.pending : { x: 0.022, y: 0.014 };
+    return `<div class="page look-${state.look}" data-page="${index}" style="aspect-ratio:${p.w}/${p.h};--scale:${scaleOf()}">
+      <img src="${p.src}" alt="${esc(state.title)} 악보 ${index + 1}페이지" draggable="false">
+      <div class="overlay">
+        ${band?.items.length ? bandMarkup(band, index, interactive, edit) : ''}
+        ${markers.map((m) => markerMarkup(m, edit)).join('')}
+        ${edit && state.mode === 'band' && !band?.items.length ? `<div class="placeholder" style="left:${pending.x * 100}%;top:${pending.y * 100}%">칩을 누르면 여기에 송폼이 붙습니다</div>` : ''}
+        ${edit && state.mode === 'section' && state.armed ? `<div class="ghost" hidden><div class="marker-body"><span class="chip" style="--c:${colorOf(state.armed)}">${chipInner(state.armed)}</span></div></div>` : ''}
+      </div>
+    </div>`;
+  }
+  function bandMarkup(band, index, interactive, edit) {
+    const chips = band.items.map((item, i) => {
+      const sep = i ? '<span class="sep" aria-hidden="true"></span>' : '';
+      if (interactive && !edit) {
+        return `${sep}<button type="button" class="chip${state.current === item.id ? ' is-current' : ''}" style="--c:${colorOf(item.label)}" data-key="${item.id}" data-action="jump" data-id="${item.id}" aria-label="${esc(fullName(item.label))} 마디로 이동">${chipInner(item.label)}</button>`;
+      }
+      const x = edit ? `<button type="button" class="chip-x" data-action="remove-chip" data-id="${item.id}" aria-label="${esc(baseOf(item.label))} 빼기">${X_ICON}</button>` : '';
+      return `${sep}<span class="chip${edit && state.selected === item.id ? ' is-selected' : ''}" style="--c:${colorOf(item.label)}" data-key="${item.id}" data-chip="${item.id}">${chipInner(item.label)}${x}</span>`;
+    }).join('');
+    return `<div class="band${edit ? ' is-editing' : ''}" data-key="band-${index}" data-band="${index}" style="left:${band.x * 100}%;top:${band.y * 100}%;max-width:${(1 - band.x - 0.02) * 100}%" ${interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"'}>${chips}</div>`;
+  }
+  function markerMarkup(m, edit) {
+    const x = edit ? `<button type="button" class="chip-x" data-action="remove-marker" data-id="${m.id}" aria-label="${esc(baseOf(m.label))} 마디 표시 지우기">${X_ICON}</button>` : '';
+    return `<div class="marker${edit ? ' is-editing' : ''}" data-key="${m.id}" data-marker="${m.id}" style="left:${m.x * 100}%;top:${m.y * 100}%"><div class="marker-body"><span class="chip" style="--c:${colorOf(m.label)}">${chipInner(m.label)}${x}</span></div></div>`;
+  }
+
+  function railPreview() {
+    const song = songBand();
+    const items = song?.band.items ?? [];
+    const road = items.length
+      ? `<ol class="roadmap">${items.map((item, i) => {
+          const marker = findMarker(item.label);
+          return `<li><button type="button" class="road-item${state.current === item.id ? ' is-current' : ''}" data-action="jump" data-id="${item.id}">
+            <span class="road-step">${String(i + 1).padStart(2, '0')}</span>
+            <span class="chip" style="--c:${colorOf(item.label)}">${chipInner(item.label)}</span>
+            <span class="road-name"><b>${esc(sectionOf(item.label).name)}${repOf(item.label) > 1 ? ` ${repOf(item.label)}번` : ''}</b><small>${esc(sectionOf(item.label).en)}</small></span>
+            <span class="road-where">${marker ? `${marker.page + 1}p` : '표시 없음'}</span>
+          </button></li>`;
+        }).join('')}</ol><p class="note">칩을 누르면 그 섹션이 시작되는 마디로 이동합니다.</p>`
+      : '<p class="empty">아직 송폼이 없습니다. 자세히 보기에서 칩을 눌러 만드세요.</p>';
+    return `<section class="card">
+        <div class="card-head"><h2>송폼</h2><span class="meta">${items.length}칸${song ? ` · ${song.page + 1}p 상단` : ''}</span></div>
+        ${road}
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>페이지</h2><span class="meta">${state.pages.length}장</span></div>
+        <div class="filmstrip">${state.pages.map((_, i) => `<button type="button" class="thumb" data-action="page" data-page="${i}" aria-current="${i === state.page}" aria-label="${i + 1}페이지 보기">${pageMarkup(i, false)}<span>${i + 1}p</span></button>`).join('')}</div>
+      </section>`;
+  }
+
+  function railDetail() {
+    const band = state.bands[state.page];
+    const items = band?.items ?? [];
+    const target = items.find((it) => it.id === state.selected) ?? items[items.length - 1] ?? null;
+    const markers = state.markers.filter((m) => m.page === state.page).sort((a, b) => a.y - b.y || a.x - b.x);
+    const seg = (action, value, current, label) => `<button type="button" data-action="${action}" data-value="${value}" aria-pressed="${value === current}">${label}</button>`;
+    return `<section class="card">
+        <div class="card-head"><h2>입력 방식</h2><span class="meta">${state.page + 1}p 편집 중</span></div>
+        <div class="seg" role="group" aria-label="입력 방식">${seg('mode', 'band', state.mode, '송폼 띠 (상단)')}${seg('mode', 'section', state.mode, '마디 섹션')}</div>
+        <p class="note">${state.mode === 'band' ? '칩을 누를 때마다 페이지 상단 띠에 스티커가 붙습니다. 띠는 끌어서 옮깁니다.' : '칩을 고르고 악보에서 그 섹션이 시작되는 마디를 누르세요. 놓은 표시는 끌어서 옮깁니다.'}</p>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>섹션 칩</h2><span class="meta">${state.mode === 'band' ? '누르면 바로 추가' : '눌러서 고르기'}</span></div>
+        <div class="palette">${SECTIONS.map((s) => `<button type="button" class="pal" style="--c:${colorOf(s.key)}" data-action="pick" data-label="${esc(s.key)}" ${state.mode === 'section' ? `aria-pressed="${state.armed === s.key}"` : ''} aria-label="${esc(s.name)} ${esc(s.en)} ${state.mode === 'band' ? '추가' : '고르기'}"><span class="chip" style="--c:${colorOf(s.key)}">${esc(s.key)}</span><small>${esc(s.name)}</small></button>`).join('')}</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>순서</h2><span class="meta">${items.length}칸</span></div>
+        ${items.length ? `<ol class="order">${items.map((item, i) => `<li class="order-item"><span class="road-step">${String(i + 1).padStart(2, '0')}</span>
+            <button type="button" class="order-pick" data-action="select" data-id="${item.id}" aria-pressed="${state.selected === item.id}"><span class="chip" style="--c:${colorOf(item.label)}">${chipInner(item.label)}</span><span>${esc(sectionOf(item.label).name)} <small>${esc(sectionOf(item.label).en)}</small></span></button>
+            <button type="button" class="mini-x" data-action="remove-chip" data-id="${item.id}" aria-label="${i + 1}번째 ${esc(baseOf(item.label))} 빼기">${X_ICON}</button></li>`).join('')}</ol>` : '<p class="empty">섹션 칩을 진행 순서대로 눌러 보세요.</p>'}
+        <div class="row"><span class="label">반복${target ? ` · ${esc(baseOf(target.label))}` : ''}</span>
+          <div class="seg" role="group" aria-label="반복 횟수">${[1, 2, 3, 4].map((n) => `<button type="button" data-action="rep" data-value="${n}" aria-pressed="${target ? repOf(target.label) === n : false}" ${target ? '' : 'disabled'}>×${n}</button>`).join('')}</div>
+        </div>
+        <div class="row"><span class="label">프리셋</span>${PRESETS.map(([name], i) => `<button type="button" class="btn" data-action="preset" data-value="${i}">${name}</button>`).join('')}${items.length ? '<button type="button" class="btn quiet" data-action="clear-band">비우기</button>' : ''}</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>모양</h2></div>
+        <div class="row"><span class="label">크기</span><div class="seg" role="group" aria-label="크기">${SIZES.map(([v, l]) => seg('size', v, state.size, l)).join('')}</div></div>
+        <div class="row"><span class="label">스타일</span><div class="seg" role="group" aria-label="스타일">${LOOKS.map(([v, l]) => seg('look', v, state.look, l)).join('')}</div></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>이 페이지의 마디 표시</h2><span class="meta">${markers.length}개</span></div>
+        ${markers.length ? `<div class="row">${markers.map((m) => `<button type="button" class="chip" style="--c:${colorOf(m.label)};font-size:18px" data-action="remove-marker" data-id="${m.id}" aria-label="${esc(baseOf(m.label))} 마디 표시 지우기">${chipInner(m.label)}</button>`).join('')}</div><p class="note">목록의 칩을 누르면 그 표시가 지워집니다.</p>` : '<p class="empty">마디 섹션으로 바꾸고 악보를 눌러 표시를 놓으세요.</p>'}
+      </section>`;
+  }
+
+  function render() {
+    workspace.dataset.view = state.view;
+    workspace.dataset.mode = state.mode;
+    sheet.innerHTML = pageMarkup(state.page, true);
+    rail.innerHTML = state.view === 'preview' ? railPreview() : railDetail();
+    document.querySelectorAll('[data-action="view"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
+    $('#pageLabel').textContent = `${state.page + 1} / ${state.pages.length}`;
+    $('[data-action="prev"]').disabled = state.page === 0;
+    $('[data-action="next"]').disabled = state.page >= state.pages.length - 1;
+    $('#songMeta').textContent = `${state.title} · ${state.meta} · ${state.pages.length}페이지`;
+    $('#caption').innerHTML = `<span class="dot" aria-hidden="true"></span>${state.view === 'preview' ? '<b>팀원이 보는 화면</b> 칩을 누르면 해당 마디로' : `<b>인도자 편집 화면</b> ${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
+    $('#hint').textContent = state.view === 'preview' ? '' : state.mode === 'band'
+      ? '빈 곳을 누르면 띠가 그 자리로 옮겨 갑니다. 칩에 마우스를 올리면 ×가 나옵니다.'
+      : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽에서 놓을 섹션 칩을 먼저 고르세요.';
+  }
+
+  /* ---------- Effects ---------- */
+  const anim = (el, frames, opts) => (reduceMotion || !el ? null : el.animate(frames, opts));
+  // Markers are 0×0 anchors centred on their chip, so they are measured by the chip body around its centre.
+  const isAnchor = (el) => el.classList.contains('marker');
+  function measure(el) {
+    const r = (isAnchor(el) ? el.firstElementChild : el).getBoundingClientRect();
+    return isAnchor(el) ? { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width } : { x: r.left, y: r.top, w: r.width };
+  }
+  function snapshot(selector) {
+    const map = new Map();
+    sheet.querySelectorAll(selector).forEach((el) => map.set(el.dataset.key, measure(el)));
+    return map;
+  }
+  function flip(selector, before, scale = false) {
+    sheet.querySelectorAll(selector).forEach((el) => {
+      const a = before.get(el.dataset.key);
+      if (!a) return;
+      const b = measure(el);
+      const dx = a.x - b.x, dy = a.y - b.y, s = scale && a.w && b.w ? a.w / b.w : 1;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(s - 1) < 0.01) return;
+      anim(el, [{ transform: `translate(${dx}px, ${dy}px) scale(${s})`, transformOrigin: 'top left' }, { transform: 'none', transformOrigin: 'top left' }], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+  }
+  function ringAt(el, color) {
+    const page = sheet.querySelector('.page');
+    if (!page || !el || reduceMotion) return;
+    const pr = page.getBoundingClientRect(), r = el.getBoundingClientRect();
+    const ring = document.createElement('span');
+    ring.className = 'ring';
+    ring.style.cssText = `left:${((r.left + r.width / 2 - pr.left) / pr.width) * 100}%;top:${((r.top + r.height / 2 - pr.top) / pr.height) * 100}%;--c:${color}`;
+    page.querySelector('.overlay').append(ring);
+    ring.animate([{ transform: 'scale(.35)', opacity: 0.85 }, { transform: 'scale(1.9)', opacity: 0 }], { duration: 640, easing: 'cubic-bezier(.2,.7,.3,1)' }).finished.then(() => ring.remove());
+  }
+  function stick(el) {
+    anim(el, [{ transform: 'scale(1.22) rotate(-4deg)' }, { transform: 'scale(.9) rotate(1deg)', offset: 0.55 }, { transform: 'none' }], { duration: 340, easing: 'ease-out' });
+  }
+  // `from` is a rect measured BEFORE the re-render that detaches the source element.
+  function flyIn(from, toEl, color) {
+    if (!toEl) return;
+    if (reduceMotion || !from || !from.width) { stick(toEl); return; }
+    const a = from, b = toEl.getBoundingClientRect();
+    const layer = document.createElement('div');
+    layer.className = `fly-layer look-${state.look}`;
+    const ghost = toEl.cloneNode(true);
+    ghost.querySelector('.chip-x')?.remove();
+    ghost.classList.remove('is-selected');
+    Object.assign(ghost.style, { position: 'fixed', left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px`, fontSize: getComputedStyle(toEl).fontSize, margin: '0' });
+    layer.append(ghost);
+    document.body.append(layer);
+    toEl.style.visibility = 'hidden';
+    const dx = a.left + a.width / 2 - (b.left + b.width / 2), dy = a.top + a.height / 2 - (b.top + b.height / 2), s = a.height / b.height;
+    ghost.animate([
+      { transform: `translate(${dx}px, ${dy}px) scale(${s}) rotate(-8deg)` },
+      { transform: `translate(${dx * 0.42}px, ${dy * 0.42 - 90}px) scale(${((s + 1) / 2) * 1.12}) rotate(10deg)`, offset: 0.5 },
+      { transform: 'none' },
+    ], { duration: 600, easing: 'cubic-bezier(.3,.75,.25,1)' }).finished.then(() => {
+      layer.remove();
+      toEl.style.visibility = '';
+      stick(toEl);
+      ringAt(toEl, color);
+    });
+  }
+  function peel(el) {
+    return anim(el, [
+      { transform: 'none', opacity: 1 },
+      { transform: 'translateY(-.5em) rotate(16deg) scale(1.06)', opacity: 0.95, offset: 0.35 },
+      { transform: 'translateY(1.2em) rotate(34deg) scale(.55)', opacity: 0 },
+    ], { duration: 340, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' })?.finished ?? Promise.resolve();
+  }
+  function spotlight(markerEl, color) {
+    const page = sheet.querySelector('.page');
+    if (!page || !markerEl) return;
+    const spot = document.createElement('span');
+    spot.className = 'spot';
+    spot.style.cssText = `left:${markerEl.style.left};top:${markerEl.style.top}`;
+    page.querySelector('.overlay').prepend(spot);
+    const run = anim(spot, [{ opacity: 0 }, { opacity: 1, offset: 0.18 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: 1500, easing: 'ease-in-out' });
+    (run?.finished ?? new Promise((r) => setTimeout(r, 900))).then(() => spot.remove());
+    anim(markerEl, [{ transform: 'scale(1)' }, { transform: 'scale(1.35)', offset: 0.3 }, { transform: 'scale(.95)', offset: 0.6 }, { transform: 'scale(1)' }], { duration: 620, easing: 'ease-out' });
+    ringAt(markerEl.querySelector('.chip'), color);
+    setTimeout(() => ringAt(markerEl.querySelector('.chip'), color), 260);
+  }
+  function turnTo(index) {
+    if (index === state.page || index < 0 || index >= state.pages.length) return;
+    const dir = index > state.page ? 1 : -1;
+    state.page = index;
+    state.selected = null;
+    render();
+    anim(sheet.querySelector('.page'), [{ transform: `translateX(${dir * 28}px) rotate(${dir * 0.6}deg)`, opacity: 0.2 }, { transform: 'none', opacity: 1 }], { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+  let toastTimer = 0;
+  function toast(message) {
+    const el = $('#toast');
+    el.textContent = message;
+    el.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('is-on'), 2600);
+  }
+
+  /* ---------- Actions ---------- */
+  function findMarker(label) {
+    const base = baseOf(label);
+    const all = state.markers.filter((m) => baseOf(m.label) === base);
+    return all.find((m) => m.page === state.page) ?? all.sort((a, b) => a.page - b.page)[0] ?? null;
+  }
+  function jump(id) {
+    const item = Object.values(state.bands).flatMap((b) => b.items).find((it) => it.id === id);
+    if (!item) return;
+    state.current = id;
+    const marker = findMarker(item.label);
+    if (!marker) {
+      render();
+      toast(`아직 ‘${baseOf(item.label)}’ 마디 표시가 없습니다. 자세히 보기의 마디 섹션에서 놓을 수 있습니다.`);
+      return;
+    }
+    if (marker.page !== state.page) turnTo(marker.page); else render();
+    spotlight(sheet.querySelector(`[data-marker="${marker.id}"]`), colorOf(marker.label));
+  }
+  function ensureBand() {
+    if (!state.bands[state.page]) {
+      const at = state.pending?.page === state.page ? state.pending : { x: 0.022, y: 0.014 };
+      state.bands[state.page] = { x: at.x, y: at.y, items: [] };
+    }
+    return state.bands[state.page];
+  }
+  function addChip(label, fromEl) {
+    const band = ensureBand();
+    if (band.items.length >= 24) { toast('송폼은 24칸까지 붙일 수 있습니다.'); return; }
+    const item = { id: nid(), label };
+    const from = fromEl?.querySelector('.chip')?.getBoundingClientRect();
+    band.items.push(item);
+    state.selected = null;
+    render();
+    flyIn(from, sheet.querySelector(`.band [data-key="${item.id}"]`), colorOf(label));
+  }
+  function removeChip(id) {
+    const band = state.bands[state.page];
+    if (!band) return;
+    const el = sheet.querySelector(`.band [data-key="${id}"]`);
+    const commit = () => {
+      const before = snapshot('.band > .chip');
+      band.items = band.items.filter((it) => it.id !== id);
+      if (state.selected === id) state.selected = null;
+      render();
+      flip('.band > .chip', before);
+    };
+    if (el) { el.querySelector('.chip-x')?.remove(); peel(el).then(commit); } else commit();
+  }
+  function setRep(n) {
+    const items = state.bands[state.page]?.items ?? [];
+    const target = items.find((it) => it.id === state.selected) ?? items[items.length - 1];
+    if (!target) return;
+    target.label = withRep(target.label, n);
+    render();
+    stick(sheet.querySelector(`.band [data-key="${target.id}"]`));
+  }
+  function applyPreset(index) {
+    const band = ensureBand();
+    band.items = PRESETS[index][1].map((label) => ({ id: nid(), label }));
+    state.selected = null;
+    render();
+    sheet.querySelectorAll('.band > .chip').forEach((el, i) => anim(el, [{ transform: 'translateY(-1.2em) scale(.4) rotate(-12deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 380, delay: i * 45, easing: 'cubic-bezier(.3,.8,.3,1.4)', fill: 'backwards' }));
+  }
+  function clearBand() {
+    const chips = [...sheet.querySelectorAll('.band > .chip')];
+    Promise.all(chips.map((el, i) => anim(el, [{ transform: 'none', opacity: 1 }, { transform: `translateY(2em) rotate(${i % 2 ? 24 : -24}deg)`, opacity: 0 }], { duration: 300, delay: i * 25, easing: 'ease-in', fill: 'forwards' })?.finished)).then(() => {
+      delete state.bands[state.page];
+      state.selected = null;
+      render();
+    });
+  }
+  function addMarker(label, fx, fy) {
+    const marker = { id: nid(), page: state.page, label, x: clamp(fx, 0.02, 0.98), y: clamp(fy, 0.01, 0.99) };
+    state.markers.push(marker);
+    render();
+    const el = sheet.querySelector(`[data-marker="${marker.id}"]`);
+    anim(el, [{ transform: 'scale(1.7)', opacity: 0, filter: 'drop-shadow(0 18px 14px rgb(0 0 0 / .3))' }, { transform: 'scale(.9)', opacity: 1, offset: 0.6, filter: 'drop-shadow(0 2px 2px rgb(0 0 0 / .2))' }, { transform: 'none', opacity: 1 }], { duration: 380, easing: 'cubic-bezier(.3,.6,.3,1)' });
+    setTimeout(() => ringAt(el?.querySelector('.chip'), colorOf(label)), 200);
+  }
+  function removeMarker(id) {
+    const el = sheet.querySelector(`[data-marker="${id}"] .marker-body`);
+    const commit = () => { state.markers = state.markers.filter((m) => m.id !== id); render(); };
+    if (el) peel(el).then(commit); else commit();
+  }
+  function setView(view) {
+    if (view === state.view) return;
+    const swap = () => { state.view = view; state.selected = null; state.current = null; render(); };
+    if (document.startViewTransition && !reduceMotion) document.startViewTransition(swap); else swap();
+  }
+
+  document.addEventListener('click', (event) => {
+    const t = event.target.closest('[data-action]');
+    if (!t) return;
+    const { action, value, id } = t.dataset;
+    if (action === 'view') setView(t.dataset.view);
+    else if (action === 'prev') turnTo(state.page - 1);
+    else if (action === 'next') turnTo(state.page + 1);
+    else if (action === 'page') turnTo(Number(t.dataset.page));
+    else if (action === 'jump') jump(id);
+    else if (action === 'mode') { state.mode = value; state.armed = value === 'section' ? state.armed ?? 'V1' : null; render(); }
+    else if (action === 'pick') {
+      if (state.mode === 'band') addChip(t.dataset.label, t);
+      else { state.armed = t.dataset.label; render(); }
+    }
+    else if (action === 'select') { state.selected = state.selected === id ? null : id; render(); }
+    else if (action === 'remove-chip') removeChip(id);
+    else if (action === 'remove-marker') removeMarker(id);
+    else if (action === 'rep') setRep(Number(value));
+    else if (action === 'preset') applyPreset(Number(value));
+    else if (action === 'clear-band') clearBand();
+    else if (action === 'size' || action === 'look') {
+      const before = snapshot('.band, .marker');
+      state[action] = value;
+      render();
+      flip('.band, .marker', before, true);
+    }
+    else if (action === 'reset') { Object.assign(state, sampleState(), { page: 0, selected: null, current: null, pending: null }); render(); toast('샘플 악보로 되돌렸습니다.'); }
+  });
+
+  /* ---------- Direct manipulation on the page (자세히 보기) ---------- */
+  let drag = null;
+  sheet.addEventListener('pointerdown', (e) => {
+    if (!editing() || e.button > 0 || e.target.closest('.chip-x')) return;
+    const pageEl = e.target.closest('.page');
+    if (!pageEl) return;
+    const r = pageEl.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    const bandEl = e.target.closest('.band'), markerEl = e.target.closest('.marker');
+    if (bandEl || markerEl) {
+      const obj = bandEl ? state.bands[state.page] : state.markers.find((m) => m.id === markerEl.dataset.marker);
+      drag = { el: bandEl || markerEl, obj, kind: bandEl ? 'band' : 'marker', r, sx: e.clientX, sy: e.clientY, ox: obj.x, oy: obj.y, nx: obj.x, ny: obj.y, moved: false, chipId: e.target.closest('[data-chip]')?.dataset.chip ?? null };
+      drag.el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
+    if (state.mode === 'section') {
+      if (!state.armed) { toast('먼저 오른쪽에서 놓을 섹션 칩을 고르세요.'); return; }
+      addMarker(state.armed, fx, fy);
+      return;
+    }
+    const target = { x: clamp(fx, 0, 0.8), y: clamp(fy - 0.015, 0, 0.95) };
+    const band = state.bands[state.page];
+    if (band?.items.length) {
+      const before = snapshot('.band');
+      Object.assign(band, target);
+      render();
+      flip('.band', before);
+    } else {
+      state.pending = { page: state.page, ...target };
+      render();
+    }
+  });
+  sheet.addEventListener('pointermove', (e) => {
+    if (drag) {
+      if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+      if (!drag.moved) { drag.moved = true; drag.el.classList.add('is-grabbed'); }
+      const lim = drag.kind === 'band' ? [0, 0.8, 0, 0.95] : [0.02, 0.98, 0.01, 0.99];
+      drag.nx = clamp(drag.ox + (e.clientX - drag.sx) / drag.r.width, lim[0], lim[1]);
+      drag.ny = clamp(drag.oy + (e.clientY - drag.sy) / drag.r.height, lim[2], lim[3]);
+      drag.el.style.left = `${drag.nx * 100}%`;
+      drag.el.style.top = `${drag.ny * 100}%`;
+      if (drag.kind === 'band') drag.el.style.maxWidth = `${(1 - drag.nx - 0.02) * 100}%`;
+      return;
+    }
+    const ghost = sheet.querySelector('.ghost');
+    const pageEl = e.target.closest('.page');
+    if (!ghost || !pageEl || e.target.closest('.band, .marker')) { if (ghost) ghost.hidden = true; return; }
+    const r = pageEl.getBoundingClientRect();
+    ghost.hidden = false;
+    ghost.style.left = `${((e.clientX - r.left) / r.width) * 100}%`;
+    ghost.style.top = `${((e.clientY - r.top) / r.height) * 100}%`;
+  });
+  sheet.addEventListener('pointerleave', () => { const ghost = sheet.querySelector('.ghost'); if (ghost) ghost.hidden = true; });
+  const endDrag = (cancel) => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (d.moved && !cancel) {
+      d.obj.x = d.nx; d.obj.y = d.ny;
+      render();
+      const el = d.kind === 'band' ? sheet.querySelector('.band') : sheet.querySelector(`[data-marker="${d.obj.id}"]`);
+      anim(el, [{ transform: 'translateY(-4px) scale(1.03)' }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.3,.7,.3,1.5)' });
+    } else if (!d.moved && d.chipId && !cancel) {
+      state.selected = state.selected === d.chipId ? null : d.chipId;
+      render();
+    } else {
+      render();
+    }
+  };
+  sheet.addEventListener('pointerup', () => endDrag(false));
+  sheet.addEventListener('pointercancel', () => endDrag(true));
+
+  /* ---------- Upload: images in file-name order, PDFs page by page ---------- */
+  async function imageToPage(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale); canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return { src: canvas.toDataURL('image/jpeg', 0.9), w: canvas.width, h: canvas.height };
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function pdfToPages(file) {
+    const base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/';
+    const pdfjs = await import(`${base}pdf.min.mjs`);
+    pdfjs.GlobalWorkerOptions.workerSrc = `${base}pdf.worker.min.mjs`;
+    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pages = [];
+    for (let n = 1; n <= Math.min(pdf.numPages, 12); n++) {
+      const page = await pdf.getPage(n);
+      const unit = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: Math.min(2, 1600 / Math.max(unit.width, unit.height)) });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      pages.push({ src: canvas.toDataURL('image/jpeg', 0.9), w: canvas.width, h: canvas.height });
+    }
+    await pdf.destroy();
+    return pages;
+  }
+  $('#upload').addEventListener('change', async (event) => {
+    const files = [...event.target.files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    event.target.value = '';
+    if (!files.length) return;
+    toast('악보를 불러오는 중입니다.');
+    try {
+      const pages = [];
+      for (const file of files) {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        pages.push(...(isPdf ? await pdfToPages(file) : [await imageToPage(file)]));
+      }
+      if (!pages.length) throw new Error('empty');
+      const items = songBand()?.band.items ?? PRESETS[0][1].map((label) => ({ id: nid(), label }));
+      Object.assign(state, { sample: false, pages: pages.slice(0, 12), page: 0, bands: { 0: { x: 0.022, y: 0.014, items } }, markers: [], selected: null, current: null, pending: null, title: files[0].name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
+      render();
+      toast(`${state.pages.length}페이지를 불러왔습니다. 송폼 띠는 1페이지에 옮겼고, 마디 표시는 새로 놓아 주세요.`);
+    } catch {
+      toast('악보를 열지 못했습니다. PDF, PNG, JPG, WebP 파일인지 확인해 주세요.');
+    }
+  });
+
+  render();
+  // The sample sheet is drawn before web fonts arrive; redraw it once they do.
+  document.fonts?.ready.then(() => {
+    if (!state.sample) return;
+    state.pages = [drawSamplePage(0), drawSamplePage(1)];
+    render();
+  });
+})();
+</script>
+<!-- publish:body-end -->
+</body>
+</html>
