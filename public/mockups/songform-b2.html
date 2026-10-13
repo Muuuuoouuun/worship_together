@@ -164,7 +164,10 @@ button.hud-chip:active { transform: scale(.94); }
 .tab-body { position: absolute; right: 0; top: 0; transform: translateY(-50%); display: flex; align-items: center; transition: filter .2s; }
 .tab-body::after { content: ""; width: 0; height: 0; border-top: .42em solid transparent; border-bottom: .42em solid transparent; border-left: .5em solid var(--c); margin-left: -.02em; }
 .look-glass .tab-body::after, .look-line .tab-body::after { border-left-color: color-mix(in srgb, var(--c) 80%, transparent); }
-.tab.is-editing { cursor: grab; touch-action: none; }
+.tab.is-editing, .workspace:not(.workspace-edit) .stage .tab, .workspace:not(.workspace-edit) .stage .band { cursor: grab; touch-action: none; }
+.band.is-grabbed .hud-chip { cursor: grabbing; }
+/* Small tabs on phones: a finger-sized invisible hit area so they can still be grabbed. */
+@media (pointer: coarse) { .tab .hud-chip::after { content: ""; position: absolute; inset: -16px; } }
 .tab.is-grabbed { cursor: grabbing; }
 .tab.is-live::before, .tab.is-linked::before { content: ""; position: absolute; left: 0; top: -1.9em; width: 86cqw; height: 3.8em; border-radius: .3em; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 34%, transparent), transparent 92%); pointer-events: none; transform-origin: left center; animation: wash 1.2s ease-out; }
 .tab.is-linked::before { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 22%, transparent), transparent 70%); animation-duration: .4s; }
@@ -740,8 +743,8 @@ button.hud-chip:active { transform: scale(.94); }
     sw.hidden = available.length < 2;
     sw.innerHTML = available.map((x) => `<button type="button" data-action="song" data-value="${x.id}" aria-pressed="${state.songId === x.id}">${esc(x.label)}</button>`).join('');
     $('#arrangerMeta').textContent = `${state.items.length}섹션 · ${totalBars()}마디 · 띠 ${state.band.page + 1}P${Object.keys(state.extra).length ? ' · 라이브 변경 있음' : ''}`;
-    $('#caption').innerHTML = `<span class="rec" aria-hidden="true"></span>${!editing() ? '<b>무대 미리보기</b>칩을 누르면 그 섹션부터' : `<b>편집 콘솔</b>${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
-    $('#hint').textContent = !editing() ? '' : state.mode === 'band' ? '레인을 끌어 순서를 바꾸고 틈의 +로 끼워 넣습니다. 띠와 탭은 악보에서 끌어 옮깁니다.' : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽 패드에서 놓을 섹션을 먼저 고르세요.';
+    $('#caption').innerHTML = `<span class="rec" aria-hidden="true"></span>${!editing() ? '<b>무대 미리보기</b>칩을 누르면 그 섹션부터 · 끌면 옮기기' : `<b>편집 콘솔</b>${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
+    $('#hint').textContent = !editing() ? '송폼 띠와 마디 탭은 끌어서 옮길 수 있습니다.' : state.mode === 'band' ? '레인을 끌어 순서를 바꾸고 틈의 +로 끼워 넣습니다. 띠와 탭은 악보에서 끌어 옮깁니다.' : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽 패드에서 놓을 섹션을 먼저 고르세요.';
     $('#darkToggle')?.addEventListener('change', (e) => { state.dark = e.target.checked; render(); });
     keepTabsOnPage();
     placePlayhead();
@@ -1156,13 +1159,15 @@ button.hud-chip:active { transform: scale(.94); }
     const item = e.target.closest('.track-item');
     if (item) pending = { el: item, sx: e.clientX, sy: e.clientY };
   });
+  // 무대 미리보기에서도 띠와 탭은 끌어서 옮긴다. 짧게 누르면 원래 동작(칩 → 그 섹션부터) 그대로.
   sheet.addEventListener('pointerdown', (e) => {
-    if (!editing() || e.button > 0 || e.target.closest('.chip-x')) return;
+    if (e.button > 0 || e.target.closest('.chip-x')) return;
     const pageEl = e.target.closest('.page');
     if (!pageEl) return;
     const r = pageEl.getBoundingClientRect();
     const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
     const bandEl = e.target.closest('.band'), tabEl = e.target.closest('.tab');
+    if (!editing() && !bandEl && !tabEl) return;
     if (bandEl || tabEl) {
       const obj = bandEl ? state.band : state.tabs.find((t) => t.id === tabEl.dataset.tab);
       drag = { el: bandEl || tabEl, obj, kind: bandEl ? 'band' : 'tab', r, sx: e.clientX, sy: e.clientY, ox: obj.x, oy: obj.y, nx: obj.x, ny: obj.y, moved: false, chipId: e.target.closest('[data-chip]')?.dataset.chip ?? null };
@@ -1181,7 +1186,13 @@ button.hud-chip:active { transform: scale(.94); }
     if (pending) { if (Math.hypot(e.clientX - pending.sx, e.clientY - pending.sy) > 6) { const p = pending; pending = null; beginReorder(e, p.el); } return; }
     if (drag) {
       if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
-      if (!drag.moved) { drag.moved = true; drag.el.classList.add('is-grabbed'); }
+      if (!drag.moved) { drag.moved = true; drag.el.classList.add('is-grabbed'); showLink(null); }
+      // Playback re-renders the sheet when the section changes; keep hold of the fresh element.
+      if (!drag.el.isConnected) {
+        drag.el = sheet.querySelector(drag.kind === 'band' ? '.band' : `[data-tab="${drag.obj.id}"]`);
+        if (!drag.el) return;
+        drag.el.classList.add('is-grabbed');
+      }
       const lim = drag.kind === 'band' ? [0, 0.8, 0, 0.95] : [0.06, 0.98, 0.01, 0.99];
       drag.nx = clamp(drag.ox + (e.clientX - drag.sx) / drag.r.width, lim[0], lim[1]);
       drag.ny = clamp(drag.oy + (e.clientY - drag.sy) / drag.r.height, lim[2], lim[3]);
@@ -1205,10 +1216,22 @@ button.hud-chip:active { transform: scale(.94); }
     if (!drag) return;
     const d = drag;
     drag = null;
-    if (d.moved && !cancel) { edit(null, () => { d.obj.x = d.nx; d.obj.y = d.ny; }); impact(d.kind === 'tab' ? sheet.querySelector(`[data-tab="${d.obj.id}"]`) : null, 'var(--stage)'); }
+    if (d.moved) swallowClick();
+    if (d.moved && !cancel) {
+      // 미리보기에는 되돌리기 버튼이 없으니 토스트로 되돌릴 길을 준다.
+      const message = editing() ? null : d.kind === 'band' ? '송폼 띠를 옮겼습니다.' : `‘${d.obj.key}’ 탭을 옮겼습니다.`;
+      edit(message, () => { d.obj.x = d.nx; d.obj.y = d.ny; });
+      impact(d.kind === 'tab' ? sheet.querySelector(`[data-tab="${d.obj.id}"]`) : null, 'var(--stage)');
+    }
     else if (!d.moved && d.chipId && !cancel) { state.selected = state.selected === d.chipId ? null : d.chipId; render(); }
-    else render();
+    else if (d.moved || editing()) render();
   };
+  // A drag that ends over a chip button must not also count as a tap on it.
+  function swallowClick() {
+    const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+    document.addEventListener('click', stop, { capture: true, once: true });
+    setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 0);
+  }
   document.addEventListener('pointerup', () => finish(false));
   document.addEventListener('pointercancel', () => finish(true));
 
@@ -1217,6 +1240,7 @@ button.hud-chip:active { transform: scale(.94); }
     if (e.target.closest('input, textarea')) return;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z' && editing()) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if (e.key === 'Escape' && drag) { finish(true); return; }
     if (e.key === 'Escape') { if (!pop.hidden) closePop(); else if (state.selected || state.armed) { state.selected = null; if (state.mode === 'section') state.armed = null; render(); } return; }
     if (!editing()) {
       if (mod || e.altKey) return;

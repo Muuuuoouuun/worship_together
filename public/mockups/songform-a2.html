@@ -152,7 +152,11 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
 
 .marker { position: absolute; width: 0; height: 0; font-size: calc(var(--scale) * 2.5cqw); }
 .marker-body { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); display: flex; transition: transform .25s cubic-bezier(.3,.7,.3,1.5); }
-.marker.is-editing { cursor: grab; touch-action: none; }
+.marker.is-editing, .workspace[data-view="preview"] .stage .marker { cursor: grab; touch-action: none; }
+.workspace[data-view="preview"] .stage .band { cursor: grab; touch-action: none; }
+.marker.is-grabbed, .band.is-grabbed, .band.is-grabbed .chip { cursor: grabbing; }
+/* Small markers on phones: a finger-sized invisible hit area so they can still be grabbed. */
+@media (pointer: coarse) { .marker .chip::after { content: ""; position: absolute; inset: -16px; } }
 .marker.is-grabbed .chip { box-shadow: 0 0 0 .12em #fff, 0 .9em 1.4em -.2em rgb(0 0 0 / .35); }
 .marker.is-linked .marker-body { transform: translate(-50%, -50%) scale(1.18); }
 .marker.is-linked .chip { outline: .12em solid var(--c); outline-offset: .2em; }
@@ -468,7 +472,7 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     { id: 'hymn360', label: '찬 360장', title: '행군 나팔 소리에', meta: '찬 360장 · FIA ver. · Key D · ♩ 118', src: 'samples/hymn-360.jpg', w: 1131, h: 1600, size: 'S',
       aliases: { V2: 'V1', 간주: 'I', O: 'I' },
       band: { x: 0.022, y: 0.012 }, items: ['I', 'V1', 'C', 'C2', '간주', 'V2', 'C', 'C2', 'O'],
-      markers: [['I', 0.262, 0.103], ['V1', 0.133, 0.321], ['C', 0.152, 0.589], ['C2', 0.2, 0.784]] },
+      markers: [['I', 0.262, 0.103], ['V1', 0.133, 0.321], ['C', 0.24, 0.611], ['C2', 0.24, 0.79]] },
     { id: 'power', label: '능력과 위엄', title: '능력과 위엄', meta: '피아워십 · Key A · ♩ 67', src: 'samples/power-and-majesty.jpg', w: 1131, h: 1600, size: 'S',
       aliases: { V2: 'V1' },
       band: { x: 0.022, y: 0.012, w: 0.32 }, items: ['V1', 'PC', 'C', 'V2', 'PC', 'C×2'],
@@ -684,9 +688,9 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     const sw = $('#songSwitch');
     sw.hidden = available.length < 2;
     sw.innerHTML = available.map((x) => `<button type="button" data-action="song" data-value="${x.id}" aria-pressed="${state.songId === x.id}">${esc(x.label)}</button>`).join('');
-    $('#caption').innerHTML = `<span class="dot" aria-hidden="true"></span>${state.view === 'preview' ? '<b>팀원이 보는 화면</b>칩을 누르면 해당 마디로' : `<b>인도자 편집 화면</b>${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
-    $('#hint').textContent = !editing() ? '' : state.mode === 'band'
-      ? '칩을 끌어 순서를 바꾸고, 틈의 +로 끼워 넣습니다. 띠는 왼쪽 손잡이로 옮깁니다.'
+    $('#caption').innerHTML = `<span class="dot" aria-hidden="true"></span>${state.view === 'preview' ? '<b>팀원이 보는 화면</b>칩을 누르면 해당 마디로 · 끌면 옮기기' : `<b>인도자 편집 화면</b>${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
+    $('#hint').textContent = !editing() ? '송폼 띠와 마디 표시는 끌어서 옮길 수 있습니다.' : state.mode === 'band'
+      ? '칩을 끌어 순서를 바꾸고, 틈의 +로 끼워 넣습니다. 띠는 왼쪽 손잡이로, 마디 표시는 그대로 끌어 옮깁니다.'
       : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽에서 놓을 섹션 칩을 먼저 고르세요.';
   }
 
@@ -1025,24 +1029,27 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     anim(sheet.querySelector(`.band [data-key="${movedId}"]`), [{ transform: 'scale(1.14)' }, { transform: 'none' }], { duration: 280, easing: 'cubic-bezier(.3,.7,.3,1.5)' });
   };
 
-  /* ---------- Pointer input on the sheet and rail (자세히 보기) ---------- */
+  /* ---------- Pointer input on the sheet and rail ---------- */
+  // 미리보기에서도 띠와 마디 표시는 끌어서 옮긴다. 짧게 누르면 원래 동작(칩 → 마디로 이동) 그대로.
   let drag = null, pending = null;
+  function grab(e, el, r) {
+    const obj = el.matches('.band') ? state.bands[state.page] : state.markers.find((m) => m.id === el.dataset.marker);
+    if (!obj) return;
+    drag = { el, obj, kind: el.matches('.band') ? 'band' : 'marker', r, sx: e.clientX, sy: e.clientY, ox: obj.x, oy: obj.y, nx: obj.x, ny: obj.y, moved: false };
+    e.preventDefault();
+  }
   sheet.addEventListener('pointerdown', (e) => {
-    if (!editing() || e.button > 0 || e.target.closest('.chip-x, .ins')) return;
+    if (e.button > 0 || e.target.closest('.chip-x, .ins')) return;
     const pageEl = e.target.closest('.page');
     if (!pageEl) return;
     closePop();
     const r = pageEl.getBoundingClientRect();
+    const target = e.target.closest('.band, .marker');
+    if (!editing()) { if (target) grab(e, target, r); return; }
     const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
     const chipEl = e.target.closest('.band [data-chip]');
     if (chipEl) { pending = { el: chipEl, sx: e.clientX, sy: e.clientY }; e.preventDefault(); return; }
-    const bandEl = e.target.closest('.band'), markerEl = e.target.closest('.marker');
-    if (bandEl || markerEl) {
-      const obj = bandEl ? state.bands[state.page] : state.markers.find((m) => m.id === markerEl.dataset.marker);
-      drag = { el: bandEl || markerEl, obj, kind: bandEl ? 'band' : 'marker', r, sx: e.clientX, sy: e.clientY, ox: obj.x, oy: obj.y, nx: obj.x, ny: obj.y, moved: false };
-      e.preventDefault();
-      return;
-    }
+    if (target) { grab(e, target, r); return; }
     if (state.mode === 'section') {
       if (!state.armed) { toast('먼저 오른쪽에서 놓을 섹션 칩을 고르세요.'); return; }
       addMarker(state.armed, fx, fy);
@@ -1098,12 +1105,21 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     if (!drag) return;
     const d = drag;
     drag = null;
+    if (d.moved) swallowClick();
     if (d.moved && !cancel) {
-      edit(null, () => { d.obj.x = d.nx; d.obj.y = d.ny; });
+      // 미리보기에는 되돌리기 버튼이 없으니 토스트로 되돌릴 길을 준다.
+      const message = editing() ? null : d.kind === 'band' ? '송폼 띠를 옮겼습니다.' : `‘${baseOf(d.obj.label)}’ 마디 표시를 옮겼습니다.`;
+      edit(message, () => { d.obj.x = d.nx; d.obj.y = d.ny; });
       const el = d.kind === 'band' ? sheet.querySelector('.band') : sheet.querySelector(`[data-marker="${d.obj.id}"]`);
       anim(el, [{ transform: 'translateY(-4px) scale(1.03)' }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.3,.7,.3,1.5)' });
-    } else render();
+    } else if (d.moved) render();
   };
+  // A drag that ends over a chip button must not also count as a tap on it.
+  function swallowClick() {
+    const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+    document.addEventListener('click', stop, { capture: true, once: true });
+    setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 0);
+  }
   document.addEventListener('pointerup', () => finish(false));
   document.addEventListener('pointercancel', () => finish(true));
 
@@ -1113,6 +1129,7 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+    if (e.key === 'Escape' && drag) { finish(true); return; }
     if (e.key === 'Escape') { if (!pop.hidden) closePop(); else if (state.selected || state.armed) { state.selected = null; if (state.mode === 'section') state.armed = null; render(); } return; }
     if (!editing() || !state.selected) return;
     if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowUp')) { e.preventDefault(); moveChip(state.selected, -1); }
