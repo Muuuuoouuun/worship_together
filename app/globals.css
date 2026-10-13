@@ -299,6 +299,58 @@
     animation: stage-latest-cue-active 680ms ease-out both;
   }
 
+  /* Worship start / count-in / pulse screens. Colors come from --stage-accent* (see lib/stageAccent.ts);
+     timing from --stage-beat-duration and the wall-clock phase delays set by useStageBeatPhase. */
+  .stage-pulse-ripple {
+    animation: stage-pulse-ripple var(--stage-beat-duration, 0.833s) cubic-bezier(0.2, 0.7, 0.3, 1) var(--stage-beat-delay, 0ms) infinite;
+  }
+
+  .stage-pulse-orbit {
+    animation: stage-pulse-orbit calc(var(--stage-beat-duration, 0.833s) * 4) linear var(--stage-bar-delay, 0ms) infinite;
+  }
+
+  .stage-pulse-disc {
+    animation: stage-pulse-disc var(--stage-beat-duration, 0.833s) ease-out var(--stage-beat-delay, 0ms) infinite;
+  }
+
+  .stage-pulse-halo {
+    animation: stage-pulse-halo var(--stage-beat-duration, 0.833s) ease-out var(--stage-beat-delay, 0ms) infinite;
+  }
+
+  .stage-pulse-svg-ring {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: stage-pulse-svg-ring var(--stage-beat-duration, 0.833s) ease-out var(--stage-beat-delay, 0ms) infinite;
+  }
+
+  .stage-pulse-tick {
+    opacity: 0.35;
+    transition: opacity 320ms ease-out, transform 320ms ease-out;
+  }
+
+  .stage-pulse-tick--on {
+    opacity: 1;
+    transform: scale(1.45);
+    transition-duration: 60ms;
+  }
+
+  .stage-pulse-bar {
+    opacity: 0.28;
+    transform: scaleY(0.6);
+    transform-origin: 50% 100%;
+    transition: opacity 320ms ease-out, transform 320ms ease-out;
+  }
+
+  .stage-pulse-bar--on {
+    opacity: 1;
+    transform: scaleY(1);
+    transition-duration: 60ms;
+  }
+
+  .stage-count-pop {
+    animation: stage-count-pop 280ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  }
+
   /* Modern Glassmorphic & Tactile Polish Tokens */
   .glass-card {
     background: color-mix(in srgb, var(--card) 88%, transparent);
@@ -644,6 +696,75 @@
   100% {
     border-color: rgb(255 255 255 / 0.1);
     box-shadow: inset 0 0 0 0 rgb(110 231 183 / 0);
+  }
+}
+
+@keyframes stage-pulse-ripple {
+  0% {
+    transform: scale(0.42);
+    opacity: 0.75;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes stage-pulse-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes stage-pulse-disc {
+  0% {
+    transform: scale(1.07);
+  }
+
+  35%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes stage-pulse-halo {
+  0% {
+    transform: scale(0.94);
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: scale(1.14);
+    opacity: 0;
+  }
+}
+
+@keyframes stage-pulse-svg-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes stage-count-pop {
+  0% {
+    transform: scale(1.18);
+    opacity: 0.4;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 

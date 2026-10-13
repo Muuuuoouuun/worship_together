@@ -6,6 +6,10 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import SessionCueToasts from '@/components/session/SessionCueToasts';
 import SoundEngineerWorkspace from '@/components/session/SoundEngineerWorkspace';
 import LiveStageScoreViewer from '@/components/session/LiveStageScoreViewer';
+import StageAccentPicker from '@/components/session/stage/StageAccentPicker';
+import WorshipCountIn from '@/components/session/stage/WorshipCountIn';
+import WorshipPulseView from '@/components/session/stage/WorshipPulseView';
+import WorshipStartScreen from '@/components/session/stage/WorshipStartScreen';
 import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
 import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRealtimeSession';
 import { isPrototypeSessionId } from '@/lib/constants';
@@ -30,6 +34,10 @@ import {
 import { usePageTurner } from '@/hooks/usePageTurner';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import { useStageAccent } from '@/hooks/useStageAccent';
+import { getStageAccentStyle } from '@/lib/stageAccent';
+import { clearStagePhase, readStagePhase, writeStagePhase } from '@/lib/stagePhaseStorage';
+import { isUsableBpm } from '@/lib/stageTempo';
 import {
     Activity,
     ArrowLeft,
@@ -77,6 +85,8 @@ type StageAction = {
     Icon: LucideIcon;
     cooldown?: boolean;
 };
+
+type StagePhase = 'ready' | 'countin' | 'live';
 
 type StageFlash = {
     id: string;
@@ -226,7 +236,7 @@ export default function WorshipTeamMode({
     const [lastSentEntryId, setLastSentEntryId] = useState<string | null>(null);
     const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
     const [clientId] = useState(createClientId);
-    const [modeView, setModeView] = useState<'score' | 'stage' | 'sound'>('score');
+    const [modeView, setModeView] = useState<'score' | 'stage' | 'sound'>('stage');
     const [showScoreCuePanel, setShowScoreCuePanel] = useState(false);
     const [stageLocked, setStageLocked] = useState(false);
     const [recentActionId, setRecentActionId] = useState<string | null>(null);
@@ -235,6 +245,13 @@ export default function WorshipTeamMode({
     const [cooldownActionIds, setCooldownActionIds] = useState<string[]>([]);
     const [stageFlash, setStageFlash] = useState<StageFlash | null>(null);
     const [isPending, startTransition] = useTransition();
+    // Start screen → count-in → live stage. A tab that already started skips back to the stage on reload.
+    const [storedStagePhase] = useState(() => readStagePhase(session.id));
+    const [stagePhase, setStagePhase] = useState<StagePhase>(storedStagePhase ? 'live' : 'ready');
+    const [stageStartedAt, setStageStartedAt] = useState<number | null>(storedStagePhase?.startedAt ?? null);
+    const [sendStartSignal, setSendStartSignal] = useState(true);
+    const [startSignalId, setStartSignalId] = useState<string | null>(null);
+    const { accent, isDefault: isDefaultAccent, setAccent } = useStageAccent();
 
     const retryLastCue = () => {
         if (!lastSentEntryId) return;
@@ -265,10 +282,13 @@ export default function WorshipTeamMode({
     const displayedSection = currentSection ?? sections[0] ?? '대기';
     const sectionIndex = sections.indexOf(displayedSection);
     const nextSection = sectionIndex < 0 ? '섹션 확인' : sections[sectionIndex + 1] ?? '마지막 섹션';
-    const beatDurationStyle = {
-        '--beat-duration': `${currentBpm ? (60 / currentBpm).toFixed(3) : '0.75'}s`,
-    } as CSSProperties;
     const metronomeActive = bpmEnabled && isActive && Boolean(currentBpm);
+    const songPresetBpm = currentSong?.bpm ?? null;
+    const startBpm = isUsableBpm(currentBpm) ? currentBpm : isUsableBpm(songPresetBpm) ? songPresetBpm : null;
+    const canSendStartSignal = realtimeStatus === 'connected' || localTransportAvailable;
+    const connectionLabel = realtimeStatus === 'connected' ? '서버 연결됨' : localTransportAvailable ? '같은 브라우저 탭끼리 연결' : '전송 연결 없음';
+    const startSignalMessage = `예배를 시작합니다 · 시작 곡 「${(currentSong?.title ?? '첫 곡').slice(0, 60)}」${startBpm ? ` ${startBpm} BPM` : ''} · 4박 카운트인 후 들어갑니다.`;
+    const accentPicker = <StageAccentPicker accent={accent} isDefault={isDefaultAccent} onChange={setAccent} />;
 
     const handlePrevSong = () => {
         if (currentSongIndex > 0) {
@@ -316,7 +336,7 @@ export default function WorshipTeamMode({
                 navigator.vibrate?.(35);
             }
         },
-        enabled: isActive,
+        enabled: isActive && stagePhase === 'live',
     });
 
     const configuredPresets = quickFeedbackPresets.length > 0
@@ -470,8 +490,109 @@ export default function WorshipTeamMode({
         });
     };
 
+    const sendEveryoneCue = (message: string) => {
+        const entry: SessionFeedbackEntry = {
+            id: createClientId(),
+            clientId,
+            role: 'leader',
+            message,
+            createdAt: new Date().toISOString(),
+            teamId,
+            songId: currentSongId,
+            songTitle: currentSong?.title ?? null,
+            page: currentPage,
+            section: currentSection,
+            recipient: { kind: 'everyone' },
+        };
+        setLastSentEntryId(entry.id);
+        void sendFeedback(entry);
+        return entry.id;
+    };
+
+    const handleStartWorship = () => {
+        if (!isActive) return;
+        setStartSignalId(sendStartSignal && canSendStartSignal ? sendEveryoneCue(startSignalMessage) : null);
+        setStagePhase('countin');
+    };
+
+    const handleCountInComplete = () => {
+        const startedAt = Date.now();
+        writeStagePhase(session.id, { startedAt });
+        setStageStartedAt(startedAt);
+        if (startBpm) {
+            updateState({ bpmEnabled: true, bpmValue: startBpm });
+        }
+        setModeView('stage');
+        setStagePhase('live');
+    };
+
+    const handleCountInCancel = () => {
+        if (startSignalId && isActive) {
+            sendEveryoneCue('예배 시작을 취소했습니다. 다시 시작 신호를 기다려주세요.');
+        }
+        setStartSignalId(null);
+        setStagePhase('ready');
+    };
+
+    const handleOpenStageWithoutCountIn = () => {
+        writeStagePhase(session.id, { startedAt: null });
+        setStageStartedAt(null);
+        setModeView('stage');
+        setStagePhase('live');
+    };
+
+    const handleReturnToStart = () => {
+        clearStagePhase(session.id);
+        setStageStartedAt(null);
+        setStartSignalId(null);
+        setStagePhase('ready');
+    };
+
+    const accentStyle = getStageAccentStyle(accent) as CSSProperties;
+
+    if (stagePhase !== 'live') {
+        return (
+            <main className="safe-area-x min-h-dvh overflow-x-hidden bg-[#070D0C] text-[#FFF7E8]" style={accentStyle}>
+                <SessionCueToasts entries={feedbackLog} isActive={isActive} currentClientId={clientId} />
+                {stagePhase === 'ready' ? (
+                    <WorshipStartScreen
+                        workspaceHref={workspaceHref ?? `/session/${session.id}`}
+                        teamName={teamName}
+                        setlistTitle={setlistTitle}
+                        songs={songs}
+                        currentSong={currentSong}
+                        bpm={startBpm}
+                        isActive={currentSession ? isActive : session.is_active}
+                        participants={participants}
+                        myRole={selectedFeedbackRole}
+                        roleLabels={ROLE_LABELS}
+                        onChangeRole={setFeedbackRole}
+                        connectionLabel={connectionLabel}
+                        canSendSignal={canSendStartSignal}
+                        sendStartSignal={sendStartSignal}
+                        onToggleStartSignal={() => setSendStartSignal((value) => !value)}
+                        startSignalMessage={startSignalMessage}
+                        accentPicker={accentPicker}
+                        onStart={handleStartWorship}
+                        onSkip={handleOpenStageWithoutCountIn}
+                    />
+                ) : (
+                    <WorshipCountIn
+                        setlistTitle={setlistTitle}
+                        songTitle={currentSong?.title ?? null}
+                        songKey={currentSong?.original_key ?? null}
+                        bpm={startBpm}
+                        signalLabel={startSignalId ? getCueDeliveryLabel(cueDeliveries[startSignalId]) : null}
+                        onCancel={handleCountInCancel}
+                        onComplete={handleCountInComplete}
+                    />
+                )}
+            </main>
+        );
+    }
+
     return (
-        <main className="safe-area-x min-h-dvh overflow-x-hidden bg-[#050b0a] text-[#fff7e8]">
+        <main className="safe-area-x min-h-dvh overflow-x-hidden bg-[#050b0a] text-[#fff7e8]" style={accentStyle}>
             <SessionCueToasts entries={feedbackLog} isActive={isActive} currentClientId={clientId} />
             {stageFlash ? (
                 <div key={stageFlash.token} className="pointer-events-none fixed top-4 inset-x-4 z-50 flex justify-center animate-in slide-in-from-top duration-200">
@@ -620,7 +741,7 @@ export default function WorshipTeamMode({
                                     : 'text-white/60 hover:text-white'
                             }`}
                         >
-                            ⏱️ BPM 콘솔 뷰
+                            ⏱️ BPM 펄스 뷰
                         </button>
                         <button
                             type="button"
@@ -722,7 +843,7 @@ export default function WorshipTeamMode({
                     />
                 ) : (
                 <section
-                    className={`grid min-h-0 flex-1 gap-4 ${
+                    className={`grid min-h-0 flex-1 grid-cols-1 gap-4 ${
                         modeView === 'score' && !showScoreCuePanel
                             ? 'lg:grid-cols-1'
                             : 'lg:grid-cols-[minmax(0,1fr)_22rem]'
@@ -787,102 +908,34 @@ export default function WorshipTeamMode({
                             )}
                         </div>
                     ) : (
-                    <section
-                        className={`stage-bpm-panel order-1 relative overflow-hidden rounded-lg border border-[#f0b56b]/20 bg-[#f0b56b]/[0.075] p-3 sm:p-5 lg:order-none lg:col-start-1 lg:row-start-1 ${blinkActive ? 'stage-bpm-panel--beat' : ''} ${blinkActive && activeBeat === 1 ? 'stage-bpm-panel--downbeat' : ''}`}
-                        style={beatDurationStyle}
-                        data-testid="team-mode-bpm"
-                    >
-                        <div className="relative flex min-h-[16.5rem] flex-col justify-between gap-4 sm:min-h-[32rem] sm:gap-5 lg:min-h-full">
-                            <div className="grid grid-cols-[minmax(0,1fr)_7.75rem] gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,0.32fr)]">
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300 sm:text-xs sm:tracking-[0.2em]">
-                                        현재 섹션
-                                    </p>
-                                    <h1 className="mt-1.5 break-words text-3xl font-black leading-tight text-[#ffe0b8] sm:mt-2 sm:text-6xl">
-                                        {displayedSection}
-                                    </h1>
-                                </div>
-                                <div className="min-w-0 rounded-lg border border-[#ffe0b8]/25 bg-black/40 px-3 py-2.5 sm:px-4 sm:py-3">
-                                    <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-amber-300 sm:text-[10px] sm:tracking-[0.18em]">
-                                        다음
-                                    </p>
-                                    <p className="mt-1.5 break-words text-base font-black leading-tight text-white sm:mt-2 sm:text-xl">
-                                        {nextSection}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-between gap-2">
-                                <button
-                                    type="button"
-                                    onClick={handlePrevSection}
-                                    disabled={sectionIndex <= 0}
-                                    className="tap-target inline-flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20 disabled:opacity-25 transition active:scale-95"
-                                >
-                                    <ChevronLeft size={14} /> 이전 섹션
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleNextSection}
-                                    disabled={sectionIndex >= sections.length - 1}
-                                    className="tap-target inline-flex items-center gap-1 rounded-xl border border-[#ffe0b8]/40 bg-[#ffe0b8]/15 px-3 py-1.5 text-xs font-bold text-[#ffe0b8] hover:bg-[#ffe0b8]/25 disabled:opacity-25 transition active:scale-95"
-                                >
-                                    다음 섹션 <ChevronRight size={14} />
-                                </button>
-                            </div>
-
-                            <ol aria-label="송폼 진행 순서" className="flex flex-wrap gap-2">
-                                {sections.map((section, index) => <li key={`${index}:${section}`} aria-current={index === sectionIndex ? 'step' : undefined} className={`rounded-full border px-3 py-2 text-xs font-bold ${index === sectionIndex ? 'border-[#ffe0b8] bg-[#ffe0b8]/20 text-[#ffe0b8]' : index < sectionIndex ? 'border-emerald-300/25 text-emerald-200' : 'border-white/10 text-white/75'}`}>
-                                    {index < sectionIndex ? '✓ ' : index === sectionIndex ? '● ' : ''}{section}
-                                </li>)}
-                            </ol>
-
-                            <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] items-end gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:gap-5">
-                                <div>
-                                    <div className="flex items-end gap-3">
-                                        <p className={`stage-bpm-value font-serif text-6xl font-black leading-none text-[#ffe0b8] sm:text-8xl ${blinkActive ? 'stage-bpm-value--beat' : ''} ${blinkActive && activeBeat === 1 ? 'stage-bpm-value--downbeat' : ''}`}>
-                                            {currentBpm ?? '--'}
-                                        </p>
-                                        <div className="flex flex-col items-start gap-1 pb-1 sm:gap-2 sm:pb-2">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300 sm:text-xs sm:tracking-[0.18em]">
-                                                BPM
-                                            </p>
-                                            <p className="inline-flex rounded-full bg-[#ffe0b8]/[0.12] px-2 py-1 text-[10px] font-black text-[#ffe0b8] sm:px-3 sm:text-xs">
-                                                Key {currentSong?.original_key ?? '-'}
-                                            </p>
-                                            <p className={`hidden rounded-full px-2 py-1 text-[10px] font-bold sm:inline-flex sm:px-3 sm:text-xs ${metronomeActive ? 'bg-emerald-300/[0.12] text-emerald-100' : 'bg-white/10 text-white/75'}`}>
-                                                {metronomeActive ? '시각 템포' : '대기'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-4 grid grid-cols-4 gap-2 sm:mt-8" aria-label="4박 시각 신호">
-                                        {[1, 2, 3, 4].map((beat) => {
-                                            const isActiveBeat = activeBeat === beat && blinkActive;
-                                            const isDownBeat = beat === 1;
-
-                                            return (
-                                                <span
-                                                    key={beat}
-                                                    className={`stage-beat-track rounded-full ${isActiveBeat ? 'stage-beat-track--active' : ''} ${isActiveBeat && isDownBeat ? 'stage-beat-track--downbeat' : ''} ${isDownBeat ? 'h-4 sm:h-5' : 'h-3 sm:h-4'}`}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                <div className={`stage-metronome-shell relative h-28 overflow-hidden rounded-lg border border-[#ffe0b8]/20 bg-black/22 sm:h-44 ${blinkActive ? 'stage-metronome-shell--beat' : ''}`}>
-                                    <div className="absolute inset-x-5 bottom-6 h-1 rounded-full bg-[#ffe0b8]/16 sm:inset-x-9 sm:bottom-9" />
-                                    <div className={`absolute left-1/2 top-6 h-16 w-1 -translate-x-1/2 rounded-full bg-[#ffe0b8] sm:top-9 sm:h-24 ${metronomeActive ? 'bpm-metronome-arm' : 'opacity-35'}`}>
-                                        <span className="absolute -top-1 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full bg-[#ffe0b8] shadow-[0_0_32px_rgba(255,224,184,0.48)] sm:-top-1.5 sm:h-5 sm:w-5" />
-                                    </div>
-                                    <div className="absolute bottom-5 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full bg-[#ffe0b8] sm:bottom-8 sm:h-6 sm:w-6" />
-                                    {metronomeActive ? (
-                                        <div className="bpm-beat-ring absolute bottom-0 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full border border-[#ffe0b8]/35 sm:bottom-1 sm:h-24 sm:w-24" />
-                                    ) : null}
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+                    <div className="order-1 min-w-0 lg:order-none lg:col-start-1 lg:row-start-1">
+                        <WorshipPulseView
+                            songs={songs}
+                            currentSong={currentSong}
+                            currentSongIndex={currentSongIndex}
+                            bpm={currentBpm}
+                            bpmEnabled={bpmEnabled}
+                            metronomeActive={metronomeActive}
+                            activeBeat={activeBeat}
+                            blinkActive={blinkActive}
+                            canToggleTempo={isActive && Boolean(currentBpm)}
+                            onToggleTempo={() => updateState({ bpmEnabled: !bpmEnabled })}
+                            sections={sections}
+                            sectionIndex={sectionIndex}
+                            displayedSection={displayedSection}
+                            nextSection={nextSection}
+                            onPrevSection={handlePrevSection}
+                            onNextSection={handleNextSection}
+                            onSelectSection={(section) => updateState({ section })}
+                            onPrevSong={handlePrevSong}
+                            onNextSong={handleNextSong}
+                            startedAt={stageStartedAt}
+                            deviceCount={participants.length + 1}
+                            deviceCaption={startSignalId ? `시작 신호 · ${getCueDeliveryLabel(cueDeliveries[startSignalId])}` : connectionLabel}
+                            accentPicker={accentPicker}
+                            onReturnToStart={handleReturnToStart}
+                        />
+                    </div>
                     )}
 
                     <aside
