@@ -286,6 +286,7 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
         <a class="past" href="songform-a.html">1차 A</a>
         <a class="past" href="songform-b.html">1차 B</a>
       </nav>
+      <div class="seg" role="group" aria-label="예시 악보" id="songSwitch" hidden></div>
       <div class="seg" role="group" aria-label="기기 너비">
         <button type="button" data-action="device" data-value="desktop" aria-pressed="true">데스크톱</button>
         <button type="button" data-action="device" data-value="tablet" aria-pressed="false">태블릿</button>
@@ -296,7 +297,7 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
         악보 올리기
       </label>
       <input class="sr-only" type="file" id="upload" accept="application/pdf,image/png,image/jpeg,image/webp" multiple>
-      <button type="button" class="btn quiet" data-action="reset">샘플 악보</button>
+      <button type="button" class="btn quiet" data-action="reset">예시 되돌리기</button>
     </div>
   </header>
 
@@ -364,6 +365,7 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     { key: 'V2', name: '2절', en: 'Verse 2', group: 'verse' },
     { key: 'PC', name: '프리코러스', en: 'Pre-Chorus', group: 'pre' },
     { key: 'C', name: '후렴', en: 'Chorus', group: 'chorus' },
+    { key: 'C2', name: '후렴 2', en: 'Chorus 2', group: 'chorus' },
     { key: 'B', name: '브릿지', en: 'Bridge', group: 'bridge' },
     { key: '간주', name: '간주', en: 'Interlude', group: 'inter' },
     { key: 'Tag', name: '태그', en: 'Tag', group: 'tag' },
@@ -459,7 +461,40 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
       ],
     };
   }
-  const state = { view: 'preview', device: 'desktop', page: 0, size: 'M', look: 'solid', mode: 'band', armed: null, selected: null, current: null, pending: null, ...sampleState() };
+  /* ---------- Example sheets: real lead sheets published next to this page as images ---------- */
+  // Positions are fractions of the page, measured on 1131×1600 renders. Sections that reuse printed music
+  // (intro/interlude/outro, verse 1/2) point at one marker through `aliases`.
+  const SONGS = [
+    { id: 'hymn360', label: '찬 360장', title: '행군 나팔 소리에', meta: '찬 360장 · FIA ver. · Key D · ♩ 118', src: 'samples/hymn-360.jpg', w: 1131, h: 1600, size: 'S',
+      aliases: { V2: 'V1', 간주: 'I', O: 'I' },
+      band: { x: 0.022, y: 0.012 }, items: ['I', 'V1', 'C', 'C2', '간주', 'V2', 'C', 'C2', 'O'],
+      markers: [['I', 0.262, 0.103], ['V1', 0.133, 0.321], ['C', 0.152, 0.589], ['C2', 0.2, 0.784]] },
+    { id: 'power', label: '능력과 위엄', title: '능력과 위엄', meta: '피아워십 · Key A · ♩ 67', src: 'samples/power-and-majesty.jpg', w: 1131, h: 1600, size: 'S',
+      aliases: { V2: 'V1' },
+      band: { x: 0.022, y: 0.012, w: 0.32 }, items: ['V1', 'PC', 'C', 'V2', 'PC', 'C×2'],
+      markers: [['V1', 0.23, 0.1375], ['PC', 0.221, 0.475], ['C', 0.212, 0.653]] },
+  ];
+  const SYNTH = { id: 'synth', label: '합성 예시', size: 'M' };
+  function songState(song) {
+    if (song.id === 'synth') return { ...sampleState(), aliases: {} };
+    return {
+      sample: false, title: song.title, meta: song.meta, aliases: song.aliases,
+      pages: [{ src: song.src, w: song.w, h: song.h }],
+      bands: { 0: { ...song.band, items: song.items.map((label) => ({ id: nid(), label })) } },
+      markers: song.markers.map(([label, x, y]) => ({ id: nid(), page: 0, label, x, y })),
+    };
+  }
+  let available = [];
+  const saved = {};
+  const SONG_KEYS = ['pages', 'bands', 'markers', 'title', 'meta', 'aliases', 'sample', 'size'];
+  function loadSong(id) {
+    if (state.songId && state.songId !== id) saved[state.songId] = Object.fromEntries(SONG_KEYS.map((k) => [k, state[k]]));
+    const song = [...SONGS, SYNTH].find((x) => x.id === id);
+    Object.assign(state, saved[id] ?? { ...songState(song), size: song.size ?? 'M' }, { songId: id, page: 0, selected: null, current: null, pending: null });
+    history.past.length = 0;
+    history.future.length = 0;
+  }
+  const state = { view: 'preview', device: 'desktop', page: 0, size: 'M', look: 'solid', mode: 'band', armed: null, selected: null, current: null, pending: null, songId: null, aliases: {}, ...sampleState() };
 
   /* ---------- History ---------- */
   const history = { past: [], future: [] };
@@ -495,9 +530,12 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
   const songBand = () => { const key = Object.keys(state.bands).sort((a, b) => a - b).find((k) => state.bands[k].items.length); return key === undefined ? null : { page: Number(key), band: state.bands[key] }; };
   const allItems = () => Object.values(state.bands).flatMap((b) => b.items);
   function findMarker(label, preferPage = state.page) {
-    const all = state.markers.filter((m) => baseOf(m.label) === baseOf(label));
-    return all.find((m) => m.page === preferPage) ?? all.sort((a, b) => a.page - b.page)[0] ?? null;
+    const pick = (key) => { const all = state.markers.filter((m) => baseOf(m.label) === key); return all.find((m) => m.page === preferPage) ?? all.sort((a, b) => a.page - b.page)[0] ?? null; };
+    const base = baseOf(label);
+    return pick(base) ?? (state.aliases?.[base] ? pick(state.aliases[base]) : null);
   }
+  // A section that reuses another section's printed music, e.g. V2 → "V1 구간".
+  const sharedNote = (label, m) => (m && baseOf(m.label) !== baseOf(label) ? ` · ${esc(baseOf(m.label))} 구간` : '');
   const lineOf = (m) => state.markers.filter((o) => o.page === m.page).sort((a, b) => a.y - b.y).indexOf(m) + 1;
 
   /* ---------- Markup ---------- */
@@ -532,7 +570,7 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     }).join('');
     const grip = edit ? `<button type="button" class="band-grip" aria-label="송폼 띠 옮기기">${GRIP_ICON}</button>` : '';
     const tail = edit ? `<button type="button" class="ins ins-tail" data-action="insert" data-index="${band.items.length}" aria-label="끝에 추가">${PLUS_ICON}</button>` : '';
-    return `<div class="band${edit ? ' is-editing' : ''}" data-key="band-${index}" data-band="${index}" style="left:${band.x * 100}%;top:${band.y * 100}%;max-width:${(1 - band.x - 0.02) * 100}%" ${interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"'}>${grip}${chips}${tail}</div>`;
+    return `<div class="band${edit ? ' is-editing' : ''}" data-key="band-${index}" data-band="${index}" style="left:${band.x * 100}%;top:${band.y * 100}%;max-width:${(band.w ?? 1 - band.x - 0.02) * 100}%" ${interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"'}>${grip}${chips}${tail}</div>`;
   }
   function markerMarkup(m, edit) {
     const x = edit ? `<button type="button" class="chip-x" data-action="remove-marker" data-id="${m.id}" aria-label="${esc(baseOf(m.label))} 마디 표시 지우기">${X_ICON}</button>` : '';
@@ -556,7 +594,7 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
             <span class="road-step">${String(i + 1).padStart(2, '0')}</span>
             <span class="chip" style="--c:${colorOf(item.label)}">${chipInner(item.label)}</span>
             <span class="road-name"><b>${esc(sectionOf(item.label).name)}${repOf(item.label) > 1 ? ` ${repOf(item.label)}번` : ''}</b><small>${esc(sectionOf(item.label).en)}</small></span>
-            <span class="road-where">${m ? `${m.page + 1}p · ${lineOf(m)}줄` : '표시 없음'}</span>
+            <span class="road-where">${m ? `${m.page + 1}p · ${lineOf(m)}줄${sharedNote(item.label, m)}` : '표시 없음'}</span>
           </button></li>`;
         }).join('')}</ol><p class="note">칩을 누르면 그 섹션이 시작되는 마디로 이동합니다. 올려 두면 마디까지 선이 이어집니다.</p>`
       : '<p class="empty">아직 송폼이 없습니다. 자세히 보기에서 칩을 눌러 만드세요.</p>';
@@ -589,7 +627,7 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
             <button type="button" class="grip" aria-label="${i + 1}번째 ${esc(baseOf(item.label))} 끌어서 옮기기">${GRIP_ICON}</button>
             <span class="road-step">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="order-pick" data-action="select" data-id="${item.id}" data-item="${item.id}" aria-pressed="${state.selected === item.id}"><span class="chip" style="--c:${colorOf(item.label)}">${chipInner(item.label)}</span><span>${esc(sectionOf(item.label).name)} <small>${esc(sectionOf(item.label).en)}</small></span></button>
-            ${m ? `<span class="where">${m.page + 1}p · ${lineOf(m)}줄</span>` : `<button type="button" class="where-btn" data-action="place" data-label="${esc(baseOf(item.label))}">마디 놓기</button>`}
+            ${m ? `<span class="where">${m.page + 1}p · ${lineOf(m)}줄${sharedNote(item.label, m)}</span>` : `<button type="button" class="where-btn" data-action="place" data-label="${esc(baseOf(item.label))}">마디 놓기</button>`}
             <button type="button" class="mini-x" data-action="remove-chip" data-id="${item.id}" aria-label="${i + 1}번째 ${esc(baseOf(item.label))} 빼기">${X_ICON}</button></li>`;
         }).join('')}</ol>` : '<p class="empty">섹션 칩을 진행 순서대로 눌러 보세요.</p>'}
         ${missing.length ? `<p class="note">마디 표시가 없는 섹션: ${missing.map(esc).join(', ')}. ‘마디 놓기’를 누르면 바로 놓을 수 있습니다.</p>` : ''}
@@ -642,7 +680,10 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     $('#pageLabel').textContent = `${state.page + 1} / ${state.pages.length}`;
     $('[data-action="prev"]').disabled = state.page === 0;
     $('[data-action="next"]').disabled = state.page >= state.pages.length - 1;
-    $('#songMeta').textContent = `${state.title} · ${state.meta} · ${state.pages.length}페이지`;
+    $('#songMeta').textContent = `${state.title} · ${state.meta} · ${state.pages.length}페이지${state.sample ? ' · 합성 예시 악보' : ''}`;
+    const sw = $('#songSwitch');
+    sw.hidden = available.length < 2;
+    sw.innerHTML = available.map((x) => `<button type="button" data-action="song" data-value="${x.id}" aria-pressed="${state.songId === x.id}">${esc(x.label)}</button>`).join('');
     $('#caption').innerHTML = `<span class="dot" aria-hidden="true"></span>${state.view === 'preview' ? '<b>팀원이 보는 화면</b>칩을 누르면 해당 마디로' : `<b>인도자 편집 화면</b>${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
     $('#hint').textContent = !editing() ? '' : state.mode === 'band'
       ? '칩을 끌어 순서를 바꾸고, 틈의 +로 끼워 넣습니다. 띠는 왼쪽 손잡이로 옮깁니다.'
@@ -752,7 +793,8 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     const item = allItems().find((it) => it.id === itemId);
     const page = sheet.querySelector('.page');
     if (!item || !page) return;
-    const marker = state.markers.find((m) => m.page === state.page && baseOf(m.label) === baseOf(item.label));
+    const found = findMarker(item.label);
+    const marker = found && found.page === state.page ? found : null;
     const markerEl = marker && sheet.querySelector(`[data-marker="${marker.id}"]`);
     linked = itemId;
     sheet.querySelectorAll(`.band [data-item="${itemId}"]`).forEach((el) => el.classList.add('is-linked'));
@@ -912,7 +954,16 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
     else if (action === 'preset') applyPreset(Number(value));
     else if (action === 'clear-band') clearBand();
     else if (action === 'size' || action === 'look') { const before = snapshot('.band, .marker'); state[action] = value; render(); flip('.band, .marker', before, true); }
-    else if (action === 'reset') { Object.assign(state, sampleState(), { page: 0, selected: null, current: null, pending: null }); history.past.length = 0; history.future.length = 0; render(); toast('샘플 악보로 되돌렸습니다.'); }
+    else if (action === 'song') { if (value !== state.songId) { loadSong(value); render(); anim(sheet.querySelector('.page'), [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' }); } }
+    else if (action === 'reset') {
+      if (state.songId === 'upload') { toast('올린 악보는 되돌릴 예시가 없습니다. 위에서 예시 악보를 고르세요.'); return; }
+      const id = state.songId ?? 'synth';
+      delete saved[id];
+      state.songId = null;
+      loadSong(id);
+      render();
+      toast('예시 악보를 처음 상태로 되돌렸습니다.');
+    }
   });
 
   /* ---------- Reordering (sheet band and rail list share one routine) ---------- */
@@ -1113,8 +1164,10 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
         pages.push(...(isPdf ? await pdfToPages(file) : [await imageToPage(file)]));
       }
       if (!pages.length) throw new Error('empty');
-      const items = songBand()?.band.items ?? PRESETS[0][1].map((label) => ({ id: nid(), label }));
-      Object.assign(state, { sample: false, pages: pages.slice(0, 12), page: 0, bands: { 0: { x: 0.022, y: 0.014, items } }, markers: [], selected: null, current: null, pending: null, title: files[0].name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
+      const items = (songBand()?.band.items ?? PRESETS[0][1].map((label) => ({ id: nid(), label }))).map((it) => ({ ...it }));
+      if (state.songId && state.songId !== 'upload') saved[state.songId] = Object.fromEntries(SONG_KEYS.map((k) => [k, state[k]]));
+      if (!available.some((x) => x.id === 'upload')) available.push({ id: 'upload', label: '올린 악보' });
+      Object.assign(state, { songId: 'upload', sample: false, aliases: {}, pages: pages.slice(0, 12), page: 0, bands: { 0: { x: 0.022, y: 0.014, items } }, markers: [], selected: null, current: null, pending: null, title: files[0].name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
       history.past.length = 0; history.future.length = 0;
       render();
       toast(`${state.pages.length}페이지를 불러왔습니다. 송폼 띠는 1페이지에 옮겼고, 마디 표시는 새로 놓아 주세요.`);
@@ -1124,8 +1177,19 @@ button.chip:active, .demo-press { transform: translateY(.04em) scale(.94); box-s
   });
 
   $('#states').innerHTML = statesMarkup();
-  render();
-  document.fonts?.ready.then(() => { if (!state.sample) return; state.pages = [drawSamplePage(0), drawSamplePage(1)]; render(); });
+  document.fonts?.ready.then(() => { if (!state.sample || !available.length) return; state.pages = [drawSamplePage(0), drawSamplePage(1)]; render(); });
+  // Use the real example sheets when their images are published alongside; otherwise the synthetic one.
+  // First render waits for that check (local files answer in milliseconds) so the wrong sheet never flashes.
+  const probe = (src) => new Promise((resolve) => { const img = new Image(); img.onload = () => resolve(true); img.onerror = () => resolve(false); img.src = src; });
+  const fallback = setTimeout(() => { if (!available.length) { available = [SYNTH]; state.songId = 'synth'; render(); } }, 1500);
+  Promise.all(SONGS.map((x) => probe(x.src))).then((ok) => {
+    clearTimeout(fallback);
+    const real = SONGS.filter((_, i) => ok[i]);
+    if (!real.length) { if (!available.length) { available = [SYNTH]; state.songId = 'synth'; render(); } return; }
+    available = real;
+    loadSong(real[0].id);
+    render();
+  });
 })();
 </script>
 <!-- publish:body-end -->

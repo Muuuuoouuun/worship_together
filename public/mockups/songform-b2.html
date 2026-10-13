@@ -305,6 +305,7 @@ button.hud-chip:active { transform: scale(.94); }
         <a class="past" href="songform-a.html">1차 A</a>
         <a class="past" href="songform-b.html">1차 B</a>
       </nav>
+      <div class="seg" role="group" aria-label="예시 악보" id="songSwitch" hidden></div>
       <div class="seg" role="group" aria-label="기기 너비">
         <button type="button" data-action="device" data-value="desktop" aria-pressed="true">데스크톱</button>
         <button type="button" data-action="device" data-value="tablet" aria-pressed="false">태블릿</button>
@@ -315,7 +316,7 @@ button.hud-chip:active { transform: scale(.94); }
         악보 올리기
       </label>
       <input class="sr-only" type="file" id="upload" accept="application/pdf,image/png,image/jpeg,image/webp" multiple>
-      <button type="button" class="btn" data-action="reset">샘플 악보</button>
+      <button type="button" class="btn" data-action="reset">예시 되돌리기</button>
     </div>
   </header>
 
@@ -390,6 +391,7 @@ button.hud-chip:active { transform: scale(.94); }
     { key: 'V2', name: '2절', en: 'Verse 2', group: 'verse', bars: 8 },
     { key: 'PC', name: '프리코러스', en: 'Pre-Chorus', group: 'pre', bars: 4 },
     { key: 'C', name: '후렴', en: 'Chorus', group: 'chorus', bars: 8 },
+    { key: 'C2', name: '후렴 2', en: 'Chorus 2', group: 'chorus', bars: 8 },
     { key: 'B', name: '브릿지', en: 'Bridge', group: 'bridge', bars: 8 },
     { key: '간주', name: '간주', en: 'Interlude', group: 'inter', bars: 4 },
     { key: 'Tag', name: '태그', en: 'Tag', group: 'tag', bars: 2 },
@@ -404,7 +406,6 @@ button.hud-chip:active { transform: scale(.94); }
     ['프리코러스', [['I', 1], ['V1', 1], ['PC', 1], ['C', 1], ['V2', 1], ['PC', 1], ['C', 1], ['B', 2], ['C', 2], ['O', 1]]],
     ['짧은 곡', [['I', 1], ['V1', 1], ['C', 2], ['B', 1], ['C', 1], ['O', 1]]],
   ];
-  const BPM = 68;
   const SYSTEM_TOPS = [360, 650, 940, 1230];
   const X_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
   const PLUS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
@@ -468,14 +469,48 @@ button.hud-chip:active { transform: scale(.94); }
   const makeItem = (key, rep = 1) => ({ id: nid(), key, rep, bars: sec(key).bars });
   function sampleState() {
     return {
-      sample: true, title: '주의 길', meta: 'Key C · ♩ 68',
+      sample: true, title: '주의 길', meta: 'Key C',
       pages: [drawSamplePage(0), drawSamplePage(1)],
       band: { page: 0, x: 0.022, y: 0.014 },
       items: PRESETS[0][1].map(([k, r]) => makeItem(k, r)),
       tabs: [tabAt(0, 0, 'I'), tabAt(0, 1, 'V1'), tabAt(0, 2, 'C'), tabAt(0, 3, 'V2'), tabAt(1, 0, 'B'), tabAt(1, 3, 'O')],
     };
   }
-  const state = { view: 'preview', device: 'desktop', page: 0, size: 'M', look: 'neon', dark: true, mode: 'band', armed: null, selected: null, playing: false, counting: false, pos: 0, speed: 4, extra: {}, ...sampleState() };
+  /* ---------- Example sheets: real lead sheets published next to this page as images ---------- */
+  // Tabs point at the first chord of each section, from just above its first staff (1131×1600 renders).
+  // Sections that reuse printed music (intro/interlude/outro, verse 1/2) share one tab through `aliases`.
+  const SONGS = [
+    { id: 'hymn360', label: '찬 360장', title: '행군 나팔 소리에', meta: '찬 360장 · FIA ver. · Key D', bpm: 118, src: 'samples/hymn-360.jpg', w: 1131, h: 1600, size: 'S',
+      aliases: { V2: 'V1', 간주: 'I', O: 'I' }, band: { page: 0, x: 0.022, y: 0.012 },
+      items: [['I', 1, 8], ['V1', 1, 8], ['C', 1, 8], ['C2', 1, 8], ['간주', 1, 8], ['V2', 1, 8], ['C', 1, 8], ['C2', 1, 8], ['O', 1, 8]],
+      tabs: [['I', 0.11, 0.1438], ['V1', 0.11, 0.3475], ['C', 0.11, 0.6156], ['C2', 0.11, 0.8006]] },
+    { id: 'power', label: '능력과 위엄', title: '능력과 위엄', meta: '피아워십 · Key A', bpm: 67, src: 'samples/power-and-majesty.jpg', w: 1131, h: 1600, size: 'S',
+      aliases: { V2: 'V1' }, band: { page: 0, x: 0.022, y: 0.012, w: 0.32 },
+      items: [['V1', 1, 16], ['PC', 1, 8], ['C', 1, 12], ['V2', 1, 16], ['PC', 1, 8], ['C', 2, 12]],
+      tabs: [['V1', 0.11, 0.15], ['PC', 0.11, 0.485], ['C', 0.11, 0.6656]] },
+  ];
+  const SYNTH = { id: 'synth', label: '합성 예시', size: 'M' };
+  function songState(song) {
+    if (song.id === 'synth') return { ...sampleState(), aliases: {}, bpm: 68 };
+    return {
+      sample: false, title: song.title, meta: song.meta, bpm: song.bpm, aliases: song.aliases,
+      pages: [{ src: song.src, w: song.w, h: song.h }],
+      band: { ...song.band },
+      items: song.items.map(([key, rep, bars]) => ({ ...makeItem(key, rep), bars })),
+      tabs: song.tabs.map(([key, x, y]) => ({ id: nid(), page: 0, key, x, y })),
+    };
+  }
+  let available = [];
+  const saved = {};
+  const SONG_KEYS = ['pages', 'band', 'items', 'tabs', 'title', 'meta', 'bpm', 'aliases', 'sample', 'size'];
+  function loadSong(id) {
+    if (state.songId && state.songId !== id) saved[state.songId] = Object.fromEntries(SONG_KEYS.map((k) => [k, state[k]]));
+    const song = [...SONGS, SYNTH].find((x) => x.id === id);
+    Object.assign(state, saved[id] ?? { ...songState(song), size: song.size ?? 'M' }, { songId: id, page: 0, pos: 0, extra: {}, selected: null });
+    history.past.length = 0;
+    history.future.length = 0;
+  }
+  const state = { view: 'preview', device: 'desktop', page: 0, size: 'M', look: 'neon', dark: true, mode: 'band', armed: null, selected: null, playing: false, counting: false, pos: 0, speed: 4, extra: {}, songId: null, aliases: {}, bpm: 68, ...sampleState() };
 
   /* ---------- History (saved song form only; live cues are not recorded) ---------- */
   const history = { past: [], future: [] };
@@ -520,7 +555,10 @@ button.hud-chip:active { transform: scale(.94); }
     }
     return { index: -1, start: 0, len: 0, within: 0 };
   }
-  const findTab = (key, preferPage = state.page) => { const all = state.tabs.filter((t) => t.key === key); return all.find((t) => t.page === preferPage) ?? all.sort((a, b) => a.page - b.page)[0] ?? null; };
+  function findTab(key, preferPage = state.page) {
+    const pick = (k) => { const all = state.tabs.filter((t) => t.key === k); return all.find((t) => t.page === preferPage) ?? all.sort((a, b) => a.page - b.page)[0] ?? null; };
+    return pick(key) ?? (state.aliases?.[key] ? pick(state.aliases[key]) : null);
+  }
   const chipInner = (it) => `${esc(it.key)}${it.rep > 1 ? `<span class="rep">×${it.rep}</span>` : ''}${state.extra[it.id] ? `<span class="live">+${state.extra[it.id]}</span>` : ''}`;
   let liveIndex = -1;
 
@@ -569,7 +607,7 @@ button.hud-chip:active { transform: scale(.94); }
       return `${tick}<span class="hud-chip${edit && state.selected === it.id ? ' is-selected' : ''}" style="--c:${colorOf(it.key)}" data-key="${it.id}" data-lane="${it.id}" data-chip="${it.id}">${chipInner(it)}${x}</span>`;
     }).join('');
     const b = state.band;
-    return `<div class="band${edit ? ' is-editing' : ''}" data-band style="left:${b.x * 100}%;top:${b.y * 100}%;max-width:${(1 - b.x - 0.02) * 100}%" ${interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"'}>${chips}</div>`;
+    return `<div class="band${edit ? ' is-editing' : ''}" data-band style="left:${b.x * 100}%;top:${b.y * 100}%;max-width:${(b.w ?? 1 - b.x - 0.02) * 100}%" ${interactive ? 'role="group" aria-label="송폼"' : 'aria-hidden="true"'}>${chips}</div>`;
   }
   function tabMarkup(t, edit, live) {
     const x = edit ? `<button type="button" class="chip-x" data-action="remove-tab" data-id="${t.id}" aria-label="${esc(sec(t.key).name)} 마디 표시 지우기">${X_ICON}</button>` : '';
@@ -674,7 +712,7 @@ button.hud-chip:active { transform: scale(.94); }
     return cells.map(([t, sw, d]) => `<div class="state"><div class="swatch" aria-hidden="true">${sw}</div><b>${t}</b><span>${d}</span></div>`).join('');
   }
   function formatClock() {
-    const secPerBar = (60 / BPM) * 4;
+    const secPerBar = (60 / state.bpm) * 4;
     const f = (bars) => { const s = Math.round(bars * secPerBar); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
     return `${f(state.pos)} / ${f(totalBars())}`;
   }
@@ -683,7 +721,7 @@ button.hud-chip:active { transform: scale(.94); }
     closePop();
     workspace.classList.toggle('workspace-edit', editing());
     $('#frame').dataset.device = state.device;
-    document.documentElement.style.setProperty('--beat', `${(60 / BPM) / state.speed}s`);
+    document.documentElement.style.setProperty('--beat', `${(60 / state.bpm) / state.speed}s`);
     liveIndex = state.items.length && !editing() ? locate(state.pos).index : -1;
     track.innerHTML = trackMarkup();
     track.classList.toggle('is-editing', editing());
@@ -697,7 +735,10 @@ button.hud-chip:active { transform: scale(.94); }
     $('#pageLabel').textContent = `${state.page + 1} / ${state.pages.length}`;
     $('[data-action="prev"]').disabled = state.page === 0;
     $('[data-action="next"]').disabled = state.page >= state.pages.length - 1;
-    $('#songMeta').textContent = `${state.title} · ${state.meta} · ${state.pages.length}페이지`;
+    $('#songMeta').textContent = `${state.title} · ${state.meta} · ♩ ${state.bpm} · ${state.pages.length}페이지${state.sample ? ' · 합성 예시 악보' : ''}`;
+    const sw = $('#songSwitch');
+    sw.hidden = available.length < 2;
+    sw.innerHTML = available.map((x) => `<button type="button" data-action="song" data-value="${x.id}" aria-pressed="${state.songId === x.id}">${esc(x.label)}</button>`).join('');
     $('#arrangerMeta').textContent = `${state.items.length}섹션 · ${totalBars()}마디 · 띠 ${state.band.page + 1}P${Object.keys(state.extra).length ? ' · 라이브 변경 있음' : ''}`;
     $('#caption').innerHTML = `<span class="rec" aria-hidden="true"></span>${!editing() ? '<b>무대 미리보기</b>칩을 누르면 그 섹션부터' : `<b>편집 콘솔</b>${state.mode === 'band' ? '송폼 띠' : `마디 섹션${state.armed ? ` · ${esc(state.armed)} 놓는 중` : ''}`}`}`;
     $('#hint').textContent = !editing() ? '' : state.mode === 'band' ? '레인을 끌어 순서를 바꾸고 틈의 +로 끼워 넣습니다. 띠와 탭은 악보에서 끌어 옮깁니다.' : state.armed ? `‘${state.armed}’ 섹션이 시작되는 마디를 누르세요.` : '오른쪽 패드에서 놓을 섹션을 먼저 고르세요.';
@@ -760,7 +801,7 @@ button.hud-chip:active { transform: scale(.94); }
   }
   function tick(now) {
     if (!state.playing) return;
-    state.pos += ((now - last) / 1000) * (BPM / 60 / 4) * state.speed;
+    state.pos += ((now - last) / 1000) * (state.bpm / 60 / 4) * state.speed;
     last = now;
     if (state.pos >= totalBars()) { state.pos = totalBars(); state.playing = false; liveUpdate(true); toast('송폼 끝까지 진행했습니다.'); return; }
     liveUpdate();
@@ -770,7 +811,7 @@ button.hud-chip:active { transform: scale(.94); }
     const token = ++countToken;
     state.counting = true;
     render();
-    const beat = Math.max(350, (60000 / BPM) / Math.min(state.speed, 2));
+    const beat = Math.max(350, (60000 / state.bpm) / Math.min(state.speed, 2));
     for (let n = 1; n <= 4; n++) {
       if (token !== countToken) return false;
       stageFx.innerHTML = `<div class="countin" aria-hidden="true"><span class="${n === 4 ? 'is-last' : ''}">${n}</span></div>`;
@@ -878,7 +919,8 @@ button.hud-chip:active { transform: scale(.94); }
     track.querySelectorAll('.lane-btn.is-linked').forEach((el) => el.classList.remove('is-linked'));
     if (!it) return;
     track.querySelector(`.lane-btn[data-lane="${id}"]`)?.classList.add('is-linked');
-    sheet.querySelectorAll(`.tab[data-tabkey="${CSS.escape(it.key)}"]`).forEach((el) => el.classList.add('is-linked'));
+    const tab = findTab(it.key);
+    if (tab) sheet.querySelector(`.tab[data-tab="${tab.id}"]`)?.classList.add('is-linked');
   }
   const linkTarget = (e) => (reorder || drag ? null : e.target.closest?.('[data-lane]'));
   document.addEventListener('pointerover', (e) => { const t = linkTarget(e); if (t) showLink(t.dataset.lane); });
@@ -1001,7 +1043,17 @@ button.hud-chip:active { transform: scale(.94); }
       track.querySelectorAll('.track-item').forEach((el, i) => anim(el, [{ transform: 'scaleX(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 300, delay: i * 50, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
       sheet.querySelectorAll('.band .hud-chip').forEach((el, i) => setTimeout(() => flickerOn(el), i * 50));
     }
-    else if (action === 'reset') { stop(true); Object.assign(state, sampleState(), { page: 0, pos: 0, selected: null }); history.past.length = 0; history.future.length = 0; render(); toast('샘플 악보로 되돌렸습니다.'); }
+    else if (action === 'song') { if (value !== state.songId) { stop(true); loadSong(value); render(); anim(sheet.querySelector('.page'), [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' }); } }
+    else if (action === 'reset') {
+      if (state.songId === 'upload') { toast('올린 악보는 되돌릴 예시가 없습니다. 위에서 예시 악보를 고르세요.'); return; }
+      stop(true);
+      const id = state.songId ?? 'synth';
+      delete saved[id];
+      state.songId = null;
+      loadSong(id);
+      render();
+      toast('예시 악보를 처음 상태로 되돌렸습니다.');
+    }
   });
 
   /* ---------- Pads: tap adds, hold 0.45s = ×2, hold 0.9s = ×3 (side panel and popover) ---------- */
@@ -1224,7 +1276,9 @@ button.hud-chip:active { transform: scale(.94); }
       }
       if (!pages.length) throw new Error('empty');
       stop(true);
-      Object.assign(state, { sample: false, pages: pages.slice(0, 12), page: 0, pos: 0, tabs: [], selected: null, band: { page: 0, x: 0.022, y: 0.014 }, title: files[0].name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
+      if (state.songId && state.songId !== 'upload') saved[state.songId] = Object.fromEntries(SONG_KEYS.map((k) => [k, state[k]]));
+      if (!available.some((x) => x.id === 'upload')) available.push({ id: 'upload', label: '올린 악보' });
+      Object.assign(state, { songId: 'upload', sample: false, aliases: {}, extra: {}, items: state.items.map((it) => ({ ...it })), pages: pages.slice(0, 12), page: 0, pos: 0, tabs: [], selected: null, band: { page: 0, x: 0.022, y: 0.014 }, title: files[0].name.replace(/\.[^.]+$/, ''), meta: '올린 악보' });
       history.past.length = 0; history.future.length = 0;
       render();
       toast(`${state.pages.length}페이지를 불러왔습니다. 마디 섹션 탭은 새로 놓아 주세요.`);
@@ -1235,8 +1289,19 @@ button.hud-chip:active { transform: scale(.94); }
 
   window.addEventListener('resize', () => { keepTabsOnPage(); placePlayhead(); });
   $('#states').innerHTML = statesMarkup();
-  render();
-  document.fonts?.ready.then(() => { if (!state.sample) return; state.pages = [drawSamplePage(0), drawSamplePage(1)]; render(); });
+  document.fonts?.ready.then(() => { if (!state.sample || !available.length) return; state.pages = [drawSamplePage(0), drawSamplePage(1)]; render(); });
+  // Use the real example sheets when their images are published alongside; otherwise the synthetic one.
+  // First render waits for that check (local files answer in milliseconds) so the wrong sheet never flashes.
+  const probe = (src) => new Promise((resolve) => { const img = new Image(); img.onload = () => resolve(true); img.onerror = () => resolve(false); img.src = src; });
+  const fallback = setTimeout(() => { if (!available.length) { available = [SYNTH]; state.songId = 'synth'; render(); } }, 1500);
+  Promise.all(SONGS.map((x) => probe(x.src))).then((ok) => {
+    clearTimeout(fallback);
+    const real = SONGS.filter((_, i) => ok[i]);
+    if (!real.length) { if (!available.length) { available = [SYNTH]; state.songId = 'synth'; render(); } return; }
+    available = real;
+    loadSong(real[0].id);
+    render();
+  });
 })();
 </script>
 <!-- publish:body-end -->

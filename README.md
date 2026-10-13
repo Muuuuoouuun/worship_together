@@ -58,7 +58,7 @@ npm ci
 npm run dev
 ```
 
-[로컬 앱](http://localhost:4000/dashboard) · [로그인](http://localhost:4000/login) · [팀·초대](http://localhost:4000/dashboard/team) · 송폼 마크업 목업 [2차 A](http://localhost:4000/mockups/songform-a2.html) · [2차 B](http://localhost:4000/mockups/songform-b2.html) (1차: [A](http://localhost:4000/mockups/songform-a.html) · [B](http://localhost:4000/mockups/songform-b.html))
+[로컬 앱](http://localhost:4000/dashboard) · [로그인](http://localhost:4000/login) · [팀·초대](http://localhost:4000/dashboard/team) · 송폼 마크업 목업 [2차 A](http://localhost:4000/mockups/songform-a2.html) · [2차 B](http://localhost:4000/mockups/songform-b2.html) (1차: [A](http://localhost:4000/mockups/songform-a.html) · [B](http://localhost:4000/mockups/songform-b.html)). 2차 목업의 실제 악보 예시 이미지는 저작권 때문에 저장소에 넣지 않았습니다. `public/mockups/samples/hymn-360.jpg`, `power-and-majesty.jpg`가 있으면 그 악보로, 없으면 합성 예시 악보로 열립니다.
 
 `NEXTAUTH_SECRET`과 `NEXTAUTH_URL`을 설정하고 사용할 Google·네이버 제공자의 키를 추가합니다. Kakao 공유는 `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`와 등록된 공개 도메인이 필요합니다. `localhost` 초대는 다른 기기에서 열 수 없으며 카카오톡 공유 버튼도 비활성화됩니다. 상세 절차는 [인증·초대 문서](docs/auth-and-invitations.md)를 따릅니다.
 

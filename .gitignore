@@ -14,6 +14,8 @@
 /coverage
 /public/pdf.worker.min.mjs
 /public/pdfjs/
+# Example sheet images for the mockups are copyrighted; keep them local.
+/public/mockups/samples/
 
 # next.js
 /.next/
