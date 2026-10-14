@@ -180,7 +180,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                             <span className={cn('shrink-0 text-[11px]', sub)}>{notice.ago}</span>
                         </li>
                     ))}
-                    {planning.ready && !planning.notices.length && <li className={cn('py-4 text-sm', sub)}>아직 팀 소식이 없어요</li>}
+                    {planning.ready && !planning.notices.length && <li className={cn('py-8 text-center text-sm', sub)}>아직 팀 소식이 없어요</li>}
                 </ul>
             </section>
 
@@ -228,7 +228,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
             <button
                 type="button"
                 onClick={() => go('requests')}
-                className={cn('flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition active:scale-[0.99]', line)}
+                className={cn('flex w-full items-center gap-3 border-y py-3.5 text-left transition active:opacity-70', line)}
             >
                 <span className={cn('flex size-2 rounded-full', openRequests.length ? TONE_DOT.peach : STATUS.idle.dot)} aria-hidden="true" />
                 <span className={cn('flex-1 text-sm', ink)}>

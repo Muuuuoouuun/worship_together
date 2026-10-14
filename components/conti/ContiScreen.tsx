@@ -42,7 +42,7 @@ export default function ContiScreen({ openOrder }: { openOrder: (id: string) => 
 
     return (
         <div className="space-y-7">
-            <ScreenTitle eyebrow="콘티·악보" title="콘티 관리" aside={<AddButton label="새 콘티 만들기 (곡 보관함)" href={createHref} />} />
+            <ScreenTitle eyebrow="콘티 내역" title="콘티 관리" aside={<AddButton label="새 콘티 만들기 (곡 보관함)" href={createHref} />} />
 
             <section aria-label="콘티 달력">
                 <div className="flex items-center justify-between">

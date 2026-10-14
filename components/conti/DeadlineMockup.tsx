@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AlarmClock, Bell, BellRing, Check, CircleCheck, Clock, EyeOff, Hand, Inbox, ListMusic, Moon, ShieldAlert, Smartphone, Undo2, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { MEMBERS, SETLISTS, member } from './mockData';
 
 /** 목업 팀원 id → 아바타에 넘길 이름·색 */
@@ -60,12 +61,10 @@ const TABS: { id: DeadlineView; label: string }[] = [
     { id: 'settings', label: '마감 설정' },
     { id: 'alerts', label: '알림' },
 ];
-const TOP_GLOW: CSSProperties = {
-    backgroundImage: 'radial-gradient(90% 100% at 85% 0%, color-mix(in oklab, var(--primary) 8%, transparent), transparent 70%)',
-};
+
 const pill = cn('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs transition active:scale-95 disabled:opacity-40', line, ink);
 const pillOn = cn('inline-flex h-8 items-center gap-1.5 rounded-full border border-transparent px-3 text-xs font-semibold transition active:scale-95', selected);
-const mainButton = cn('flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99] disabled:opacity-40', selected);
+const mainButton = cn(buttonVariants({ size: 'lg' }), 'w-full text-sm');
 const bubble = cn('rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[13px] leading-relaxed', chip, body);
 
 function tuesdayBefore(date: string): string {
@@ -83,10 +82,9 @@ export default function DeadlineMockup({ initialView = 'member', initialPhase = 
     const shared = { phase, nudges, myNudge, eta, openAlerts: () => setView('alerts') };
 
     return (
-        <div className="relative isolate -mx-4 break-keep bg-card ring-border sm:mx-0 sm:rounded-[2rem] sm:shadow-sm sm:ring-1">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 sm:rounded-t-[2rem]" style={TOP_GLOW} />
-            <div className="sticky top-[var(--app-header-h,0px)] z-20 border-b border-border/70 bg-card/90 backdrop-blur-md sm:rounded-t-[2rem] lg:top-0">
-                <div role="tablist" aria-label="목업 화면" className="no-scrollbar flex gap-5 overflow-x-auto px-5 sm:px-8">
+        <div className="relative isolate max-w-3xl break-keep">
+            <div className="sticky top-[var(--app-header-h,0px)] z-20 -mx-4 border-b border-border/70 bg-background/95 px-4 sm:mx-0 sm:px-0 lg:top-0">
+                <div role="tablist" aria-label="목업 화면" className="no-scrollbar flex gap-5 overflow-x-auto">
                     {TABS.map((tab) => {
                         const active = view === tab.id;
                         return (
@@ -99,13 +97,13 @@ export default function DeadlineMockup({ initialView = 'member', initialPhase = 
                 </div>
             </div>
 
-            <div className="space-y-7 px-5 pb-10 pt-6 sm:px-8 sm:pt-8">
+            <div className="space-y-7 pb-10 pt-6">
                 {(view === 'member' || view === 'leader') && (
                     <div className="space-y-2">
                         <Eyebrow>시간을 바꿔 보기 · 지금 {md(PHASES[phase].date)} ({weekday(PHASES[phase].date)}) {PHASES[phase].time}</Eyebrow>
                         <div role="group" aria-label="시간 상태" className={cn('flex gap-1 rounded-full p-1', chip)}>
                             {(Object.keys(PHASES) as DeadlinePhase[]).map((key) => (
-                                <button key={key} type="button" aria-pressed={phase === key} onClick={() => setPhase(key)} className={cn('h-8 flex-1 rounded-full text-xs transition', phase === key ? cn(selected, 'font-semibold') : sub)}>
+                                <button key={key} type="button" aria-pressed={phase === key} onClick={() => setPhase(key)} className={cn('h-8 flex-1 rounded-full text-xs transition', phase === key ? 'bg-card font-semibold text-foreground shadow-xs' : sub)}>
                                     {PHASES[key].label}
                                 </button>
                             ))}
@@ -322,8 +320,8 @@ function LeaderView({ phase, nudges, eta, openAlerts, onEta, onConfirm }: Shared
                     <p className={cn('mt-3 text-xs', body)}>팀원 6명에게 알림을 보냈고, 받은 요청 {nudges.length}건은 자동으로 완료됐어요.</p>
                 ) : (
                     <div className="mt-4 flex gap-2">
-                        <button type="button" onClick={onConfirm} className={cn('h-10 flex-1 rounded-xl text-sm font-semibold transition active:scale-[0.99]', selected)}>콘티 작성하기</button>
-                        <button type="button" onClick={onConfirm} className="h-10 flex-1 rounded-xl bg-card/70 text-sm font-medium text-foreground ring-1 ring-foreground/10 transition active:scale-[0.99]">곡 제목만 먼저</button>
+                        <button type="button" onClick={onConfirm} className={cn(buttonVariants(), 'flex-1')}>콘티 작성하기</button>
+                        <button type="button" onClick={onConfirm} className={cn(buttonVariants({ variant: 'outline' }), 'flex-1')}>곡 제목만 먼저</button>
                     </div>
                 )}
             </SetlistCard>

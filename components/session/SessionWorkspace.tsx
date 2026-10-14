@@ -759,7 +759,7 @@ export default function SessionWorkspace({
 
             <div className="mx-auto flex max-w-7xl flex-col gap-6">
                 <PageHeader
-                    back={{ href: '/dashboard', label: '대시보드로 돌아가기' }}
+                    back={{ href: '/dashboard', label: '오늘' }}
                     eyebrow={
                         <span className="inline-flex flex-wrap items-center gap-x-1.5">
                             <span className={cn('size-1.5 rounded-full', isActive ? 'bg-destructive' : 'bg-muted-foreground/40')} aria-hidden="true" />

@@ -114,18 +114,17 @@ export default function ContiWorkspace({
             {screen === 'order' && <OrderScreen setlistId={setlistId} onBack={() => go('conti')} onSelect={selectSetlist} />}
             {screen === 'team' && <TeamScreen openOrder={openOrder} />}
             {screen === 'requests' && <RequestScreen />}
-            {screen === 'alerts' && <AlertsScreen onBack={() => go('week')} openOrder={openOrder} go={go} />}
+            {screen === 'alerts' && <AlertsScreen onBack={embedded ? undefined : () => go('week')} openOrder={openOrder} go={go} />}
         </ContiProvider>
     );
 
     if (embedded) {
         const activeTab = screen === 'order' ? 'conti' : screen;
         return (
-            <div className="relative isolate -mx-4 break-keep bg-card ring-border sm:mx-0 sm:rounded-[2rem] sm:shadow-sm sm:ring-1">
-                <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 sm:rounded-t-[2rem]" style={TOP_GLOW} />
-
-                <div className="sticky top-[var(--app-header-h,0px)] z-20 border-b border-border/70 bg-card/90 backdrop-blur-md sm:rounded-t-[2rem] lg:top-0">
-                    <div role="tablist" aria-label="콘티·악보 화면" className="no-scrollbar flex gap-5 overflow-x-auto px-5 sm:px-8">
+            // 다른 화면처럼 바탕 위에 바로 놓습니다 (카드 틀 없음).
+            <div className="relative isolate max-w-3xl break-keep">
+                <div className="sticky top-[var(--app-header-h,0px)] z-20 -mx-4 border-b border-border/70 bg-background/95 px-4 sm:mx-0 sm:px-0 lg:top-0">
+                    <div role="tablist" aria-label="콘티·악보 화면" className="no-scrollbar flex gap-5 overflow-x-auto">
                         {PAGE_TABS.map((tab) => {
                             const active = activeTab === tab.id;
                             const count = tab.id === 'requests' ? openCount : tab.id === 'alerts' ? unread : 0;
@@ -153,7 +152,7 @@ export default function ContiWorkspace({
                     </div>
                 </div>
 
-                <div className="px-5 pb-10 pt-6 sm:px-8 sm:pt-8">{screens}</div>
+                <div className="pb-10 pt-6">{screens}</div>
             </div>
         );
     }

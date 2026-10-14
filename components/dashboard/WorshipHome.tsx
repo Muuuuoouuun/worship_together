@@ -225,11 +225,11 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
                         )}
 
                         <div className="flex flex-col gap-2 sm:flex-row">
-                            <Link href={liveHref} className={cn(buttonVariants({ size: 'lg' }), 'w-full sm:w-auto')}>
+                            <Link href={liveHref} className={cn(buttonVariants(), 'w-full sm:w-auto')}>
                                 <Radio aria-hidden="true" />
                                 {next ? '이 콘티로 예배 입장' : '샘플 예배 체험'}
                             </Link>
-                            <Link href="/dashboard/songs" className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'w-full sm:w-auto')}>
+                            <Link href="/dashboard/songs" className={cn(buttonVariants({ variant: 'outline' }), 'w-full sm:w-auto')}>
                                 <ListMusic className="text-muted-foreground" aria-hidden="true" />
                                 콘티·곡 목록 관리
                             </Link>

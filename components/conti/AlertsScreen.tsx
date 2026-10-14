@@ -35,7 +35,8 @@ const FILTERS: { id: 'all' | NoticeCategory; label: string }[] = [
 
 const GROUPS: NoticeGroup[] = ['오늘', '어제', '이번 주', '이전'];
 
-export default function AlertsScreen({ onBack, openOrder, go }: { onBack: () => void; openOrder: (id: string) => void; go: (screen: ScreenId) => void }) {
+/** onBack 이 있으면(시안 앱 화면) 이번 주로 돌아가는 버튼을 보여줍니다. 페이지 탭으로 열 때는 없습니다. */
+export default function AlertsScreen({ onBack, openOrder, go }: { onBack?: () => void; openOrder: (id: string) => void; go: (screen: ScreenId) => void }) {
     const { planning, setlists } = useConti();
     const { send, busy } = useDispatch();
     const [filter, setFilter] = useState<'all' | NoticeCategory>('all');
@@ -70,9 +71,11 @@ export default function AlertsScreen({ onBack, openOrder, go }: { onBack: () => 
     return (
         <div className="space-y-5">
             <header className="flex items-center gap-3">
-                <RoundIconButton label="이번 주로" onClick={onBack}>
-                    <ArrowLeft size={18} />
-                </RoundIconButton>
+                {onBack && (
+                    <RoundIconButton label="이번 주로" onClick={onBack}>
+                        <ArrowLeft size={18} />
+                    </RoundIconButton>
+                )}
                 <div className="min-w-0 flex-1">
                     <Eyebrow>알림 {planning.sample && <SampleChip className="ml-1" />}</Eyebrow>
                     <h2 className={cn('mt-0.5 text-[17px] font-semibold tracking-tight', ink)}>

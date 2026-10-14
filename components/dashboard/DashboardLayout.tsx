@@ -39,7 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <Brand />
                 </div>
                 <SidebarNav />
-                <div className="flex items-center gap-2 border-t border-border/70 p-4 [&_details>div]:bottom-[calc(100%+8px)] [&_details>div]:left-0 [&_details>div]:right-auto [&_details>div]:top-auto">
+                <div className="flex flex-col items-start gap-2 border-t border-border/70 p-4 [&_details>div]:bottom-[calc(100%+8px)] [&_details>div]:left-0 [&_details>div]:right-auto [&_details>div]:top-auto">
                     <ThemeToggle />
                     <Suspense fallback={<p role="status" className="min-h-10 py-2 text-sm text-muted-foreground">계정 확인 중…</p>}>
                         <AccountMenu />

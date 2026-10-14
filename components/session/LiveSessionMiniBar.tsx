@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Music2, Radio, Users, X } from 'lucide-react';
 import { readPrototypeLibrary, LIBRARY_CHANGED_EVENT } from '@/lib/libraryPrototypeStorage';
-import { getTeamSnapshot, parseTeamSnapshot, TEAM_STORAGE_KEY } from '@/lib/teamPrototype';
+import { getTeamSnapshot, parseTeamSnapshot, TEAM_STORAGE_EVENT, TEAM_STORAGE_KEY } from '@/lib/teamPrototype';
 import { DEMO_SESSION_ID, DEMO_TEAM_ID } from '@/lib/constants';
 
 /** 바가 그리는 값만 담습니다. 모두 원시값이라 내용이 같으면 이전 상태를 그대로 둡니다. */
@@ -65,6 +66,8 @@ export default function LiveSessionMiniBar() {
     );
     const [dismissed, setDismissed] = useState(false);
     const [state, setState] = useState<MiniBarState>(INITIAL_STATE);
+    // 공통 틀은 화면을 옮겨도 다시 만들어지지 않으므로, 화면이 바뀔 때마다 다시 읽습니다 (오늘 여부·다음 콘티).
+    const pathname = usePathname();
 
     useEffect(() => {
         let active = true;
@@ -85,13 +88,16 @@ export default function LiveSessionMiniBar() {
         queueMicrotask(refresh);
         window.addEventListener('storage', onStorage);
         window.addEventListener(LIBRARY_CHANGED_EVENT, refresh);
+        // 같은 탭에서 팀을 만들거나 바꾸면 바로 반영합니다.
+        window.addEventListener(TEAM_STORAGE_EVENT, refresh);
 
         return () => {
             active = false;
             window.removeEventListener('storage', onStorage);
             window.removeEventListener(LIBRARY_CHANGED_EVENT, refresh);
+            window.removeEventListener(TEAM_STORAGE_EVENT, refresh);
         };
-    }, []);
+    }, [pathname]);
 
     if (!isClient || dismissed) {
         return null;

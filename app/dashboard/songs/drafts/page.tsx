@@ -32,6 +32,7 @@ export default async function SetlistDraftsPage({ searchParams }: SetlistDraftsP
         <main className="min-h-dvh bg-muted dark:bg-background">
             {/* 휴대폰·태블릿: 실제 앱처럼 한 화면 */}
             <div className="lg:hidden">
+                <h1 className="sr-only">콘티 · 순서 리디자인</h1>
                 <div className="mx-auto min-h-dvh max-w-md bg-card shadow-sm">
                     <MockContiWorkspace initialScreen={screen} mode="app" />
                 </div>

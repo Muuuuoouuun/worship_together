@@ -13,7 +13,10 @@ const tab = 'relative flex select-none flex-col items-center justify-center gap-
 /** 모바일 하단 내비게이션 + 더보기 시트 */
 export default function MobileNav() {
     const pathname = usePathname() ?? '';
-    const [moreOpen, setMoreOpen] = useState(false);
+    // 시트를 연 화면을 기억해, 뒤로 가기 등으로 화면이 바뀌면 닫힌 것으로 봅니다 (공통 틀은 다시 만들어지지 않음).
+    const [openedOn, setOpenedOn] = useState<string | null>(null);
+    const moreOpen = openedOn === pathname;
+    const setMoreOpen = (open: boolean) => setOpenedOn(open ? pathname : null);
     const secondaryActive = secondaryNavItems.some((item) => isNavActive(pathname, item.href));
 
     return (

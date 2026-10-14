@@ -15,7 +15,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     const user = invite ? await getCurrentUser() : null;
     return <main className="flex min-h-dvh items-center justify-center bg-background px-5 py-10">
         <section className="w-full max-w-[440px] rounded-[28px] border border-border bg-card p-6 sm:p-9">
-            <Link href="/dashboard" className="-my-2 inline-flex min-h-9 items-center rounded-full text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground">Worship Together</Link>
+            <Link href="/dashboard" className="-my-2 inline-flex min-h-9 items-center rounded-full text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">Worship Together</Link>
             <div className="mb-5 mt-7 flex size-12 items-center justify-center rounded-2xl bg-muted text-foreground"><UsersRound size={22} aria-hidden="true" /></div>
             {invite ? <>
                 <p className="text-xs font-medium text-muted-foreground">함께 준비하는 예배</p>

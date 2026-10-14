@@ -67,11 +67,11 @@
   --secondary-foreground: #FFFFFF;
   --accent: #456885;
   --accent-foreground: #FFFFFF;
-  --success: #059669;
+  --success: #047857;
   --success-foreground: #FFFFFF;
   --warning: #D97706;
   --warning-foreground: #FFFFFF;
-  --destructive: #E11D48;
+  --destructive: #BE123C;
   --destructive-foreground: #FFFFFF;
   color-scheme: light;
 }

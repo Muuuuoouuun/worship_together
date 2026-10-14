@@ -22,6 +22,7 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { COMMON_KEYS } from '@/lib/setlistDetailsStorage';
 import {
     SECTION_NAMES,
@@ -154,7 +155,7 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
                 </button>
                 {editor ? (
                     !editing && (
-                        <button type="button" onClick={startEdit} className={cn('inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold', selected)}>
+                        <button type="button" onClick={startEdit} className={cn(buttonVariants({ size: 'sm' }), 'shrink-0')}>
                             <Pencil size={15} aria-hidden="true" />
                             편집
                         </button>
@@ -296,12 +297,12 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
                     </ol>
 
                     {sessionHref ? (
-                        <Link href={sessionHref} className={cn('flex h-13 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99]', selected)}>
+                        <Link href={sessionHref} className={cn(buttonVariants({ size: 'lg' }), 'w-full text-sm')}>
                             <Radio size={17} aria-hidden="true" />
                             이 콘티로 예배 열기
                         </Link>
                     ) : (
-                        <button type="button" className={cn('flex h-13 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99]', selected)}>
+                        <button type="button" className={cn(buttonVariants({ size: 'lg' }), 'w-full text-sm')}>
                             <Radio size={17} aria-hidden="true" />
                             이 콘티로 예배 열기
                         </button>
@@ -324,10 +325,10 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function EditActions({ onCancel, onSave }: { onCancel: () => void; onSave: () => void }) {
     return (
         <div className="flex gap-2">
-            <button type="button" onClick={onCancel} className={cn('h-11 flex-1 rounded-2xl border text-sm font-semibold', line, ink)}>
+            <button type="button" onClick={onCancel} className={cn(buttonVariants({ variant: 'outline' }), 'flex-1')}>
                 취소
             </button>
-            <button type="button" onClick={onSave} className={cn('inline-flex h-11 flex-[2] items-center justify-center gap-1.5 rounded-2xl text-sm font-semibold', selected)}>
+            <button type="button" onClick={onSave} className={cn(buttonVariants(), 'flex-[2]')}>
                 <Check size={16} aria-hidden="true" />
                 저장
             </button>
@@ -524,10 +525,10 @@ function SongEditCard({
                 </div>
                 {onMove && (
                     <div className="flex shrink-0 gap-1">
-                        <button type="button" aria-label="위로" disabled={isFirst} onClick={() => onMove(-1)} className={cn('flex size-9 items-center justify-center rounded-xl border disabled:opacity-30', line, ink)}>
+                        <button type="button" aria-label="위로" disabled={isFirst} onClick={() => onMove(-1)} className={cn('flex size-9 items-center justify-center rounded-full border disabled:opacity-30', line, ink)}>
                             <ArrowUp size={15} />
                         </button>
-                        <button type="button" aria-label="아래로" disabled={isLast} onClick={() => onMove(1)} className={cn('flex size-9 items-center justify-center rounded-xl border disabled:opacity-30', line, ink)}>
+                        <button type="button" aria-label="아래로" disabled={isLast} onClick={() => onMove(1)} className={cn('flex size-9 items-center justify-center rounded-full border disabled:opacity-30', line, ink)}>
                             <ArrowDown size={15} />
                         </button>
                     </div>
