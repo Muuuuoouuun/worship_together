@@ -1,32 +1,15 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { CalendarPlus, Check, Copy, Download, ExternalLink, Share2, X } from 'lucide-react';
 import { planningDate, type TeamSchedule } from '@/types/planning';
 import { worshipRoles, type WorshipRole } from '@/types/team';
 import { downloadIcsFile, getGoogleCalendarUrl } from '@/lib/calendarExport';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { useSheetDismiss } from '@/hooks/useSheetDismiss';
 
 const checkbox = 'size-4 shrink-0 rounded accent-foreground';
-
-/** Esc 로 닫고, 열려 있는 동안 뒤 화면 스크롤을 막습니다. */
-function useSheetDismiss(onClose: () => void) {
-    useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (event.key !== 'Escape') return;
-            event.stopPropagation();
-            onClose();
-        };
-        document.addEventListener('keydown', onKey);
-        const previous = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-        return () => {
-            document.removeEventListener('keydown', onKey);
-            document.body.style.overflow = previous;
-        };
-    }, [onClose]);
-}
 
 export default function EventShareModal({
     event,

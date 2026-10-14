@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { type TeamSchedule } from '@/types/planning';
 import { type TeamMember } from '@/types/team';
 import { cn } from '@/lib/utils';
@@ -25,11 +25,21 @@ function dotClass(event: TeamSchedule, userId: string) {
     return event.kind === 'worship' ? TONE_DOT.sky : TONE_DOT.mint;
 }
 
+/** 'YYYY-MM-DD' → '10월 18일 (토)' */
+function dayLabel(dateStr: string) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return `${m}월 ${d}일 (${WEEK_HEAD[new Date(y, m - 1, d).getDay()]})`;
+}
+
+/** 모바일 점 표시 개수. 넘치면 '+N' 으로 나머지 개수를 보여 줍니다. */
+const MAX_DOTS = 3;
+
 export default function CalendarView({
     events,
     userId,
     manager,
     selectedDate,
+    selectedEventId,
     onSelectEvent,
     onOpenMonthlySundaysModal,
     onAddEventOnDate,
@@ -41,12 +51,16 @@ export default function CalendarView({
     manager: boolean;
     /** 선택된 일정의 날짜 (YYYY-MM-DD) — 검정 원으로 표시 */
     selectedDate?: string;
+    /** 선택된 일정 id — 모바일 '이 날 일정' 목록에서 표시 */
+    selectedEventId?: string | null;
     onSelectEvent: (event: TeamSchedule) => void;
     onOpenMonthlySundaysModal: () => void;
     onAddEventOnDate: (dateStr: string) => void;
 }) {
     const today = useMemo(() => new Date(), []);
     const [currentDate, setCurrentDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+    // 마지막으로 누른 날짜. 모바일에서는 이 날의 일정을 달력 아래에 모두 보여 줍니다.
+    const [pickedDate, setPickedDate] = useState<string | null>(null);
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth() + 1;
@@ -116,8 +130,29 @@ export default function CalendarView({
             list.push(ev);
             map.set(dateKey, list);
         }
+        // 하루 안에서는 시작 시각 순서로 (점·칩·목록이 같은 순서)
+        for (const list of map.values()) list.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
         return map;
     }, [events]);
+
+    /** 날짜를 고릅니다. 일정이 있으면 (이미 그 날 일정을 보고 있지 않은 한) 첫 일정을 열고, 비어 있으면 관리자는 새 일정을 등록합니다. */
+    function openDay(dateStr: string, dayEvents: TeamSchedule[], isCurrentMonth: boolean) {
+        setPickedDate(dateStr);
+        if (dayEvents.length > 0) {
+            if (selectedDate !== dateStr) onSelectEvent(dayEvents[0]);
+        } else if (manager && isCurrentMonth) {
+            onAddEventOnDate(dateStr);
+        }
+    }
+
+    function pickEvent(dateStr: string, event: TeamSchedule) {
+        setPickedDate(dateStr);
+        onSelectEvent(event);
+    }
+
+    const focusDate = pickedDate ?? selectedDate;
+    const focusVisible = focusDate ? calendarDays.some((day) => day.dateStr === focusDate) : false;
+    const focusEvents = focusDate && focusVisible ? (eventsByDate.get(focusDate) ?? []) : [];
 
     return (
         <section aria-label={`${year}년 ${month}월 일정 달력`} className="space-y-3 animate-in fade-in duration-200">
@@ -168,18 +203,13 @@ export default function CalendarView({
 
                 {calendarDays.map((day) => {
                     const dayEvents = eventsByDate.get(day.dateStr) ?? [];
-                    const isSelected = selectedDate === day.dateStr;
+                    const isSelected = focusDate === day.dateStr;
+                    const overflow = dayEvents.length > MAX_DOTS ? dayEvents.length - MAX_DOTS : 0;
 
                     return (
                         <div
                             key={day.dateStr}
-                            onClick={() => {
-                                if (dayEvents.length > 0) {
-                                    onSelectEvent(dayEvents[0]);
-                                } else if (manager && day.isCurrentMonth) {
-                                    onAddEventOnDate(day.dateStr);
-                                }
-                            }}
+                            onClick={() => openDay(day.dateStr, dayEvents, day.isCurrentMonth)}
                             className={cn(
                                 'group flex min-w-0 cursor-pointer flex-col items-center gap-1 py-1 transition-colors',
                                 'sm:min-h-[7.5rem] sm:items-stretch sm:gap-1.5 sm:border-t sm:border-border/70 sm:px-1 sm:py-2 sm:hover:bg-muted/40',
@@ -209,6 +239,7 @@ export default function CalendarView({
                                         aria-label={`${day.dateStr} 새 일정 등록`}
                                         onClick={(e) => {
                                             e.stopPropagation();
+                                            setPickedDate(day.dateStr);
                                             onAddEventOnDate(day.dateStr);
                                         }}
                                         className="hidden size-6 items-center justify-center rounded-full text-muted-foreground opacity-0 transition hover:bg-muted hover:text-brand focus-visible:opacity-100 group-hover:opacity-100 sm:flex"
@@ -218,23 +249,36 @@ export default function CalendarView({
                                 )}
                             </div>
 
-                            {/* 모바일: 날짜 아래 점 */}
+                            {/* 모바일: 날짜 아래 점 (넘치면 +N — 누르면 아래 목록에 이 날 일정이 모두 나옵니다) */}
                             <div className="flex h-3 items-center justify-center gap-0.5 sm:hidden">
-                                {dayEvents.slice(0, 3).map((ev) => (
+                                {dayEvents.slice(0, MAX_DOTS).map((ev) => (
                                     <button
                                         key={ev.id}
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            onSelectEvent(ev);
+                                            pickEvent(day.dateStr, ev);
                                         }}
-                                        className="flex size-3 items-center justify-center"
+                                        className="flex h-3 w-2.5 items-center justify-center"
                                         title={`${ev.title} (${kst(ev.startsAt).time})`}
                                         aria-label={`${ev.title} (${kst(ev.startsAt).time})`}
                                     >
                                         <span className={cn('size-1.5 rounded-full', dotClass(ev, userId))} />
                                     </button>
                                 ))}
+                                {overflow > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            openDay(day.dateStr, dayEvents, day.isCurrentMonth);
+                                        }}
+                                        className="flex h-3 items-center text-[9px] font-semibold leading-none tabular-nums text-muted-foreground"
+                                        aria-label={`${dayLabel(day.dateStr)} 일정 ${dayEvents.length}개 모두 보기`}
+                                    >
+                                        +{overflow}
+                                    </button>
+                                )}
                             </div>
 
                             {/* 데스크톱: 일정 칩 */}
@@ -252,7 +296,7 @@ export default function CalendarView({
                                             type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                onSelectEvent(ev);
+                                                pickEvent(day.dateStr, ev);
                                             }}
                                             className={cn(
                                                 'w-full rounded-lg px-1.5 py-1 text-left text-[11px] text-foreground transition hover:brightness-95 dark:hover:brightness-125',
@@ -290,6 +334,51 @@ export default function CalendarView({
                 <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-foreground" aria-hidden="true" />내 사역</span>
                 <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-secondary" aria-hidden="true" />빈자리</span>
             </p>
+
+            {/* 모바일: 고른 날의 일정 전부 + 이 날 일정 추가 (데스크톱은 칸 안 칩과 '+' 로 충분) */}
+            {focusDate && focusEvents.length > 0 && (
+                <section aria-label={`${dayLabel(focusDate)} 일정`} className="border-t border-border/70 pt-3 sm:hidden">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-[15px] font-semibold text-foreground">
+                            {dayLabel(focusDate)}
+                            <span className="ml-1.5 text-xs font-normal tabular-nums text-muted-foreground">일정 {focusEvents.length}개</span>
+                        </p>
+                        {manager && (
+                            <Button type="button" size="xs" onClick={() => onAddEventOnDate(focusDate)}>
+                                <Plus />
+                                <span>이 날 일정 추가</span>
+                            </Button>
+                        )}
+                    </div>
+                    <ul className="mt-1">
+                        {focusEvents.map((ev) => {
+                            const isCurrent = ev.id === selectedEventId;
+                            const isMyDuty = ev.slots.some((s) => s.memberId === userId);
+                            const vacantCount = ev.slots.filter((s) => !s.memberId || s.attendance === 'absent').length;
+                            return (
+                                <li key={ev.id} className="border-b border-border/70 last:border-b-0">
+                                    <button
+                                        type="button"
+                                        aria-current={isCurrent ? 'true' : undefined}
+                                        onClick={() => pickEvent(focusDate, ev)}
+                                        className="flex min-h-12 w-full items-center gap-3 py-2 text-left"
+                                    >
+                                        <span className={cn('size-2 shrink-0 rounded-full', dotClass(ev, userId))} aria-hidden="true" />
+                                        <span className="w-10 shrink-0 text-xs tabular-nums text-muted-foreground">{kst(ev.startsAt).time}</span>
+                                        <span className={cn('min-w-0 flex-1 truncate text-[15px] text-foreground', isCurrent ? 'font-semibold' : 'font-medium')}>{ev.title}</span>
+                                        {vacantCount > 0 ? (
+                                            <span className="shrink-0 text-xs font-semibold text-secondary">빈자리 {vacantCount}</span>
+                                        ) : isMyDuty ? (
+                                            <span className="shrink-0 text-xs font-semibold text-foreground">내 사역</span>
+                                        ) : null}
+                                        {isCurrent && <Check size={16} className="shrink-0 text-brand" aria-hidden="true" />}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </section>
+            )}
         </section>
     );
 }

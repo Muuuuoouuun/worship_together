@@ -1286,6 +1286,7 @@ const TEMPLATE_PRESETS = [
 
 export default function SchedulePanel({ state, members, userId, busy, onCommand }: PlanningPanelProps) {
     const headingId = useId();
+    const createFormId = useId();
     const [filter, setFilter] = useState<'upcoming' | 'my' | 'vacant' | 'past' | 'all'>('upcoming');
     const [roleFilter, setRoleFilter] = useState<string>('all');
     const [now, setNow] = useState(() => Date.now());
@@ -1372,6 +1373,8 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
     const [selectedCalendarEventId, setSelectedCalendarEventId] = useState<string | null>(null);
     const [createEventDate, setCreateEventDate] = useState<string | null>(null);
     const [createFormOpen, setCreateFormOpen] = useState(false);
+    // 처음 펼칠 때 폼을 만들고, 접어도 입력 중인 내용을 유지합니다 (Disclosure 와 같은 방식).
+    const [createFormMounted, setCreateFormMounted] = useState(false);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -1848,7 +1851,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             {manager ? (
                 <div className="space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" variant="brand" size="sm" aria-expanded={createFormOpen} onClick={() => setCreateFormOpen(open => !open)}>
+                        <Button type="button" size="sm" aria-expanded={createFormOpen} aria-controls={createFormMounted ? createFormId : undefined} onClick={() => { setCreateFormMounted(true); setCreateFormOpen(open => !open); }}>
                             <Plus strokeWidth={2.25} />
                             <span>직접 일정 만들기</span>
                         </Button>
@@ -1876,8 +1879,8 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                             <span>이번 달 주일 일괄 생성</span>
                         </Button>
                     </div>
-                    {createFormOpen ? (
-                        <div className="rounded-3xl border border-border p-5 sm:max-w-xl sm:p-6">
+                    {createFormMounted ? (
+                        <div id={createFormId} hidden={!createFormOpen} className="rounded-3xl border border-border p-5 sm:max-w-xl sm:p-6">
                             <p className={eyebrow}>새 일정</p>
                             <h3 className="mb-4 mt-0.5 text-[17px] font-semibold tracking-tight">직접 일정 만들기</h3>
                             <EventForm {...actions} />
@@ -1995,6 +1998,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                     userId={userId}
                     manager={manager}
                     selectedDate={selectedCalendarEvent ? kstInput(selectedCalendarEvent.startsAt).slice(0, 10) : undefined}
+                    selectedEventId={selectedCalendarEvent?.id}
                     onSelectEvent={(event) => setSelectedCalendarEventId(event.id)}
                     onOpenMonthlySundaysModal={() => setMonthlySundaysModalOpen(true)}
                     onAddEventOnDate={(dateStr) => {
@@ -2019,7 +2023,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                 <X size={18} />
                             </button>
                         </header>
-                        <EventForm {...actions} defaultDate={createEventDate} />
+                        <EventForm key={createEventDate} {...actions} defaultDate={createEventDate} />
                     </section>
                 )}
 

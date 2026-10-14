@@ -118,7 +118,7 @@ export default function RotationPanel({ state, members, userId, busy, onCommand 
 
             {/* 2. 로테이션 생성 폼 (관리자 전용) */}
             {manager ? (
-                <details className={cn(block, 'group px-4 sm:px-5')}>
+                <details className="group min-w-0 border-y border-border/70">
                     <summary className={cn(summaryRow, 'flex min-h-14 items-center gap-3 py-2.5')}>
                         <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground">
                             <Plus size={18} strokeWidth={2.25} />

@@ -3,6 +3,7 @@
 import { useId, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSheetDismiss } from '@/hooks/useSheetDismiss';
 import {
     AlertTriangle,
     Check,
@@ -115,6 +116,7 @@ export default function OnlineTeamManager({
     const [batchOpen, setBatchOpen] = useState(false);
     const [batchText, setBatchText] = useState('');
     const parsedBatch = useMemo(() => parseMemberLines(batchText), [batchText]);
+    useSheetDismiss(() => setBatchOpen(false), batchOpen);
 
     // Member list search & filter
     const [memberSearch, setMemberSearch] = useState('');
@@ -404,7 +406,7 @@ export default function OnlineTeamManager({
                                             ))}
                                         </Select>
                                     </label>
-                                    <Button type="submit" variant="brand" disabled={pending || !directName.trim()}>
+                                    <Button type="submit" disabled={pending || !directName.trim()}>
                                         <Plus aria-hidden="true" />
                                         <span>추가</span>
                                     </Button>
@@ -669,7 +671,7 @@ export default function OnlineTeamManager({
                             placeholder="예: 주일 2부 찬양팀"
                         />
                     </label>
-                    <Button type="submit" variant="brand" disabled={pending || !name.trim()}>
+                    <Button type="submit" disabled={pending || !name.trim()}>
                         <Plus aria-hidden="true" />
                         <span>팀 만들기</span>
                     </Button>

@@ -1,31 +1,14 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Info, Plus, Trash2, X } from 'lucide-react';
 import { type BlockedDate, type PlanningCommand } from '@/types/planning';
 import { type TeamMember, worshipRoles } from '@/types/team';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/conti/ui';
+import { useSheetDismiss } from '@/hooks/useSheetDismiss';
 
 const control = 'h-11 w-full min-w-0 rounded-2xl border border-border bg-card px-3.5 text-base text-foreground transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:border-foreground/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/10 sm:text-sm';
-
-/** Esc 로 닫고, 열려 있는 동안 뒤 화면 스크롤을 막습니다. */
-function useSheetDismiss(onClose: () => void) {
-    useEffect(() => {
-        const onKey = (event: KeyboardEvent) => {
-            if (event.key !== 'Escape') return;
-            event.stopPropagation();
-            onClose();
-        };
-        document.addEventListener('keydown', onKey);
-        const previous = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-        return () => {
-            document.removeEventListener('keydown', onKey);
-            document.body.style.overflow = previous;
-        };
-    }, [onClose]);
-}
 
 export default function BlockedDatesModal({
     onClose,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react';
 import { planningDate, type PlanningCommand, type ScheduleSlot, type TeamSchedule } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { STATUS } from '@/components/ui/status';
 import { Avatar } from '@/components/conti/ui';
 import { ROLE_ICON } from '@/components/conti/planningUi';
+import { useSheetDismiss } from '@/hooks/useSheetDismiss';
 
 const ROLE_DISPLAY_ORDER: WorshipRole[] = [
     'leader',
@@ -83,22 +84,7 @@ export default function MatrixView({
     }
 
     // 빠른 배정 시트: Esc 로 닫고, 열려 있는 동안 뒤 화면 스크롤을 막습니다.
-    const sheetOpen = Boolean(assigningSlot);
-    useEffect(() => {
-        if (!sheetOpen) return;
-        const onKey = (event: KeyboardEvent) => {
-            if (event.key !== 'Escape') return;
-            event.stopPropagation();
-            setAssigningSlot(null);
-        };
-        document.addEventListener('keydown', onKey);
-        const previous = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-        return () => {
-            document.removeEventListener('keydown', onKey);
-            document.body.style.overflow = previous;
-        };
-    }, [sheetOpen]);
+    useSheetDismiss(() => setAssigningSlot(null), Boolean(assigningSlot));
 
     // Filter events for the current month
     const monthEvents = useMemo(() => {

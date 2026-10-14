@@ -3,6 +3,7 @@
 import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSheetDismiss } from "@/hooks/useSheetDismiss";
 
 interface ModalProps {
   open: boolean;
@@ -23,29 +24,8 @@ function Modal({
   className,
   isBottomSheetOnMobile = true,
 }: ModalProps) {
-  // ESC 키로 닫기
-  React.useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onOpenChange(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onOpenChange]);
-
-  // 스크롤 방지
-  React.useEffect(() => {
-    if (open) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [open]);
+  // Esc 로 닫고(겹친 창이면 맨 위만), 열려 있는 동안 뒤 화면 스크롤을 막습니다.
+  useSheetDismiss(() => onOpenChange(false), open);
 
   if (!open) return null;
 

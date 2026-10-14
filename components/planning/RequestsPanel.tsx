@@ -259,7 +259,7 @@ export default function RequestsPanel({ state, members, userId, busy, onCommand,
     return (
         <section aria-label="콘티 요청" className="min-w-0 space-y-7 text-foreground">
             <div className="space-y-2">
-                <details open={requests.length === 0 || Boolean(initialSetlist)} className="group rounded-3xl border border-border/70 bg-card px-4 sm:px-5">
+                <details open={requests.length === 0 || Boolean(initialSetlist)} className="group border-y border-border/70">
                     <summary className={cn(summaryRow, 'flex min-h-14 items-center gap-3 py-2.5')}>
                         <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground">
                             <Plus size={18} strokeWidth={2.25} />
