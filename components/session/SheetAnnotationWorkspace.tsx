@@ -13,6 +13,7 @@ import {
     HIGHLIGHTER_COLORS,
     importSheetPages,
     readSheet,
+    rekeySheet,
     rotateSheetPage,
     saveSheet,
     sheetKey,
@@ -30,6 +31,7 @@ import {
     type SheetPage,
 } from '@/lib/sheetAnnotations';
 import { renderSheetPageImage, sheetFileStem } from '@/lib/sheetRender';
+import { keyInterval, keyLabel, LEAD_SHEET_KEYS, LEAD_SHEETS, type LeadSheetKey } from '@/lib/leadSheet';
 import {
     abbreviateSectionLabel,
     formatSongFormText,
@@ -115,6 +117,15 @@ function downloadFile(blob: Blob, name: string) {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** One semitone up or down through the key list (C → D♭ → D …). */
+const stepKey = (key: LeadSheetKey, direction: 1 | -1) => LEAD_SHEET_KEYS[(LEAD_SHEET_KEYS.indexOf(key) + direction + 12) % 12];
+function scoreKeyNote(score: NonNullable<SheetDocument['score']>) {
+    const original = LEAD_SHEETS[score.id]?.key ?? 'C';
+    if (original === score.key) return `원키 ${keyLabel(original)} · 키를 바꾸면 음표·코드·조표를 새로 그립니다`;
+    const { semitones } = keyInterval(original, score.key);
+    return `원키 ${keyLabel(original)}에서 ${semitones > 0 ? `${semitones}반음 위` : `${-semitones}반음 아래`}`;
 }
 
 const noSubscribe = () => () => {};
@@ -1011,6 +1022,40 @@ export default function SheetAnnotationWorkspace({
         setStatus('공유 파일을 내려받았습니다. 팀원에게 전달 후 공유 파일 열기로 확인해주세요.');
     }
 
+    async function loadSampleSheet() {
+        setBusy(true);
+        setImportProgress('체험용 샘플 악보를 그리는 중…');
+        try {
+            persist(await createSampleSheetDocument(title));
+            setView('draft');
+            if (canTurnPage) onPageChange(1);
+            setStatus('체험용 샘플 악보 2장을 불러왔습니다. 위의 ‘키’에서 바꾸면 새 키로 다시 그려집니다.');
+        } catch {
+            setStatus('샘플 악보를 그리지 못했습니다. 다시 시도해주세요.');
+        } finally {
+            setBusy(false);
+            setImportProgress(null);
+        }
+    }
+
+    /** Redraws the app-engraved pages in another key (melody, chords, key signature); marks stay put. */
+    async function changeScoreKey(key: LeadSheetKey) {
+        const current = documentRef.current;
+        if (!current?.score || current.score.key === key) return;
+        const from = current.score.key;
+        setBusy(true);
+        setImportProgress(`${keyLabel(key)} 키로 악보를 다시 그리는 중…`);
+        try {
+            persist(await rekeySheet(current, key));
+            setStatus(`${keyLabel(from)} → ${keyLabel(key)} 키로 바꿨습니다. 음표·코드·조표를 새로 그렸고 필기는 그대로입니다.`);
+        } catch {
+            setStatus('악보를 새 키로 그리지 못했습니다. 다시 시도해주세요.');
+        } finally {
+            setBusy(false);
+            setImportProgress(null);
+        }
+    }
+
     async function printSheet() {
         const pages = shown?.pages;
         if (!pages?.length) return;
@@ -1254,13 +1299,7 @@ export default function SheetAnnotationWorkspace({
                     type="button"
                     className={`${button} border-amber-400/40 bg-amber-400/10 text-amber-700 dark:text-amber-300 hover:bg-amber-400/20`}
                     disabled={busy || !loaded}
-                    onClick={() => {
-                        const sampleDoc = createSampleSheetDocument(title);
-                        persist(sampleDoc);
-                        setView('draft');
-                        if (canTurnPage) onPageChange(1);
-                        setStatus('체험용 샘플 악보 2장을 불러왔습니다.');
-                    }}
+                    onClick={() => void loadSampleSheet()}
                 >
                     <Sparkles size={16} className="text-amber-500" />
                     체험용 샘플 악보 불러오기
@@ -1914,6 +1953,49 @@ export default function SheetAnnotationWorkspace({
                     )}
                 </div>
             </div>
+            {shown?.score && (
+                <div className="flex flex-wrap items-center gap-2" role="group" aria-label="악보 키">
+                    <span className="text-xs font-bold text-muted-foreground">키</span>
+                    {view === 'draft' ? (
+                        <>
+                            <button
+                                type="button"
+                                className={button}
+                                disabled={busy}
+                                aria-label="반음 내리기"
+                                onClick={() => void changeScoreKey(stepKey(shown.score!.key, -1))}
+                            >
+                                ▼ 반음
+                            </button>
+                            <select
+                                aria-label="악보 키 고르기"
+                                value={shown.score.key}
+                                disabled={busy}
+                                onChange={(e) => void changeScoreKey(e.target.value as LeadSheetKey)}
+                                className="tap-target rounded-xl border border-primary/15 bg-background/80 px-3 py-2 text-sm font-bold"
+                            >
+                                {LEAD_SHEET_KEYS.map((key) => (
+                                    <option key={key} value={key}>
+                                        {keyLabel(key)}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type="button"
+                                className={button}
+                                disabled={busy}
+                                aria-label="반음 올리기 (키업)"
+                                onClick={() => void changeScoreKey(stepKey(shown.score!.key, 1))}
+                            >
+                                ▲ 키업
+                            </button>
+                        </>
+                    ) : (
+                        <span className="text-sm font-bold">{keyLabel(shown.score.key)}</span>
+                    )}
+                    <span className="text-xs text-muted-foreground">{scoreKeyNote(shown.score)}</span>
+                </div>
+            )}
             {shown?.pages.length ? (
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                     <span>💡</span>

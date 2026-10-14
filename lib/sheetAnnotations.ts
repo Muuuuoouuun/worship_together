@@ -1,4 +1,6 @@
 import { isValidSongFormSections, layoutSectionMarker, layoutSongFormMarkup, SONG_FORM_MAX_ANCHOR_X } from './songFormMarkup';
+import { isLeadSheetKey, LEAD_SHEETS, SAMPLE_LEAD_SHEET, transposeLeadSheet, type LeadSheetKey } from './leadSheet';
+import { renderLeadSheetPages } from './leadSheetRender';
 
 /**
  * 'songform' = song form band (I → V1 → C …); 'section' = one section chip placed at a measure (text = label);
@@ -23,12 +25,21 @@ export type SheetMark = {
     shape?: SheetMarkShape;
 };
 
-export type SheetPage = { image: string; width: number; height: number; marks: SheetMark[] };
+export type SheetPage = {
+    image: string;
+    width: number;
+    height: number;
+    marks: SheetMark[];
+    /** Set on pages the app engraved itself: which page of `SheetDocument.score` this is, so a key change can redraw it. */
+    scorePage?: number;
+};
 export type SheetDocument = {
     version: 1;
     title: string;
     pages: SheetPage[];
     updatedAt: string;
+    /** A sheet the app engraves from data (the sample), and the key it is drawn in. */
+    score?: { id: string; key: LeadSheetKey };
 };
 
 export const SHEET_COLORS = ['#dc2626', '#2563eb', '#15803d', '#111827', '#eab308', '#9333ea'];
@@ -199,7 +210,13 @@ export function validateSheet(value: unknown): SheetDocument {
         typeof doc.updatedAt !== 'string' || !Array.isArray(doc.pages) || doc.pages.length < 1 || doc.pages.length > 20) {
         throw new Error('1~20페이지의 Worship Together 공유 파일을 선택해주세요.');
     }
+    if (doc.score !== undefined && (!doc.score || !(doc.score.id in LEAD_SHEETS) || !isLeadSheetKey(doc.score.key))) {
+        throw new Error('악보 키 정보가 올바르지 않습니다.');
+    }
     for (const page of doc.pages) {
+        if (page?.scorePage !== undefined && (!doc.score || !Number.isInteger(page.scorePage) || page.scorePage < 0 || page.scorePage >= LEAD_SHEETS[doc.score.id].pages.length)) {
+            throw new Error('악보 키 정보가 올바르지 않습니다.');
+        }
         if (!page || typeof page.image !== 'string' || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(page.image) ||
             !Number.isFinite(page.width) || !Number.isFinite(page.height) || page.width < 1 || page.height < 1 ||
             page.width > 5000 || page.height > 5000 || !Array.isArray(page.marks) || page.marks.length > 2000) {
@@ -522,175 +539,20 @@ export function isPointNearMark(
     return false;
 }
 
+const PLACEHOLDER_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
 /**
- * Creates a realistic, high-definition 2-page sample worship lead sheet.
- * In browser environments, draws crisp musical staves, chords, lyrics, and marks on HTML5 Canvas.
- * In Node/SSR, provides a lightweight valid fallback.
+ * The 2-page 체험용 sample, engraved with VexFlow in `key` (C by default), with a few sample marks.
+ * Outside a browser (tests, SSR) the pages are 1px placeholders.
  */
-export function createSampleSheetDocument(title = '은혜로다'): SheetDocument {
+export async function createSampleSheetDocument(title = '은혜로다', key: LeadSheetKey = 'C'): Promise<SheetDocument> {
+    const engraved = typeof document === 'undefined' ? null : await renderLeadSheetPages(transposeLeadSheet(SAMPLE_LEAD_SHEET, key), title || '은혜로다');
+    const pageImage = (index: number) => engraved?.[index] ?? { image: PLACEHOLDER_IMAGE, width: 1200, height: 1600 };
     const pages: SheetDocument['pages'] = [];
 
-    const generatePageImage = (pageNumber: number): string => {
-        if (typeof document === 'undefined') {
-            return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = 1200;
-        canvas.height = 1600;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-            return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-        }
-
-        // Crisp warm manuscript paper background
-        ctx.fillStyle = '#fcfbfa';
-        ctx.fillRect(0, 0, 1200, 1600);
-
-        // Subtle vintage paper border
-        ctx.strokeStyle = '#e2dfd8';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(30, 30, 1140, 1540);
-
-        // Header Title
-        ctx.fillStyle = '#0f172a';
-        ctx.textAlign = 'center';
-        ctx.font = 'bold 44px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif';
-        ctx.fillText(title || '은혜로다', 600, 110);
-
-        ctx.font = '600 20px -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = '#64748b';
-        ctx.fillText(pageNumber === 1 ? 'Worship Lead Sheet · 4/4 박자 · 느리고 은혜롭게' : 'Worship Lead Sheet · 후렴 및 엔딩', 600, 145);
-
-        // Header Meta info
-        ctx.textAlign = 'left';
-        ctx.font = 'bold 22px monospace';
-        ctx.fillStyle = '#b45309';
-        ctx.fillText('Key: C Major (1 = C)', 80, 190);
-
-        ctx.textAlign = 'right';
-        ctx.fillStyle = '#475569';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.fillText('Tempo: ♩ = 68  |  Page ' + pageNumber + ' of 2', 1120, 190);
-
-        // Divider
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(80, 210);
-        ctx.lineTo(1120, 210);
-        ctx.stroke();
-
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(80, 216);
-        ctx.lineTo(1120, 216);
-        ctx.stroke();
-
-        // Staves setup
-        const systems = pageNumber === 1
-            ? [
-                { section: '[Intro]', chords: ['C', 'G/B', 'Am7', 'Em7'], lyrics: '(피아노 & 어쿠스틱 기타 아르페지오 잔잔하게 시작)' },
-                { section: '[Verse 1]', chords: ['F', 'C/E', 'Dm7', 'G7sus4 G'], lyrics: '시작됐네 우리 주님의 능력이 나의 삶을 다스리시네' },
-                { section: '[Chorus]', chords: ['C', 'Em7', 'F', 'G'], lyrics: '주의 은혜로다 주의 은혜로다 주님의 사랑이 나를 감싸네' },
-                { section: '[Verse 2]', chords: ['Am7', 'Em7', 'F  G7', 'C'], lyrics: '넘치는 은혜로 내 영혼 소생케 하시며 나의 모든 길 인도하시네' },
-            ]
-            : [
-                { section: '[Bridge]', chords: ['F', 'G/F', 'Em7', 'Am7'], lyrics: '내가 누려왔던 모든 것들이 내가 지나왔던 모든 시간이' },
-                { section: '[Bridge 2]', chords: ['Dm7', 'G7', 'C', 'C7'], lyrics: '내가 걸어왔던 모든 순간이 당연한 것 아니라 은혜였소' },
-                { section: '[Chorus (All Out)]', chords: ['F', 'G/F', 'Em7', 'Am7'], lyrics: '아침 해가 뜨고 저녁의 노을 봄의 꽃향기와 가을의 열매' },
-                { section: '[Ending / Coda]', chords: ['Dm7', 'G7', 'Csus4', 'C (Fine)'], lyrics: '꿈꾸지 못했던 가장 큰 선물 주님의 사랑과 은혜라네' },
-            ];
-
-        const startY = 270;
-        const systemGap = 310;
-        const staffLineGap = 16;
-
-        systems.forEach((sys, sysIdx) => {
-            const topY = startY + sysIdx * systemGap;
-
-            // Section Tag Badge
-            ctx.fillStyle = '#0f172a';
-            ctx.beginPath();
-            ctx.roundRect(80, topY - 35, 120, 28, 6);
-            ctx.fill();
-            ctx.fillStyle = '#ffffff';
-            ctx.textAlign = 'center';
-            ctx.font = 'bold 15px sans-serif';
-            ctx.fillText(sys.section, 140, topY - 16);
-
-            // Chords above staff
-            ctx.textAlign = 'left';
-            ctx.font = 'bold 26px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-            ctx.fillStyle = '#0369a1';
-            const colWidth = (1120 - 80) / 4;
-            sys.chords.forEach((chord, cIdx) => {
-                ctx.fillText(chord, 80 + cIdx * colWidth + 15, topY - 10);
-            });
-
-            // 5 staff lines
-            ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 1.5;
-            for (let l = 0; l < 5; l++) {
-                const lineY = topY + l * staffLineGap;
-                ctx.beginPath();
-                ctx.moveTo(80, lineY);
-                ctx.lineTo(1120, lineY);
-                ctx.stroke();
-            }
-
-            // Left and Right barlines
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            ctx.moveTo(80, topY);
-            ctx.lineTo(80, topY + 4 * staffLineGap);
-            ctx.moveTo(1120, topY);
-            ctx.lineTo(1120, topY + 4 * staffLineGap);
-            ctx.stroke();
-
-            // Internal measure barlines
-            ctx.lineWidth = 1.5;
-            for (let b = 1; b < 4; b++) {
-                const barX = 80 + b * colWidth;
-                ctx.beginPath();
-                ctx.moveTo(barX, topY);
-                ctx.lineTo(barX, topY + 4 * staffLineGap);
-                ctx.stroke();
-            }
-
-            // Note stems and heads decorative representation
-            ctx.fillStyle = '#0f172a';
-            for (let m = 0; m < 4; m++) {
-                const measureX = 80 + m * colWidth;
-                [0.28, 0.68].forEach((offsetRatio, noteIdx) => {
-                    const noteX = measureX + colWidth * offsetRatio;
-                    const noteY = topY + ((m + noteIdx) % 4) * staffLineGap + 8;
-                    ctx.beginPath();
-                    ctx.ellipse(noteX, noteY, 8, 6, -0.3, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillRect(noteX + 6, noteY - 32, 2.5, 32);
-                });
-            }
-
-            // Lyrics underneath staff
-            ctx.textAlign = 'left';
-            ctx.font = '600 21px -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif';
-            ctx.fillStyle = '#1e293b';
-            ctx.fillText(sys.lyrics, 85, topY + 4 * staffLineGap + 40);
-        });
-
-        // Bottom Footer
-        ctx.textAlign = 'center';
-        ctx.font = '14px sans-serif';
-        ctx.fillStyle = '#94a3b8';
-        ctx.fillText('Worship Together Stage Score Engine · ' + (pageNumber === 1 ? '1/2 페이지' : '2/2 페이지'), 600, 1560);
-
-        return canvas.toDataURL('image/jpeg', 0.92);
-    };
-
     pages.push({
-        image: generatePageImage(1),
-        width: 1200,
-        height: 1600,
+        ...pageImage(0),
+        scorePage: 0,
         marks: [
             {
                 id: 'sample-mark-hl-1',
@@ -710,7 +572,7 @@ export function createSampleSheetDocument(title = '은혜로다'): SheetDocument
                 kind: 'stamp',
                 color: '#2563eb',
                 text: '후렴 반복',
-                points: [[760, 530]],
+                points: [[790, 530]],
             },
             {
                 id: 'sample-mark-pen-1',
@@ -731,9 +593,8 @@ export function createSampleSheetDocument(title = '은혜로다'): SheetDocument
     });
 
     pages.push({
-        image: generatePageImage(2),
-        width: 1200,
-        height: 1600,
+        ...pageImage(1),
+        scorePage: 1,
         marks: [
             {
                 id: 'sample-mark-stamp-2',
@@ -750,6 +611,23 @@ export function createSampleSheetDocument(title = '은혜로다'): SheetDocument
         title: (title || '은혜로다').slice(0, 200),
         pages,
         updatedAt: new Date().toISOString(),
+        score: { id: SAMPLE_LEAD_SHEET.id, key },
+    };
+}
+
+/** Re-engraves the app-drawn pages of a sheet in another key; marks and any added pages stay as they are. */
+export async function rekeySheet(doc: SheetDocument, key: LeadSheetKey): Promise<SheetDocument> {
+    const sheet = doc.score ? LEAD_SHEETS[doc.score.id] : undefined;
+    if (!doc.score || !sheet || doc.score.key === key) return doc;
+    const engraved = await renderLeadSheetPages(transposeLeadSheet(sheet, key), doc.title);
+    return {
+        ...doc,
+        score: { ...doc.score, key },
+        updatedAt: new Date().toISOString(),
+        pages: doc.pages.map((page) => {
+            const next = page.scorePage === undefined ? undefined : engraved[page.scorePage];
+            return next ? { ...page, image: next.image, width: next.width, height: next.height } : page;
+        }),
     };
 }
 
@@ -800,8 +678,11 @@ export async function rotateSheetPage(page: SheetPage, angleDeg: 90 | 180 | 270 
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((angleDeg * Math.PI) / 180);
     ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+    // A turned page no longer matches its engraving, so it drops out of key changes.
+    const { scorePage: _engraved, ...rest } = page;
+    void _engraved;
     return {
-        ...page,
+        ...rest,
         image: canvas.toDataURL('image/jpeg', IMPORT_QUALITY),
         width: canvas.width,
         height: canvas.height,

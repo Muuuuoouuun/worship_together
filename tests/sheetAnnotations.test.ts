@@ -159,14 +159,18 @@ test('isPointNearMark accurately detects hits on line segments and stamps', () =
     assert.equal(isPointNearMark(600, 600, stampMark, 1.0), false);
 });
 
-test('createSampleSheetDocument produces a valid 2-page document with sample markings', () => {
-    const doc = createSampleSheetDocument('은혜로다');
+test('createSampleSheetDocument produces a valid 2-page document with sample markings', async () => {
+    const doc = await createSampleSheetDocument('은혜로다', 'D');
     assert.equal(doc.version, 1);
     assert.equal(doc.title, '은혜로다');
     assert.equal(doc.pages.length, 2);
     assert.ok(doc.pages[0].marks.length >= 2);
+    assert.deepEqual(doc.score, { id: 'sample', key: 'D' });
+    assert.deepEqual(doc.pages.map((p) => p.scorePage), [0, 1]);
     const validated = validateSheet(doc);
     assert.equal(validated.pages.length, 2);
+    assert.throws(() => validateSheet({ ...doc, score: { id: 'sample', key: 'H' } }));
+    assert.throws(() => validateSheet({ ...doc, pages: [{ ...doc.pages[0], scorePage: 5 }] }));
 });
 
 test('validateSheet and isPointNearMark accept text and rect marks', () => {

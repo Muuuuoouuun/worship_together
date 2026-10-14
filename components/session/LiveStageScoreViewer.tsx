@@ -46,6 +46,7 @@ import {
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
 import SongFormMarkup, { SongFormSectionMarker } from './SongFormMarkup';
 import SheetInkLayer from './SheetInkLayer';
+import { normalizeKey } from '@/lib/leadSheet';
 
 export interface LiveStageScoreViewerProps {
     teamId: string;
@@ -234,7 +235,8 @@ export default function LiveStageScoreViewer({
 
     const loadSampleSheet = async () => {
         try {
-            const sampleDoc = createSampleSheetDocument(title);
+            // Drawn in the song's key when the library knows it (major keys).
+            const sampleDoc = await createSampleSheetDocument(title, normalizeKey(originalKey) ?? 'C');
             const publishedKey = sheetKey(teamId, songId, true);
             await saveSheet(publishedKey, sampleDoc);
             setSheet(sampleDoc);
