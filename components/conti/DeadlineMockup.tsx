@@ -4,6 +4,12 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import { AlarmClock, Bell, BellRing, Check, CircleCheck, Clock, EyeOff, Hand, Inbox, ListMusic, Moon, ShieldAlert, Smartphone, Undo2, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MEMBERS, SETLISTS, member } from './mockData';
+
+/** 목업 팀원 id → 아바타에 넘길 이름·색 */
+const person = (id: string | null | undefined) => {
+    const found = member(id);
+    return { name: found?.name ?? null, tone: found?.tone };
+};
 import { addDays, dayOf, diffDays, md, monthOf, weekLabel, weekday, type Tone } from './model';
 import { Avatar, AvatarStack, Eyebrow, RoundIconButton, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_ICON, body, chip, ink, line, selected, sub, todayText, tabOn, tabOff, ringCard, attentionText, divide } from './ui';
 
@@ -169,7 +175,7 @@ function WaitingAvatars({ nudges }: { nudges: Nudge[] }) {
     const hidden = nudges.length - named.length;
     return (
         <span className="flex items-center -space-x-1">
-            <AvatarStack ids={named} max={3} size="xs" />
+            <AvatarStack people={named.map(person)} max={3} size="xs" />
             {hidden > 0 && <AnonymousAvatar size="xs" />}
         </span>
     );
@@ -214,7 +220,7 @@ function SetlistCard({ phase, nudges, title, children }: { phase: DeadlinePhase;
                 </span>
                 <span className="inline-flex items-center gap-2">
                     <span className={cn('text-xs', sub)}>담당</span>
-                    <Avatar id={LEADER} size="sm" />
+                    <Avatar {...person(LEADER)} size="sm" />
                     <span className={cn('text-xs font-medium', ink)}>{leader?.name}</span>
                 </span>
             </div>
@@ -234,7 +240,7 @@ function MemberView({ phase, nudges, myNudge, eta, openAlerts, onNudge }: Shared
 
             {etaOption && (
                 <div className={cn('flex gap-3.5 border-b pb-5', line)}>
-                    <Avatar id={LEADER} size="md" />
+                    <Avatar {...person(LEADER)} size="md" />
                     <div className="min-w-0 flex-1">
                         <p className="text-sm leading-snug"><span className={cn('font-semibold', ink)}>{leader?.name}</span><span className={body}>님이 예정 시간을 알려줬어요</span></p>
                         <p className={cn('mt-2', bubble)}>{etaOption.label}</p>
@@ -291,7 +297,7 @@ function NudgeComposer({ onSend }: { onSend: (nudge: { message: string; anonymou
 function SentNudge({ nudge, onCancel }: { nudge: { message: string; anonymous: boolean }; onCancel: () => void }) {
     return (
         <div className="flex gap-3.5 animate-in fade-in duration-150">
-            {nudge.anonymous ? <AnonymousAvatar size="md" /> : <Avatar id={ME} size="md" />}
+            {nudge.anonymous ? <AnonymousAvatar size="md" /> : <Avatar {...person(ME)} size="md" />}
             <div className="min-w-0 flex-1">
                 <p className="text-sm leading-snug"><span className={cn('font-semibold', ink)}>요청을 보냈어요</span>{nudge.anonymous && <span className={sub}> · 이름 숨김</span>}</p>
                 <p className={cn('mt-2', bubble)}>{nudge.message}</p>
@@ -329,7 +335,7 @@ function LeaderView({ phase, nudges, eta, openAlerts, onEta, onConfirm }: Shared
                     <ul>
                         {nudges.map((nudge) => (
                             <li key={nudge.id} className={cn('flex gap-3.5 border-b py-4 last:border-b-0', line)}>
-                                {nudge.from ? <Avatar id={nudge.from} size="md" /> : <AnonymousAvatar size="md" />}
+                                {nudge.from ? <Avatar {...person(nudge.from)} size="md" /> : <AnonymousAvatar size="md" />}
                                 <div className="min-w-0 flex-1">
                                     <p className="text-sm leading-snug"><span className={cn('font-semibold', ink)}>{nudge.from ? member(nudge.from)?.name : '팀원 1명'}</span><span className={sub}> · {nudge.part}</span></p>
                                     <p className={cn('mt-2', bubble)}>{nudge.message}</p>
@@ -364,7 +370,7 @@ function LeaderView({ phase, nudges, eta, openAlerts, onEta, onConfirm }: Shared
                         { date: addDays(SETLIST.date, 14), owner: 'm2', status: '미작성', text: sub },
                     ].map((item) => (
                         <li key={item.date} className="flex items-center gap-3.5 py-4">
-                            <Avatar id={item.owner} size="md" />
+                            <Avatar {...person(item.owner)} size="md" />
                             <div className="min-w-0 flex-1">
                                 <p className={cn('text-[15px] font-medium', ink)}>{md(item.date)} {SETLIST.service}</p>
                                 <p className={cn('mt-0.5 text-xs tabular-nums', sub)}>마감 {md(tuesdayBefore(item.date))} (화) 23:59</p>
@@ -579,7 +585,7 @@ function AlertsView() {
                                 return (
                                     <li key={item.id} className={cn('flex gap-3.5 border-b py-4 last:border-b-0', line)}>
                                         <span className="relative inline-flex shrink-0 self-start">
-                                            {item.actor ? <Avatar id={item.actor} size="md" /> : <span className={cn('flex size-9 items-center justify-center rounded-full', TONE_BLOCK[item.tone])}><item.icon size={16} className={TONE_ICON[item.tone]} aria-hidden="true" /></span>}
+                                            {item.actor ? <Avatar {...person(item.actor)} size="md" /> : <span className={cn('flex size-9 items-center justify-center rounded-full', TONE_BLOCK[item.tone])}><item.icon size={16} className={TONE_ICON[item.tone]} aria-hidden="true" /></span>}
                                             {item.actor && (
                                                 <span className="absolute -bottom-1 -right-1 flex size-[1.125rem] items-center justify-center rounded-full bg-card ring-2 ring-card">
                                                     <span className={cn('flex size-full items-center justify-center rounded-full', TONE_BLOCK[item.tone])}><item.icon size={10} strokeWidth={2.5} className={TONE_ICON[item.tone]} aria-hidden="true" /></span>

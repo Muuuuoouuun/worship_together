@@ -12,7 +12,8 @@ export function resolveScreen(tab: string | null | undefined, setlist: string | 
     const setlistId = setlist || undefined;
     return { screen: screen === 'order' && !setlistId ? 'conti' : screen, setlistId };
 }
-export type Tone = 'sky' | 'mint' | 'peach' | 'lilac' | 'sand';
+export type { Tone } from '@/components/ui/tones';
+import type { Tone } from '@/components/ui/tones';
 export type SetlistStatus = 'done' | 'confirmed' | 'writing' | 'empty';
 export type LinkKind = 'video' | 'sheet' | 'mr' | 'other';
 

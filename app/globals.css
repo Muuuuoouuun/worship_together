@@ -122,6 +122,9 @@
     text-rendering: optimizeLegibility;
     letter-spacing: -0.012em;
     touch-action: manipulation;
+    /* 한글은 띄어쓰기에서만 줄을 바꾸고, 너무 긴 단어만 강제로 나눕니다 (레퍼런스와 같은 줄바꿈) */
+    word-break: keep-all;
+    overflow-wrap: break-word;
   }
 
   h1, h2, h3, h4, h5, h6 {

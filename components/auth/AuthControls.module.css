@@ -18,7 +18,7 @@
 .account { position: relative; color: var(--foreground); font-size: 14px; }
 .account summary { display: flex; align-items: center; gap: 8px; min-height: 40px; cursor: pointer; border: 1px solid var(--border); border-radius: 9999px; background: var(--card); padding: 4px 12px 4px 4px; list-style: none; }
 .account summary::-webkit-details-marker { display: none; }
-.avatar { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; color: var(--primary-foreground); background: var(--primary); font-size: 12px; font-weight: 700; }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; color: var(--foreground); background: var(--muted); font-size: 12px; font-weight: 700; }
 .name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 @media (max-width: 639px) { .name { display: none; } .account summary { padding-right: 8px; } }
 .panel { position: absolute; z-index: 60; right: 0; top: calc(100% + 8px); width: min(260px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 20px; color: var(--foreground); background: var(--card); box-shadow: 0 12px 32px rgb(0 0 0 / 0.12); overflow-wrap: anywhere; }
