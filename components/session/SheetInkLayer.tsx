@@ -2,6 +2,7 @@
 
 import { memo, type MouseEvent } from 'react';
 import { lineMarkPath, pointsToSvgPath, type SheetMark } from '@/lib/sheetAnnotations';
+import { markPart, PART_BADGES } from '@/lib/markParts';
 
 /** Hand-drawn marks in their layer order; song form markup is drawn by the caller on top. */
 const INK_ORDER: ReadonlyArray<SheetMark['kind']> = ['highlighter', 'rect', 'pen', 'line', 'stamp', 'text'];
@@ -122,10 +123,50 @@ const InkMark = memo(function InkMark({ mark, ratio, dark, erasable, onErase }: 
     }
 });
 
+const BADGE_WIDTH = 18;
+const BADGE_HEIGHT = 14;
+
+/** Top-left corner of a mark as drawn above, where its part badge hangs off. */
+function badgeCorner(mark: SheetMark, ratio: number): [number, number] {
+    const [x, y] = mark.points[0] ?? [0, 0];
+    switch (mark.kind) {
+        case 'stamp':
+            return [Math.min(x, 780), Math.max(y * ratio, 25) - 25];
+        case 'text':
+            return [Math.min(x, 900) - 4, Math.max(y * ratio, 20) - (mark.fontSize ?? 20)];
+        case 'rect': {
+            const q = mark.points[1];
+            return q ? [Math.min(x, q[0]), Math.min(y, q[1]) * ratio] : [x, y * ratio];
+        }
+        default:
+            return [x, y * ratio];
+    }
+}
+
+/** A tiny tag on a mark that is for one part only, so the leader can tell whose notes are whose. */
+const PartBadge = memo(function PartBadge({ mark, ratio }: { mark: SheetMark; ratio: number }) {
+    const part = markPart(mark);
+    if (!part) return null;
+    const [cornerX, cornerY] = badgeCorner(mark, ratio);
+    const x = Math.max(0, Math.min(cornerX, 1000 - BADGE_WIDTH));
+    const y = Math.max(0, cornerY - BADGE_HEIGHT);
+    const { short, color } = PART_BADGES[part];
+    return (
+        <g data-part={part} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`} pointerEvents="none">
+            <rect width={BADGE_WIDTH} height={BADGE_HEIGHT} rx="4" fill={color} fillOpacity="0.88" />
+            <text x={BADGE_WIDTH / 2} y={BADGE_HEIGHT / 2} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize="10" fontWeight="800">
+                {short}
+            </text>
+        </g>
+    );
+});
+
 type LayerProps = {
     marks: readonly SheetMark[];
     ratio: number;
     dark?: boolean;
+    /** Workspace: tag marks that are for one part with a small badge. */
+    partBadges?: boolean;
     /** Eraser tool: marks fade on hover and a click removes them. */
     erasable?: boolean;
     /** Keep this stable (useCallback) so the layer stays memoized. */
@@ -133,7 +174,7 @@ type LayerProps = {
 };
 
 /** The page's hand-drawn marks (pen, highlighter, boxes, lines, stamps, text) inside the page SVG. */
-function SheetInkLayer({ marks, ratio, dark = false, erasable = false, onErase }: LayerProps) {
+function SheetInkLayer({ marks, ratio, dark = false, partBadges = false, erasable = false, onErase }: LayerProps) {
     return (
         <>
             {INK_ORDER.flatMap((kind) =>
@@ -141,6 +182,7 @@ function SheetInkLayer({ marks, ratio, dark = false, erasable = false, onErase }
                     .filter((mark) => mark.kind === kind)
                     .map((mark) => <InkMark key={mark.id} mark={mark} ratio={ratio} dark={dark} erasable={erasable} onErase={onErase} />)
             )}
+            {partBadges ? marks.map((mark) => (markPart(mark) ? <PartBadge key={`${mark.id}:part`} mark={mark} ratio={ratio} /> : null)) : null}
         </>
     );
 }

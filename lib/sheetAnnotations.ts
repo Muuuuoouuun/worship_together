@@ -3,6 +3,9 @@ import { isLeadSheetKey, LEAD_SHEETS, SAMPLE_LEAD_SHEET, transposeLeadSheet, typ
 import { renderLeadSheetPages } from './leadSheetRender';
 import { isChartSettings, type ChartSettings } from './chordChart';
 import { updateChordChart } from './chordChartSheet';
+import { isSheetPart, type SheetPart } from './markParts';
+
+export type { SheetPart };
 
 /**
  * 'songform' = song form band (I → V1 → C …); 'section' = one section chip placed at a measure (text = label);
@@ -25,6 +28,8 @@ export type SheetMark = {
     /** kind 'songform' only: ordered chip labels, e.g. ['I', 'V1', 'C×2']. */
     sections?: string[];
     shape?: SheetMarkShape;
+    /** Who the mark is for; unset means everyone (모두). Song form marks ('songform', 'section') ignore it. */
+    part?: SheetPart;
 };
 
 export type SheetPage = {
@@ -241,9 +246,10 @@ export function validateSheet(value: unknown): SheetDocument {
             const isValidWidth = mark.strokeWidth === undefined || (Number.isFinite(mark.strokeWidth) && mark.strokeWidth >= 0.5 && mark.strokeWidth <= 60);
             const isValidOpacity = mark.opacity === undefined || (Number.isFinite(mark.opacity) && mark.opacity >= 0 && mark.opacity <= 1);
             const isValidFontSize = mark.fontSize === undefined || (Number.isFinite(mark.fontSize) && mark.fontSize >= 8 && mark.fontSize <= 72);
+            const isValidPart = mark.part === undefined || isSheetPart(mark.part);
 
             if (!mark || typeof mark.id !== 'string' || !isValidKind || !isValidColor ||
-                !isValidWidth || !isValidOpacity || !isValidFontSize || !isValidShape ||
+                !isValidWidth || !isValidOpacity || !isValidFontSize || !isValidShape || !isValidPart ||
                 (mark.kind === 'line' && mark.points?.length !== 2) ||
                 !Array.isArray(mark.points) || mark.points.length < 1 || mark.points.length > 5000 ||
                 mark.points.some((point) => !Array.isArray(point) || point.length !== 2 || point.some((n) => !Number.isFinite(n) || n < 0 || n > 1000)) ||

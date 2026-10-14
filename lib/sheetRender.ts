@@ -152,9 +152,13 @@ function drawMark(ctx: CanvasRenderingContext2D, mark: SheetMark, ratio: number)
     ctx.restore();
 }
 
+/** Picks which of a page's marks to draw (e.g. only the parts being viewed); the stored marks are left alone. */
+export type SheetMarksFilter = (marks: readonly SheetMark[]) => readonly SheetMark[];
+
 /** Draws marks in viewBox units; the caller scales the context so 1000 units span the page width. */
-export function drawSheetMarks(ctx: CanvasRenderingContext2D, marks: readonly SheetMark[], ratio: number) {
-    for (const kind of LAYERS) for (const mark of marks) if (mark.kind === kind) drawMark(ctx, mark, ratio);
+export function drawSheetMarks(ctx: CanvasRenderingContext2D, marks: readonly SheetMark[], ratio: number, filter?: SheetMarksFilter) {
+    const shown = filter ? filter(marks) : marks;
+    for (const kind of LAYERS) for (const mark of shown) if (mark.kind === kind) drawMark(ctx, mark, ratio);
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -166,10 +170,10 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     });
 }
 
-export type SheetImageOptions = { withMarks?: boolean; type?: 'image/jpeg' | 'image/png'; quality?: number };
+export type SheetImageOptions = { withMarks?: boolean; type?: 'image/jpeg' | 'image/png'; quality?: number; marksFilter?: SheetMarksFilter };
 
 /** One page with its marks as an image file, at the page's own resolution. */
-export async function renderSheetPageImage(page: SheetPage, { withMarks = true, type = 'image/jpeg', quality = 0.92 }: SheetImageOptions = {}): Promise<Blob> {
+export async function renderSheetPageImage(page: SheetPage, { withMarks = true, type = 'image/jpeg', quality = 0.92, marksFilter }: SheetImageOptions = {}): Promise<Blob> {
     const image = await loadImage(page.image);
     const canvas = document.createElement('canvas');
     canvas.width = page.width;
@@ -182,7 +186,7 @@ export async function renderSheetPageImage(page: SheetPage, { withMarks = true, 
     if (withMarks) {
         const unit = canvas.width / 1000;
         ctx.scale(unit, unit);
-        drawSheetMarks(ctx, page.marks, page.height / page.width);
+        drawSheetMarks(ctx, page.marks, page.height / page.width, marksFilter);
     }
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
     canvas.width = canvas.height = 0;

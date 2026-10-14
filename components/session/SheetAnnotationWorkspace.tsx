@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Mo
 import { createPortal } from 'react-dom';
 import { BookOpen, ChevronLeft, ChevronRight, Copy, Delete, Download, Eraser, FileUp, Hand, Highlighter, ImageDown, ListMusic, Maximize2, Minimize2, Moon, MoveUpRight, Music2, Pencil, Printer, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
+import { useMarkViewParts } from '@/hooks/useMarkPartPrefs';
 import { useSongFormStepper } from '@/hooks/useSongFormStepper';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
@@ -32,6 +33,7 @@ import {
     type SheetPage,
 } from '@/lib/sheetAnnotations';
 import { renderSheetPageImage, sheetFileStem } from '@/lib/sheetRender';
+import { marksForParts, togglePartInSelection, withMarkPart, type SheetPart } from '@/lib/markParts';
 import { canRedo, canUndo, EMPTY_HISTORY, recordSheetChange, redoPage, undoPage, type SheetHistory } from '@/lib/markHistory';
 import { keyInterval, keyLabel, LEAD_SHEET_KEYS, LEAD_SHEETS, type LeadSheetKey } from '@/lib/leadSheet';
 import { chartKeyNote, type ChartSettings } from '@/lib/chordChart';
@@ -61,6 +63,7 @@ import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFor
 import SongFormMarkup, { SongFormMarkupPlaceholder, SongFormSectionMarker } from './SongFormMarkup';
 import SheetInkLayer from './SheetInkLayer';
 import ChordChartPanel from './ChordChartPanel';
+import MarkPartPicker, { MarkPartFilter } from './MarkPartPicker';
 
 type Props = {
     teamId: string;
@@ -178,6 +181,10 @@ export default function SheetAnnotationWorkspace({
     const [penWidth, setPenWidth] = useState<number>(3);
     const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
     const [textFontSize, setTextFontSize] = useState<number>(20);
+    /** 누구에게: the part new marks are for (null = everyone). */
+    const [markPart, setMarkPart] = useState<SheetPart | null>(null);
+    /** 보기: parts shown besides the marks for everyone (null = all parts). Kept per device. */
+    const { visible: viewParts, setVisible: setViewParts } = useMarkViewParts();
     /** Per-page undo/redo of the draft's marks. */
     const [history, setHistory] = useState<SheetHistory>(EMPTY_HISTORY);
     const [textModal, setTextModal] = useState<{ isOpen: boolean; x: number; y: number; text: string } | null>(null);
@@ -232,6 +239,8 @@ export default function SheetAnnotationWorkspace({
     const page = isEditingOtherPage && editPage !== null ? editPage : livePage;
     const activePage = shown?.pages[page - 1];
     const pageRatio = activePage ? activePage.height / activePage.width : 1;
+    /** Print and image export draw only what the 보기 filter shows. */
+    const exportFilter = viewParts ? (marks: readonly SheetMark[]) => marksForParts(marks, viewParts) : undefined;
     const pageSongFormMarks = (view === 'draft' && activePage?.marks.filter(isSongFormMark)) || [];
     const songFormSections = pageSongFormMarks.find((m) => m.kind === 'songform')?.sections ?? [];
     const pageSectionMarkers = pageSongFormMarks.filter((m) => m.kind === 'section');
@@ -477,13 +486,20 @@ export default function SheetAnnotationWorkspace({
     function addMark(mark: SheetMark) {
         const current = documentRef.current;
         if (!current?.pages[page - 1] || current.pages[page - 1].marks.length >= 2000) return;
+        const placed = withMarkPart(mark, markPart);
         persist({
             ...current,
             updatedAt: new Date().toISOString(),
             pages: current.pages.map((item, index) =>
-                index === page - 1 ? { ...item, marks: [...item.marks, mark] } : item
+                index === page - 1 ? { ...item, marks: [...item.marks, placed] } : item
             ),
         });
+    }
+
+    /** A new mark must not vanish from the view it was drawn in, so a filter that hides the part widens to it. */
+    function chooseMarkPart(part: SheetPart | null) {
+        setMarkPart(part);
+        if (part && viewParts && !viewParts.has(part)) setViewParts(togglePartInSelection(viewParts, part));
     }
 
     function removeMark(markId: string) {
@@ -738,7 +754,7 @@ export default function SheetAnnotationWorkspace({
 
         if (tool === 'eraser') {
             const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
-            const currentMarks = documentRef.current?.pages[page - 1]?.marks ?? [];
+            const currentMarks = marksForParts(documentRef.current?.pages[page - 1]?.marks ?? [], viewParts);
             const ratio = activePage ? activePage.height / activePage.width : 1;
             const hit = currentMarks.find((m) => isPointNearMark(x, y, m, ratio));
             if (hit) {
@@ -832,7 +848,7 @@ export default function SheetAnnotationWorkspace({
             if (now - lastEraserCheckRef.current < 25) return;
             lastEraserCheckRef.current = now;
             const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
-            const currentMarks = documentRef.current?.pages[page - 1]?.marks ?? [];
+            const currentMarks = marksForParts(documentRef.current?.pages[page - 1]?.marks ?? [], viewParts);
             const ratio = activePage ? activePage.height / activePage.width : 1;
             const hit = currentMarks.find((m) => isPointNearMark(x, y, m, ratio));
             if (hit) {
@@ -1009,14 +1025,19 @@ export default function SheetAnnotationWorkspace({
     function clearPageMarks() {
         const current = documentRef.current;
         if (!current || !current.pages[page - 1]?.marks.length) return;
-        if (typeof window !== 'undefined' && !window.confirm('현재 페이지의 모든 필기를 지우시겠습니까?')) {
+        // Marks the 보기 filter hides are not on screen, so clearing leaves them.
+        const pageMarks = current.pages[page - 1].marks;
+        const shownMarks = new Set(marksForParts(pageMarks, viewParts));
+        if (!shownMarks.size) return;
+        const question = viewParts ? '현재 페이지에 보이는 필기를 지우시겠습니까? 숨겨진 파트의 필기는 남습니다.' : '현재 페이지의 모든 필기를 지우시겠습니까?';
+        if (typeof window !== 'undefined' && !window.confirm(question)) {
             return;
         }
         persist({
             ...current,
             updatedAt: new Date().toISOString(),
             pages: current.pages.map((item, index) =>
-                index === page - 1 ? { ...item, marks: [] } : item
+                index === page - 1 ? { ...item, marks: pageMarks.filter((m) => !shownMarks.has(m)) } : item
             ),
         });
     }
@@ -1108,7 +1129,7 @@ export default function SheetAnnotationWorkspace({
             const urls: string[] = [];
             for (const [index, item] of pages.entries()) {
                 setImportProgress(`인쇄할 악보 ${index + 1}/${pages.length}페이지 만드는 중…`);
-                urls.push(URL.createObjectURL(await renderSheetPageImage(item, { withMarks: exportMarks })));
+                urls.push(URL.createObjectURL(await renderSheetPageImage(item, { withMarks: exportMarks, marksFilter: exportFilter })));
             }
             setPrintImages(urls);
             setStatus(`${pages.length}페이지를 인쇄 창으로 보냈습니다. ‘PDF로 저장’을 고르면 PDF 파일로 남습니다.`);
@@ -1123,7 +1144,7 @@ export default function SheetAnnotationWorkspace({
     /** The page on screen as a JPEG file, marks burned in unless turned off. */
     async function currentPageFile(): Promise<File | null> {
         if (!activePage) return null;
-        const blob = await renderSheetPageImage(activePage, { withMarks: exportMarks });
+        const blob = await renderSheetPageImage(activePage, { withMarks: exportMarks, marksFilter: exportFilter });
         return new File([blob], `${sheetFileStem(title)}-${page}p.jpg`, { type: 'image/jpeg' });
     }
 
@@ -1269,7 +1290,7 @@ export default function SheetAnnotationWorkspace({
 
         return (
             <>
-                <SheetInkLayer marks={marks} ratio={ratio} erasable={interactive && tool === 'eraser'} onErase={eraseMark} />
+                <SheetInkLayer marks={marksForParts(marks, viewParts)} ratio={ratio} partBadges erasable={interactive && tool === 'eraser'} onErase={eraseMark} />
                 {interactive ? renderLiveStroke(ratio) : null}
                 {songForms.map((mark) => renderSongFormMark(mark, interactive, ratio))}
                 {sectionMarkers.map((mark) => renderSongFormMark(mark, interactive, ratio))}
@@ -1370,6 +1391,13 @@ export default function SheetAnnotationWorkspace({
                     팀 공유본 {published ? `· ${published.pages.length}p` : '없음'}
                 </button>
             </div>
+            {shown?.pages.length ? (
+                <MarkPartFilter
+                    visible={viewParts}
+                    onChange={setViewParts}
+                    hiddenCount={activePage ? activePage.marks.length - marksForParts(activePage.marks, viewParts).length : 0}
+                />
+            ) : null}
             {showTools && view === 'draft' && (
                 <div className="space-y-3 rounded-2xl border border-primary/10 bg-card/40 p-3 animate-in fade-in duration-150">
                     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="필기 도구">
@@ -1864,6 +1892,10 @@ export default function SheetAnnotationWorkspace({
                                 ))}
                             </div>
                         ) : null}
+
+                        {(tool === 'pen' || tool === 'highlighter' || tool === 'stamp' || tool === 'text' || tool === 'rect' || tool === 'line') && (
+                            <MarkPartPicker value={markPart} onChange={chooseMarkPart} />
+                        )}
                     </div>
 
                     <p className="text-xs text-muted-foreground">
@@ -2279,7 +2311,7 @@ export default function SheetAnnotationWorkspace({
                         <input type="checkbox" checked={exportMarks} onChange={(e) => setExportMarks(e.target.checked)} className="size-4 accent-primary" />
                         필기·송폼 포함
                     </label>
-                    <span className="text-xs text-muted-foreground">{view === 'published' ? '팀 공유본' : '내 필기'} 기준</span>
+                    <span className="text-xs text-muted-foreground">{view === 'published' ? '팀 공유본' : '내 필기'} 기준{viewParts ? ' · 보기 필터 적용' : ''}</span>
                 </div>
             ) : null}
             {printImages &&

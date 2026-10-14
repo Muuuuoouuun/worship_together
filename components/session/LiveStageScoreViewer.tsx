@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Activity,
     Bell,
@@ -28,6 +28,7 @@ import {
     Zap,
 } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
+import { useMyPart, useOverlayPersonal } from '@/hooks/useMarkPartPrefs';
 import { useSongFormStepper } from '@/hooks/useSongFormStepper';
 import { useChartLyricsOnly } from '@/hooks/useChartLyricsOnly';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
@@ -45,6 +46,7 @@ import {
     type SheetDocument,
     type SheetMark,
 } from '@/lib/sheetAnnotations';
+import { marksForParts, marksNotIn, PART_ALL_LABEL, PART_LABELS, parsePart, SHEET_PARTS } from '@/lib/markParts';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
 import SongFormMarkup, { SongFormSectionMarker } from './SongFormMarkup';
 import SheetInkLayer from './SheetInkLayer';
@@ -136,6 +138,8 @@ export default function LiveStageScoreViewer({
 }: LiveStageScoreViewerProps) {
     const [sheet, setSheet] = useState<SheetDocument | null>(null);
     const [sheetSource, setSheetSource] = useState<'published' | 'draft'>('published');
+    /** My own draft, when it can be drawn over the team copy (same page count). */
+    const [personalSheet, setPersonalSheet] = useState<SheetDocument | null>(null);
     const [loaded, setLoaded] = useState(false);
     const [cueBanner, setCueBanner] = useState<{ message: string; role?: string | null; accent?: string | null } | null>(null);
     const [pageTurnFlash, setPageTurnFlash] = useState<'prev' | 'next' | null>(null);
@@ -277,6 +281,17 @@ export default function LiveStageScoreViewer({
     const [fitMode, setFitMode] = useState<'height' | 'width'>('height');
     const [isDualPage, setIsDualPage] = useState<boolean>(false);
 
+    // 내 파트 hides other parts' marks; 내 필기 겹치기 draws my draft over the team copy. Both are kept per device.
+    const { part: myPart, visible: visibleParts, setPart: setMyPart } = useMyPart();
+    const { on: overlayChoice, setOn: setOverlayChoice } = useOverlayPersonal();
+    const canOverlay = sheetSource === 'published' && personalSheet !== null && personalSheet.pages.length === (sheet?.pages.length ?? 0);
+    const overlayOn = overlayChoice && canOverlay;
+    // Per page: the draft's marks the team copy doesn't already hold (right after publishing they are the same marks).
+    const personalMarks = useMemo(
+        () => (overlayOn && sheet && personalSheet ? sheet.pages.map((item, index) => marksNotIn(personalSheet.pages[index].marks, item.marks)) : null),
+        [overlayOn, sheet, personalSheet]
+    );
+
     const containerRef = useRef<HTMLDivElement | null>(null);
     const cueTimeoutRef = useRef<number | null>(null);
     const flashTimeoutRef = useRef<number | null>(null);
@@ -292,6 +307,8 @@ export default function LiveStageScoreViewer({
     const pageIndex = (chartView.lyricsOnly ? Math.min(page, totalPages) : page) - 1;
     const activePage = shownPages?.[pageIndex];
     const secondPage = isDualPage && shownPages?.[pageIndex + 1] ? shownPages[pageIndex + 1] : null;
+    // Lyrics-only pages are laid out afresh and carry no marks, so personal marks would land in the wrong place.
+    const overlayMarks = chartView.lyricsOnly ? null : personalMarks;
 
     // Save preferences
     useEffect(() => {
@@ -383,6 +400,7 @@ export default function LiveStageScoreViewer({
             try {
                 const [published, draft] = await Promise.all([readSheet(publishedKey), readSheet(draftKey)]);
                 if (!active) return;
+                setPersonalSheet(published && published.pages.length > 0 && draft?.pages.length === published.pages.length ? draft : null);
                 if (published && published.pages.length > 0) {
                     setSheet(published);
                     setSheetSource('published');
@@ -549,12 +567,17 @@ export default function LiveStageScoreViewer({
     }, [latestCueMessage, latestCueRole, latestCueAccent, audioCueEnabled]);
 
     // Hand-drawn marks come from the shared memoized layer; song form markup draws on top with the pedal highlight.
-    function renderMarks(marks: SheetMark[], pageObj: { width: number; height: number }) {
+    function renderMarks(marks: SheetMark[], pageObj: { width: number; height: number }, personal?: readonly SheetMark[]) {
         const ratio = pageObj.height / pageObj.width;
         const songForms = [...marks.filter((m) => m.kind === 'songform'), ...marks.filter((m) => m.kind === 'section')];
         return (
             <>
-                <SheetInkLayer marks={marks} ratio={ratio} dark={isDarkInverted} />
+                <SheetInkLayer marks={marksForParts(marks, visibleParts)} ratio={ratio} dark={isDarkInverted} />
+                {personal ? (
+                    <g data-layer="personal">
+                        <SheetInkLayer marks={marksForParts(personal, visibleParts)} ratio={ratio} dark={isDarkInverted} />
+                    </g>
+                ) : null}
                 {songForms.map((mark) =>
                     mark.kind === 'songform' ? (
                         <SongFormMarkup
@@ -616,7 +639,8 @@ export default function LiveStageScoreViewer({
 
             {/* Stage Top HUD (Zen mode collapses it smoothly with pure whitespace) */}
             <header
-                className={`mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#0a0f0e]/85 px-3.5 py-2 backdrop-blur-xl shadow-lg transition-all duration-300 ${
+                // z-40 keeps the settings popover above the score area's song form overlay (z-30).
+                className={`relative z-40 mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#0a0f0e]/85 px-3.5 py-2 backdrop-blur-xl shadow-lg transition-all duration-300 ${
                     isZenMode ? '-translate-y-4 opacity-0 pointer-events-none h-0 p-0 m-0 overflow-hidden' : 'opacity-100'
                 }`}
             >
@@ -1071,6 +1095,42 @@ export default function LiveStageScoreViewer({
                                         </select>
                                     </div>
 
+                                    {/* My part: other parts' marks hide, marks for everyone always show */}
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs text-white/70 font-medium">내 파트</span>
+                                        <select
+                                            aria-label="내 파트"
+                                            value={myPart ?? ''}
+                                            onChange={(e) => setMyPart(parsePart(e.target.value))}
+                                            className="rounded-lg bg-white/10 px-2 py-1 text-xs font-bold text-amber-300 border border-white/15 focus:outline-none"
+                                        >
+                                            <option value="">{PART_ALL_LABEL}</option>
+                                            {SHEET_PARTS.map((part) => (
+                                                <option key={part} value={part}>{PART_LABELS[part]}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* My draft over the team copy — only offered when there is a draft to draw */}
+                                    {canOverlay && (
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-xs text-white/70 font-medium">내 필기 겹치기</span>
+                                            <button
+                                                type="button"
+                                                aria-pressed={overlayOn}
+                                                aria-label="내 필기 겹치기"
+                                                onClick={() => setOverlayChoice(!overlayChoice)}
+                                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                                                    overlayOn
+                                                        ? 'bg-amber-400 text-black'
+                                                        : 'bg-white/10 text-white/60 hover:bg-white/15'
+                                                }`}
+                                            >
+                                                {overlayOn ? '켜짐' : '꺼짐'}
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {/* Fit Mode */}
                                     <div className="flex items-center justify-between gap-2">
                                         <span className="text-xs text-white/70 font-medium">화면 맞춤</span>
@@ -1376,7 +1436,7 @@ export default function LiveStageScoreViewer({
                                     viewBox={`0 0 1000 ${(1000 * activePage.height) / activePage.width}`}
                                     preserveAspectRatio="none"
                                 >
-                                    {renderMarks(activePage.marks, activePage)}
+                                    {renderMarks(activePage.marks, activePage, overlayMarks?.[pageIndex])}
                                 </svg>
                             </div>
 
@@ -1401,7 +1461,7 @@ export default function LiveStageScoreViewer({
                                         viewBox={`0 0 1000 ${(1000 * secondPage.height) / secondPage.width}`}
                                         preserveAspectRatio="none"
                                     >
-                                        {renderMarks(secondPage.marks, secondPage)}
+                                        {renderMarks(secondPage.marks, secondPage, overlayMarks?.[pageIndex + 1])}
                                     </svg>
                                 </div>
                             )}
@@ -1468,6 +1528,14 @@ export default function LiveStageScoreViewer({
                                 }`}
                             >
                                 {pageTurnFlash === 'prev' ? <ChevronLeft size={36} /> : <ChevronRight size={36} />}
+                            </div>
+                        )}
+
+                        {/* Legend for what is drawn: my draft over the team copy, and the part being shown */}
+                        {(overlayOn || myPart) && (
+                            <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-white/85">
+                                {overlayOn && <span className="rounded-full border border-sky-300/40 bg-black/70 px-2 py-0.5">팀 공유 + 내 필기</span>}
+                                {myPart && <span className="rounded-full border border-white/20 bg-black/70 px-2 py-0.5">내 파트 · {PART_LABELS[myPart]}</span>}
                             </div>
                         )}
 
