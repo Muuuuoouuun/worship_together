@@ -32,6 +32,7 @@ import { useSongFormStepper } from '@/hooks/useSongFormStepper';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
+import StageClickControls from '@/components/session/StageClickControls';
 import { isStageAudioEnabled, setStageAudioEnabled, playStageCueSound } from '@/lib/stageAudioCue';
 import { readSongStageNote, saveSongStageNote, STAGE_NOTE_CHANGED_EVENT } from '@/lib/stageNotesStorage';
 import { getCueCategory } from '@/types/session';
@@ -857,6 +858,9 @@ export default function LiveStageScoreViewer({
                             {audioCueEnabled ? <Bell size={13} className="text-emerald-400" /> : <BellOff size={13} />}
                             <span className="hidden xl:inline text-[11px]">{audioCueEnabled ? '소리 ON' : '무음'}</span>
                         </button>
+
+                        {/* Count-in and click for the band; sound starts only after a tap. */}
+                        <StageClickControls bpm={effectiveBpm} />
                     </div>
                 ) : null}
 
