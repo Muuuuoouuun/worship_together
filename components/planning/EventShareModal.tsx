@@ -1,13 +1,32 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
-import { Calendar, Check, Copy, ExternalLink, Share2, X } from 'lucide-react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { CalendarPlus, Check, Copy, Download, ExternalLink, Share2, X } from 'lucide-react';
 import { planningDate, type TeamSchedule } from '@/types/planning';
 import { worshipRoles, type WorshipRole } from '@/types/team';
 import { downloadIcsFile, getGoogleCalendarUrl } from '@/lib/calendarExport';
+import { cn } from '@/lib/utils';
+import { Button, buttonVariants } from '@/components/ui/button';
 
-const button = 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted active:scale-[0.98] disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
-const primary = `${button} bg-primary text-primary-foreground hover:bg-primary/90`;
+const checkbox = 'size-4 shrink-0 rounded accent-foreground';
+
+/** Esc 로 닫고, 열려 있는 동안 뒤 화면 스크롤을 막습니다. */
+function useSheetDismiss(onClose: () => void) {
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            onClose();
+        };
+        document.addEventListener('keydown', onKey);
+        const previous = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', onKey);
+            document.body.style.overflow = previous;
+        };
+    }, [onClose]);
+}
 
 export default function EventShareModal({
     event,
@@ -26,6 +45,7 @@ export default function EventShareModal({
     const [highlightVacant, setHighlightVacant] = useState(true);
     const [includeGreeting, setIncludeGreeting] = useState(true);
     const [copied, setCopied] = useState(false);
+    useSheetDismiss(onClose);
 
     const shareText = useMemo(() => {
         const dateStr = planningDate(event.startsAt);
@@ -105,147 +125,118 @@ export default function EventShareModal({
         await handleCopy();
     }
 
+    const options: [boolean, (value: boolean) => void, string][] = [
+        [includeSetlist, setIncludeSetlist, '콘티 및 곡 목록 포함'],
+        [includeDetails, setIncludeDetails, '장소 및 안내 메모 포함'],
+        [highlightVacant, setHighlightVacant, '빈자리(미정) 강조'],
+        [includeGreeting, setIncludeGreeting, '안내 및 축복 멘트 포함'],
+    ];
+
     return (
         <div
             role="dialog"
             aria-modal="true"
             aria-labelledby={modalId}
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs animate-in fade-in sm:p-4"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 animate-in fade-in sm:items-center sm:p-4"
             onClick={(e) => {
                 if (e.target === e.currentTarget) onClose();
             }}
         >
-            <div className="flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl sm:rounded-3xl border border-border bg-card shadow-2xl overflow-hidden pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-0 animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
-                {/* 모바일 바텀시트 핸들 바 */}
-                <div className="mx-auto my-2.5 h-1.5 w-12 rounded-full bg-border sm:hidden shrink-0" />
+            <div className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border bg-card pb-[env(safe-area-inset-bottom)] shadow-2xl animate-in slide-in-from-bottom duration-200 sm:rounded-3xl sm:pb-0 sm:slide-in-from-bottom-0 sm:zoom-in-95">
+                <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" aria-hidden="true" />
 
-                <div className="flex items-center justify-between border-b border-border/60 p-4 sm:p-5 bg-muted/30 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <Share2 className="text-primary" size={20} />
-                        <h3 id={modalId} className="text-base sm:text-lg font-bold text-foreground">
+                <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-4 sm:px-6 sm:pt-6">
+                    <div className="min-w-0">
+                        <p className="text-[11px] font-medium text-muted-foreground">{event.title}</p>
+                        <h3 id={modalId} className="mt-0.5 text-[17px] font-semibold tracking-tight text-foreground">
                             일정 & 섬김 명단 공유
                         </h3>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="닫기"
+                        className="-mr-2 -mt-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                         <X size={18} />
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-6">
+                    {/* 포함할 내용 */}
+                    <fieldset className="space-y-1">
+                        <legend className="text-[11px] font-medium text-muted-foreground">포함할 내용</legend>
+                        <div className="grid gap-x-4 sm:grid-cols-2">
+                            {options.map(([checked, set, label]) => (
+                                <label key={label} className="flex min-h-11 cursor-pointer items-center gap-2.5 border-b border-border/70 text-sm text-foreground">
+                                    <input type="checkbox" checked={checked} onChange={(e) => set(e.target.checked)} className={checkbox} />
+                                    <span>{label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </fieldset>
 
-                {/* 옵션 선택 체크박스 */}
-                <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-foreground bg-muted/40 p-3 rounded-2xl border border-border/60">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={includeSetlist}
-                            onChange={(e) => setIncludeSetlist(e.target.checked)}
-                            className="rounded"
-                        />
-                        <span>콘티 및 곡 목록 포함</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={includeDetails}
-                            onChange={(e) => setIncludeDetails(e.target.checked)}
-                            className="rounded"
-                        />
-                        <span>장소 및 안내 메모 포함</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={highlightVacant}
-                            onChange={(e) => setHighlightVacant(e.target.checked)}
-                            className="rounded"
-                        />
-                        <span>🚨 빈자리(미정) 강조</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={includeGreeting}
-                            onChange={(e) => setIncludeGreeting(e.target.checked)}
-                            className="rounded"
-                        />
-                        <span>안내 및 축복 멘트 포함</span>
-                    </label>
-                </div>
+                    {/* 미리보기 */}
+                    <div className="space-y-2">
+                        <span className="block text-[11px] font-medium text-muted-foreground">공유 텍스트 미리보기</span>
+                        <pre className="max-h-52 select-all overflow-y-auto whitespace-pre-wrap rounded-2xl bg-muted/60 px-4 py-3.5 font-sans text-[13px] leading-6 text-foreground">
+                            {shareText}
+                        </pre>
+                    </div>
 
-                {/* 텍스트 실시간 미리보기 */}
-                <div className="space-y-1">
-                    <span className="text-xs font-semibold text-muted-foreground">공유 텍스트 미리보기</span>
-                    <pre className="rounded-2xl border border-border bg-background p-3 text-xs text-foreground font-mono whitespace-pre-wrap max-h-52 overflow-y-auto leading-relaxed select-all">
-                        {shareText}
-                    </pre>
-                </div>
-
-                {/* 캘린더 연동 영역 */}
-                <div className="rounded-2xl border border-border/80 bg-background/50 p-3.5 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-xs">
-                        <Calendar size={16} className="text-secondary" />
-                        <div>
-                            <p className="font-bold text-foreground">내 캘린더에 일정 등록</p>
-                            <p className="text-[11px] text-muted-foreground">스마트폰 캘린더나 구글 캘린더에 추가하세요</p>
+                    {/* 캘린더 등록 */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground">내 캘린더에 일정 등록</p>
+                            <p className="text-xs text-muted-foreground">스마트폰 캘린더나 구글 캘린더에 추가하세요</p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                onClick={() => downloadIcsFile(event, teamName, names)}
+                                title="아이폰/맥 캘린더, 아웃룩용 .ics 파일 다운로드"
+                            >
+                                <Download className="text-muted-foreground" />
+                                <span>.ics 다운로드</span>
+                            </Button>
+                            <a
+                                href={getGoogleCalendarUrl(event, teamName, names)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn(buttonVariants({ variant: 'outline', size: 'xs' }))}
+                            >
+                                <CalendarPlus className="text-muted-foreground" />
+                                <span>구글 캘린더</span>
+                                <ExternalLink className="text-muted-foreground" />
+                            </a>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <button
-                            type="button"
-                            onClick={() => downloadIcsFile(event, teamName, names)}
-                            className={`${button} text-xs py-1.5 h-8`}
-                            title="아이폰/맥 캘린더, 아웃룩용 .ics 파일 다운로드"
-                        >
-                            <span>.ics 다운로드</span>
-                        </button>
-                        <a
-                            href={getGoogleCalendarUrl(event, teamName, names)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`${button} text-xs py-1.5 h-8 text-primary`}
-                        >
-                            <span>구글 캘린더</span>
-                            <ExternalLink size={12} />
-                        </a>
-                    </div>
                 </div>
 
-                {/* 모달 하단 버튼 */}
-                <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border/60">
-                    <button type="button" onClick={onClose} className={`${button} text-xs py-2`}>
+                {/* 하단 버튼 */}
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/70 px-5 py-4 sm:px-6">
+                    <Button type="button" variant="ghost" size="sm" onClick={onClose} className="mr-auto">
                         닫기
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleCopy}
-                        className={`${button} text-xs py-2 font-bold`}
-                    >
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={handleCopy}>
                         {copied ? (
                             <>
-                                <Check size={14} className="text-emerald-600" />
-                                <span className="text-emerald-600">복사 완료!</span>
+                                <Check className="text-brand" />
+                                <span className="text-brand">복사 완료!</span>
                             </>
                         ) : (
                             <>
-                                <Copy size={14} />
+                                <Copy className="text-muted-foreground" />
                                 <span>클립보드 복사</span>
                             </>
                         )}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleNativeShare}
-                        className={`${primary} text-xs py-2 font-bold`}
-                    >
-                        <Share2 size={14} />
+                    </Button>
+                    <Button type="button" size="sm" onClick={handleNativeShare}>
+                        <Share2 />
                         <span>카톡 · 공유하기</span>
-                    </button>
-                </div>
+                    </Button>
                 </div>
             </div>
         </div>
