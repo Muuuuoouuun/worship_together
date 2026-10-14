@@ -3,13 +3,17 @@
 import Script from 'next/script';
 import { useState } from 'react';
 import { Check, Copy, MessageCircle, Share2 } from 'lucide-react';
+import { buttonVariants } from '@/components/ui/button';
+import { Input, Textarea } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 declare global {
     interface Window {
         Kakao?: { isInitialized(): boolean; init(key: string): void; Share: { sendDefault(options: { objectType: 'text'; text: string; link: { webUrl: string; mobileWebUrl: string }; buttonTitle: string }): void } };
     }
 }
-const style = 'tap-bounce inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-bold transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:border-dashed disabled:saturate-50';
+/** 카카오톡 공유 버튼만 카카오 노란색을 씁니다 (외부 서비스 고유 색). */
+const kakaoButton = cn(buttonVariants(), 'bg-[#FEE500] text-[#191919] hover:bg-[#F4DC00]');
 
 export default function InviteShareButtons({ url, teamName }: { url: string; teamName: string }) {
     const key = process.env.NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY;
@@ -48,20 +52,20 @@ export default function InviteShareButtons({ url, teamName }: { url: string; tea
         try { await navigator.share({ title: `${teamName} 초대`, text, url }); setStatus('공유창을 닫았습니다. 참여한 팀원은 명단에서 확인할 수 있습니다.'); }
         catch (error) { if (error instanceof Error && error.name === 'AbortError') setStatus('공유를 취소했습니다.'); else { setStatus('공유창을 열지 못했습니다. 링크 복사를 이용해주세요.'); setFallback(true); } }
     }
-    return <div className="space-y-3">
+    return <div className="@container space-y-3">
         {key && <Script src="https://t1.kakaocdn.net/kakao_js_sdk/2.8.3/kakao.min.js" strategy="afterInteractive" onReady={initKakao} onError={() => setStatus('카카오 공유를 불러오지 못했습니다. 링크 복사를 이용해주세요.')} />}
-        <div className="grid gap-2 sm:grid-cols-3">
-            <button className={`${style} border-[#dbc800] bg-[#fee500] text-[#191919] hover:bg-[#f4dc00]`} disabled={!ready || local} onClick={kakao}><MessageCircle size={18} /> 카카오톡 초대</button>
-            <button className={`${style} ${copied ? 'border-emerald-500/40 bg-emerald-50/80 text-emerald-800 shadow-[0_0_20px_rgba(16,185,129,0.2)] dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-card text-foreground hover:bg-muted'}`} onClick={() => void copy()}>
-                {copied ? <Check size={17} className="animate-check-pop text-emerald-600 dark:text-emerald-400" /> : <Copy size={17} />}
+        <div className="grid gap-2 @lg:grid-cols-3">
+            <button className={kakaoButton} disabled={!ready || local} onClick={kakao}><MessageCircle aria-hidden="true" /> 카카오톡 초대</button>
+            <button className={cn(buttonVariants({ variant: 'outline' }), copied && 'border-success/40 text-success hover:bg-success/10')} onClick={() => void copy()}>
+                {copied ? <Check className="animate-check-pop" aria-hidden="true" /> : <Copy aria-hidden="true" />}
                 {copied ? '복사 완료!' : '링크 복사'}
             </button>
-            <button className={`${style} bg-card text-foreground hover:bg-muted`} onClick={() => void share()}><Share2 size={17} /> 다른 앱으로 공유</button>
+            <button className={buttonVariants({ variant: 'outline' })} onClick={() => void share()}><Share2 aria-hidden="true" /> 다른 앱으로 공유</button>
         </div>
-        {!key && <p className="text-sm leading-6 text-muted-foreground">카카오 공유를 준비 중입니다. 복사한 링크를 카카오톡에 붙여넣어 초대할 수 있습니다.</p>}
-        {local && <p className="text-sm leading-6 text-muted-foreground">현재 링크는 이 컴퓨터에서만 열립니다. 다른 기기로 초대하려면 공개 서비스 주소를 연결해야 합니다.</p>}
-        <label className="block text-sm font-semibold text-foreground">초대 링크<input aria-label="온라인 팀 초대 링크" value={url} readOnly onFocus={event => event.target.select()} className="mt-2 min-h-12 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm text-foreground" /></label>
-        {fallback && <textarea aria-label="직접 복사할 초대 내용" readOnly value={`${text}\n${url}`} rows={4} onFocus={event => event.target.select()} className="w-full rounded-xl border border-border bg-card p-3 text-sm text-foreground" />}
-        <p role="status" className={`text-sm leading-6 transition-all ${status ? 'animate-success-bounce text-foreground' : 'text-foreground'}`}>{status}</p>
+        {!key && <p className="text-xs leading-relaxed text-muted-foreground">카카오 공유를 준비 중입니다. 복사한 링크를 카카오톡에 붙여넣어 초대할 수 있습니다.</p>}
+        {local && <p className="text-xs leading-relaxed text-muted-foreground">현재 링크는 이 컴퓨터에서만 열립니다. 다른 기기로 초대하려면 공개 서비스 주소를 연결해야 합니다.</p>}
+        <label className="block text-xs font-medium text-muted-foreground">초대 링크<Input aria-label="온라인 팀 초대 링크" value={url} readOnly onFocus={event => event.target.select()} className="mt-1.5" /></label>
+        {fallback && <Textarea aria-label="직접 복사할 초대 내용" readOnly value={`${text}\n${url}`} rows={4} onFocus={event => event.target.select()} />}
+        <p role="status" className={cn('text-sm leading-relaxed text-foreground', status && 'animate-success-bounce')}>{status}</p>
     </div>;
 }
