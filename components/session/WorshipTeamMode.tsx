@@ -15,6 +15,8 @@ import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRe
 import { isPrototypeSessionId } from '@/lib/constants';
 import { createClientId } from '@/lib/clientId';
 import { useSongSections } from '@/hooks/useSongSections';
+import { useSetlistDetails } from '@/hooks/useSetlistDetails';
+import { formatKey, formatKeyLabel, resolveSetlistPlans, withStageKeys } from '@/lib/stageSongPlan';
 import { useSessionStore } from '@/store/sessionStore';
 import {
     getDefaultSessionFeedbackTarget,
@@ -71,6 +73,8 @@ interface WorshipTeamModeProps {
     initialState: SessionCurrentState;
     teamName: string;
     setlistTitle: string;
+    /** 콘티가 만들어진 시각. 예전에 제목으로 저장된 세부 정보를 찾는 데 씁니다. */
+    setlistCreatedAt?: string | null;
 }
 
 type StageAction = {
@@ -215,6 +219,7 @@ export default function WorshipTeamMode({
     initialState,
     teamName,
     setlistTitle,
+    setlistCreatedAt,
 }: WorshipTeamModeProps) {
     const initializeSession = useSessionStore((state) => state.initializeSession);
     const applyRemoteState = useSessionStore((state) => state.applyRemoteState);
@@ -278,6 +283,17 @@ export default function WorshipTeamMode({
     const latestCue = feedbackLog[feedbackLog.length - 1] ?? null;
     const currentSongIndex = songs.findIndex((song) => song.id === currentSongId);
     const nextSong = currentSongIndex >= 0 ? songs[currentSongIndex + 1] ?? null : songs[1] ?? null;
+    // 콘티에서 정한 이번 주 Key·메모. 저장소가 바뀌면 열려 있는 무대도 따라갑니다.
+    const setlistDetails = useSetlistDetails(teamId, session.setlist_id, setlistCreatedAt ? { title: setlistTitle, createdAt: setlistCreatedAt } : undefined);
+    const songPlans = useMemo(() => resolveSetlistPlans(songs, setlistDetails), [songs, setlistDetails]);
+    // 무대 화면들은 곡의 original_key 를 '지금 연주하는 Key' 로 보여주므로 이번 주 Key 를 담은 복사본을 넘깁니다.
+    const stageSongs = useMemo(() => withStageKeys(songs, songPlans), [songs, songPlans]);
+    const stageCurrentSong = stageSongs.find((song) => song.id === currentSongId) ?? null;
+    const currentPlan = currentSongId ? songPlans[currentSongId] ?? null : null;
+    const nextPlan = nextSong ? songPlans[nextSong.id] ?? null : null;
+    const currentKeyText = formatKey(currentPlan);
+    // 다음 곡이 있을 때만 쓰는 메모입니다.
+    const transitionNote = nextSong ? currentPlan?.transitionNote ?? null : null;
     const sections = useSongSections(currentSongId, teamId);
     const displayedSection = currentSection ?? sections[0] ?? '대기';
     const sectionIndex = sections.indexOf(displayedSection);
@@ -559,8 +575,8 @@ export default function WorshipTeamMode({
                         workspaceHref={workspaceHref ?? `/session/${session.id}`}
                         teamName={teamName}
                         setlistTitle={setlistTitle}
-                        songs={songs}
-                        currentSong={currentSong}
+                        songs={stageSongs}
+                        currentSong={stageCurrentSong}
                         bpm={startBpm}
                         isActive={currentSession ? isActive : session.is_active}
                         participants={participants}
@@ -580,7 +596,7 @@ export default function WorshipTeamMode({
                     <WorshipCountIn
                         setlistTitle={setlistTitle}
                         songTitle={currentSong?.title ?? null}
-                        songKey={currentSong?.original_key ?? null}
+                        songKey={stageCurrentSong?.original_key ?? null}
                         bpm={startBpm}
                         signalLabel={startSignalId ? getCueDeliveryLabel(cueDeliveries[startSignalId]) : null}
                         onCancel={handleCountInCancel}
@@ -818,7 +834,7 @@ export default function WorshipTeamMode({
 
                 {modeView === 'sound' ? (
                     <SoundEngineerWorkspace
-                        songs={songs}
+                        songs={stageSongs}
                         currentSongId={currentSongId}
                         currentSection={currentSection}
                         sections={sections}
@@ -857,6 +873,10 @@ export default function WorshipTeamMode({
                                     songId={currentSong.id}
                                     title={currentSong.title}
                                     originalKey={currentSong.original_key}
+                                    targetKey={currentPlan?.key}
+                                    directionNotes={currentPlan?.directionNotes}
+                                    transitionNote={transitionNote}
+                                    nextSongKey={nextPlan?.key}
                                     currentBpm={currentBpm}
                                     bpmEnabled={bpmEnabled}
                                     isActive={isActive}
@@ -877,7 +897,7 @@ export default function WorshipTeamMode({
                                     hasNextSong={currentSongIndex < songs.length - 1}
                                     nextSongTitle={nextSong?.title}
                                     prevSongTitle={currentSongIndex > 0 ? songs[currentSongIndex - 1]?.title : null}
-                                    songs={songs}
+                                    songs={stageSongs}
                                     onSelectSong={(songId) => updateState({ songId, page: 1, section: null })}
                                     leaderSongId={currentSongId}
                                     leaderPage={currentPage}
@@ -910,8 +930,10 @@ export default function WorshipTeamMode({
                     ) : (
                     <div className="order-1 min-w-0 lg:order-none lg:col-start-1 lg:row-start-1">
                         <WorshipPulseView
-                            songs={songs}
-                            currentSong={currentSong}
+                            songs={stageSongs}
+                            currentSong={stageCurrentSong}
+                            keyLabel={formatKeyLabel(currentPlan)}
+                            transitionNote={transitionNote}
                             currentSongIndex={currentSongIndex}
                             bpm={currentBpm}
                             bpmEnabled={bpmEnabled}
@@ -1043,10 +1065,16 @@ export default function WorshipTeamMode({
 
                             <div className="mt-4 grid grid-cols-2 gap-2">
                                 <StageMetric label="악보" value={`${currentPage}p`} />
-                                <StageMetric label="키" value={currentSong?.original_key ?? '-'} />
-                                <StageMetric label="다음 곡" value={nextSong?.title ?? '마지막'} />
+                                <StageMetric label="키" value={currentKeyText || (currentSong?.original_key ?? '-')} />
+                                <StageMetric label="다음 곡" value={nextSong ? `${nextSong.title}${nextPlan?.key ? ` · ${nextPlan.key}` : ''}` : '마지막'} />
                                 <StageMetric label="넘김" value="리더 따라감" />
                             </div>
+
+                            {modeView === 'score' && transitionNote ? (
+                                <p className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs font-bold leading-relaxed text-amber-100" data-testid="team-transition-note">
+                                    <span className="text-amber-300">곡 전환</span> · {transitionNote}
+                                </p>
+                            ) : null}
 
                             <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-white/75">
                                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-2">

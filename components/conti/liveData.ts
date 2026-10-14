@@ -5,7 +5,7 @@
 
 import type { LibrarySetlist, LibrarySong } from '@/lib/libraryPrototypeStorage';
 import { validateYouTubeUrl, type SongForm, type SongFormSection } from '@/lib/songForm';
-import type { SetlistDetailMetadata, SongSetlistOverride } from '@/lib/setlistDetailsStorage';
+import { cleanTransitionNote, directionNotesOf, type SetlistDetailMetadata, type SongSetlistOverride } from '@/lib/setlistDetailsStorage';
 import { normalizeLinkUrl, type StoredSongLink } from '@/lib/songLinksStorage';
 import {
     LINK_LABEL,
@@ -34,12 +34,6 @@ export function statusFor(date: string, today: string, songCount: number, saved:
     if (songCount === 0) return 'empty';
     if (date < today) return 'done';
     return saved === 'confirmed' ? 'confirmed' : 'writing';
-}
-
-function notesFrom(override: SongSetlistOverride | undefined): string[] {
-    if (!override) return [];
-    if (override.notes) return override.notes;
-    return override.leaderNotes ? override.leaderNotes.split(/\r?\n/).map((note) => note.trim()).filter(Boolean) : [];
 }
 
 function linksFrom(form: SongForm | null | undefined, stored: StoredSongLink[] | undefined): SongLink[] {
@@ -72,7 +66,8 @@ export function buildContiSetlists(sources: LiveSources): ContiSetlist[] {
                 lead: override?.lead ?? null,
                 form: (form?.sections ?? []).map((section) => formCodeFromLabel(section.label)),
                 links: linksFrom(form, sources.links[songId]),
-                notes: notesFrom(override),
+                notes: directionNotesOf(override),
+                transitionNote: override?.transitionNote ?? null,
                 comments: (details?.comments ?? [])
                     .filter((comment) => comment.songId === songId)
                     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -167,6 +162,7 @@ export function planSave(input: {
         if (value.sheet.trim() && !normalizeLinkUrl(value.sheet)) return { ok: false, error: `${name} 악보 링크가 올바른 주소가 아니에요.` };
         if (value.mr.trim() && !normalizeLinkUrl(value.mr)) return { ok: false, error: `${name} MR 링크가 올바른 주소가 아니에요.` };
 
+        const transitionNote = cleanTransitionNote(value.transition);
         overrides[songId] = {
             songId,
             targetKey: value.key && value.key !== song.original_key ? value.key : null,
@@ -174,6 +170,7 @@ export function planSave(input: {
             notes: value.notes.split(/\r?\n/).map((note) => note.trim()).filter(Boolean).slice(0, 20),
             lead: value.lead.trim() || null,
             leaderNotes: null,
+            ...(transitionNote ? { transitionNote } : {}),
         };
 
         const existing = input.forms[songId] ?? null;

@@ -52,14 +52,14 @@ const FORM: SongForm = {
 };
 
 function draft(overrides: Partial<SetlistDraft['songs'][string]> = {}): SetlistDraft {
-    const base = { key: 'G', bpm: '68', lead: '', form: ['I', 'V1', 'C'], notes: '', video: FORM.youtubeUrl!, sheet: '', mr: '' };
+    const base = { key: 'G', bpm: '68', lead: '', form: ['I', 'V1', 'C'], notes: '', transition: '', video: FORM.youtubeUrl!, sheet: '', mr: '' };
     return {
         owner: '김찬양',
         status: 'confirmed',
         order: ['s1', 's2'],
         songs: {
             s1: { ...base, ...overrides },
-            s2: { key: 'A', bpm: '76', lead: '', form: [], notes: '', video: '', sheet: '', mr: '' },
+            s2: { key: 'A', bpm: '76', lead: '', form: [], notes: '', transition: '', video: '', sheet: '', mr: '' },
         },
     };
 }

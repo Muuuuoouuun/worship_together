@@ -48,12 +48,20 @@ import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFor
 import SongFormMarkup, { SongFormSectionMarker } from './SongFormMarkup';
 import SheetInkLayer from './SheetInkLayer';
 import { normalizeKey } from '@/lib/leadSheet';
+import { formatKeyLabel, resolveKey } from '@/lib/stageSongPlan';
 
 export interface LiveStageScoreViewerProps {
     teamId: string;
     songId: string;
     title: string;
     originalKey?: string | null;
+    /** 이번 주 Key (콘티에서 정한 Key). 있으면 Key 표기와 샘플 악보에 originalKey 대신 씁니다. */
+    targetKey?: string | null;
+    /** 이 곡의 인도자 디렉팅 메모 */
+    directionNotes?: string[];
+    /** 이 곡에서 다음 곡으로 넘어갈 때의 메모 */
+    transitionNote?: string | null;
+    nextSongKey?: string | null;
     currentBpm?: number | null;
     bpmEnabled?: boolean;
     isActive?: boolean;
@@ -91,6 +99,10 @@ export default function LiveStageScoreViewer({
     songId,
     title,
     originalKey,
+    targetKey,
+    directionNotes = [],
+    transitionNote,
+    nextSongKey,
     currentBpm,
     bpmEnabled = false,
     isActive = true,
@@ -234,10 +246,12 @@ export default function LiveStageScoreViewer({
         }
     }, [updateBpm]);
 
+    // The key played this week: the setlist's key first, then the library's original key.
+    const songKey = resolveKey(originalKey, targetKey);
     const loadSampleSheet = async () => {
         try {
-            // Drawn in the song's key when the library knows it (major keys).
-            const sampleDoc = await createSampleSheetDocument(title, normalizeKey(originalKey) ?? 'C');
+            // Drawn in the key played this week when it is known (major keys).
+            const sampleDoc = await createSampleSheetDocument(title, normalizeKey(songKey.key) ?? 'C');
             const publishedKey = sheetKey(teamId, songId, true);
             await saveSheet(publishedKey, sampleDoc);
             setSheet(sampleDoc);
@@ -682,9 +696,9 @@ export default function LiveStageScoreViewer({
                         <span className="truncate text-sm font-black text-white/95">
                             {title}
                         </span>
-                        {originalKey && (
+                        {songKey.key && (
                             <span className="inline-flex rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-black text-amber-300 shrink-0">
-                                Key {originalKey}
+                                {formatKeyLabel(songKey)}
                             </span>
                         )}
                         {currentSection && (
@@ -1524,15 +1538,20 @@ export default function LiveStageScoreViewer({
                         </button>
                     </div>
                     <div className="space-y-1.5 text-white/80 text-[11px] leading-relaxed">
-                        <p>
-                            <strong className="text-amber-300">말씀 본문:</strong> 시편 100편 1-5절 (&quot;온 땅이여 여호와께 즐거운 찬송을 부를지어다&quot;)
-                        </p>
-                        <p>
-                            <strong className="text-emerald-300">곡간 멘트:</strong> &quot;오늘 이곳에 임재하신 주님을 바라봅니다. 잔잔한 마음으로 주님의 이름을 높여 찬양하겠습니다.&quot; (멘트 끝날 때 드럼 킥 진입)
-                        </p>
-                        <p>
-                            <strong className="text-rose-300">합심 기도:</strong> 찬양 후 환우들과 공동체를 위한 3분 통성 기도 (건반 E key 잔잔한 패드 유지)
-                        </p>
+                        {directionNotes.map((note, index) => (
+                            <p key={`${index}-${note}`}>
+                                <strong className="text-emerald-300">디렉팅 메모:</strong> {note}
+                            </p>
+                        ))}
+                        {transitionNote ? (
+                            <p>
+                                <strong className="text-rose-300">곡 전환:</strong> {transitionNote}
+                                {nextSongTitle ? <span className="text-white/50"> → {nextSongTitle}</span> : null}
+                            </p>
+                        ) : null}
+                        {directionNotes.length === 0 && !transitionNote ? (
+                            <p className="text-white/50">이 곡에 등록된 디렉팅 메모나 곡 전환 메모가 없어요. 콘티 편집에서 추가할 수 있어요.</p>
+                        ) : null}
                     </div>
                 </div>
             )}
@@ -1945,9 +1964,14 @@ export default function LiveStageScoreViewer({
                             }}
                             className="tap-target inline-flex items-center gap-1 rounded-xl border border-amber-400/50 bg-amber-400/20 px-3 py-1.5 text-xs font-black text-amber-200 hover:bg-amber-400/30 transition animate-pulse"
                         >
-                            <span>다음 곡: {nextSongTitle}</span>
+                            <span>다음 곡: {nextSongTitle}{nextSongKey ? ` · ${nextSongKey}` : ''}</span>
                             <ChevronsRight size={15} />
                         </button>
+                    ) : null}
+                    {page >= totalPages && hasNextSong && transitionNote ? (
+                        <span className="min-w-0 line-clamp-2 rounded-xl border border-rose-300/30 bg-rose-400/10 px-2.5 py-1.5 text-[11px] font-bold leading-snug text-rose-200" title={transitionNote}>
+                            곡 전환 · {transitionNote}
+                        </span>
                     ) : null}
 
                     {/* Recent Cue Pill Button */}

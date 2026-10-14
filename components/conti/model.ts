@@ -40,6 +40,8 @@ export interface ContiSong {
     links: SongLink[];
     /** 인도자가 정한 특이사항 */
     notes: string[];
+    /** 이 곡에서 다음 곡으로 넘어갈 때의 메모 */
+    transitionNote?: string | null;
     /** 팀원들이 남긴 코멘트 */
     comments: SongComment[];
 }
