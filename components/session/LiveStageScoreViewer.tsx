@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
 import { useSongFormStepper } from '@/hooks/useSongFormStepper';
+import { useChartLyricsOnly } from '@/hooks/useChartLyricsOnly';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
@@ -284,9 +285,13 @@ export default function LiveStageScoreViewer({
     const { isActive: isWakeLockActive, isSupported: isWakeLockSupported, toggle: toggleWakeLock } = useScreenWakeLock(isActive);
     const { activeBeat, blinkActive } = useVisualMetronome(bpmEnabled && isActive, effectiveBpm);
 
-    const totalPages = sheet?.pages.length ?? 0;
-    const activePage = sheet?.pages[page - 1];
-    const secondPage = isDualPage && sheet?.pages[page] ? sheet.pages[page] : null;
+    // 가사만 (chord charts): this device's own lyrics-only pages, which can number differently from the saved ones.
+    const chartView = useChartLyricsOnly(sheet);
+    const shownPages = chartView.pages;
+    const totalPages = shownPages?.length ?? 0;
+    const pageIndex = (chartView.lyricsOnly ? Math.min(page, totalPages) : page) - 1;
+    const activePage = shownPages?.[pageIndex];
+    const secondPage = isDualPage && shownPages?.[pageIndex + 1] ? shownPages[pageIndex + 1] : null;
 
     // Save preferences
     useEffect(() => {
@@ -319,7 +324,7 @@ export default function LiveStageScoreViewer({
 
     // Pedal 섹션 이동 mode: walk the song form band, turning to each section marker's page.
     const stepper = useSongFormStepper({
-        pages: sheet?.pages,
+        pages: shownPages,
         page,
         canTurnPage,
         onPageChange: (next) => {
@@ -953,6 +958,23 @@ export default function LiveStageScoreViewer({
                         <Activity size={13} className={realtimeStatus === 'connected' ? 'text-emerald-400 animate-pulse' : 'text-amber-400'} />
                         <span className="hidden sm:inline">상태 점검</span>
                     </button>
+
+                    {/* Chord chart: lyrics only, on this device */}
+                    {chartView.available && (
+                        <button
+                            type="button"
+                            aria-pressed={chartView.preferred}
+                            onClick={() => chartView.setLyricsOnly(!chartView.preferred)}
+                            className={`tap-target inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
+                                chartView.preferred
+                                    ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
+                                    : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10'
+                            }`}
+                            title={chartView.failed ? '가사만 보기를 만들지 못했습니다' : '이 기기에서만 코드를 숨기고 가사를 크게 봅니다'}
+                        >
+                            가사만{chartView.loading ? '…' : chartView.failed ? ' ⚠' : ''}
+                        </button>
+                    )}
 
                     {/* Master Settings Popover */}
                     <div className="relative">

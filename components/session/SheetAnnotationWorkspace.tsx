@@ -3,7 +3,7 @@
 import { createClientId } from '@/lib/clientId';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { BookOpen, ChevronLeft, ChevronRight, Copy, Delete, Download, Eraser, FileUp, Hand, Highlighter, ImageDown, ListMusic, Maximize2, Minimize2, Moon, MoveUpRight, Pencil, Printer, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Copy, Delete, Download, Eraser, FileUp, Hand, Highlighter, ImageDown, ListMusic, Maximize2, Minimize2, Moon, MoveUpRight, Music2, Pencil, Printer, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
 import { useSongFormStepper } from '@/hooks/useSongFormStepper';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
@@ -34,6 +34,8 @@ import {
 import { renderSheetPageImage, sheetFileStem } from '@/lib/sheetRender';
 import { canRedo, canUndo, EMPTY_HISTORY, recordSheetChange, redoPage, undoPage, type SheetHistory } from '@/lib/markHistory';
 import { keyInterval, keyLabel, LEAD_SHEET_KEYS, LEAD_SHEETS, type LeadSheetKey } from '@/lib/leadSheet';
+import { chartKeyNote, type ChartSettings } from '@/lib/chordChart';
+import { applyChordChart } from '@/lib/chordChartSheet';
 import {
     abbreviateSectionLabel,
     formatSongFormText,
@@ -58,6 +60,7 @@ import { readSongForm } from '@/lib/songFormStorage';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
 import SongFormMarkup, { SongFormMarkupPlaceholder, SongFormSectionMarker } from './SongFormMarkup';
 import SheetInkLayer from './SheetInkLayer';
+import ChordChartPanel from './ChordChartPanel';
 
 type Props = {
     teamId: string;
@@ -130,6 +133,12 @@ function scoreKeyNote(score: NonNullable<SheetDocument['score']>) {
     return `원키 ${keyLabel(original)}에서 ${semitones > 0 ? `${semitones}반음 위` : `${-semitones}반음 아래`}`;
 }
 
+/** The key the key row shows and changes: the engraved sample's, else the chord chart's. */
+function sheetKeyInfo(doc: SheetDocument): { key: LeadSheetKey; note: string } | null {
+    if (doc.score) return { key: doc.score.key, note: scoreKeyNote(doc.score) };
+    return doc.chart ? { key: doc.chart.key, note: chartKeyNote(doc.chart) } : null;
+}
+
 const noSubscribe = () => () => {};
 /** Whether this device can hand an image file to another app (Web Share level 2, e.g. KakaoTalk on phones). */
 function canShareImageFiles() {
@@ -190,6 +199,7 @@ export default function SheetAnnotationWorkspace({
     const [stroke, setStroke] = useState<SheetMark | null>(null);
     const [status, setStatus] = useState('악보 불러오는 중…');
     const [busy, setBusy] = useState(false);
+    const [showChordChart, setShowChordChart] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [zoom, setZoom] = useState(1);
     const [isDarkInverted, setIsDarkInverted] = useState(false);
@@ -217,6 +227,7 @@ export default function SheetAnnotationWorkspace({
     const draftKey = sheetKey(teamId, songId);
     const publishedKey = sheetKey(teamId, songId, true);
     const shown = view === 'draft' ? draft : published;
+    const keyInfo = shown ? sheetKeyInfo(shown) : null;
     const isEditingOtherPage = !canTurnPage && editPage !== null && editPage !== livePage && editPage <= (shown?.pages.length ?? 0);
     const page = isEditingOtherPage && editPage !== null ? editPage : livePage;
     const activePage = shown?.pages[page - 1];
@@ -1049,11 +1060,33 @@ export default function SheetAnnotationWorkspace({
         }
     }
 
-    /** Redraws the app-engraved pages in another key (melody, chords, key signature); marks stay put. */
+    /** Draws the chord chart pages from text, or redraws them; marks on existing chart pages stay. */
+    async function createChordChart(settings: ChartSettings) {
+        setBusy(true);
+        setImportProgress('코드 악보를 그리는 중…');
+        try {
+            const had = Boolean(documentRef.current?.chart);
+            const next = await applyChordChart(documentRef.current, settings, title);
+            persist(next);
+            setView('draft');
+            setShowChordChart(false);
+            const first = next.pages.findIndex((p) => p.chartPage === 0) + 1;
+            if (canTurnPage && first > 0 && !had) onPageChange(first);
+            const count = next.pages.filter((p) => p.chartPage !== undefined).length;
+            setStatus(`코드 악보 ${count}장을 ${had ? '다시 그렸습니다. 필기는 그대로입니다.' : '만들었습니다. 위의 ‘키’에서 바꾸면 코드가 새 키로 다시 그려집니다.'}`);
+        } catch (error) {
+            setStatus(error instanceof Error ? error.message : '코드 악보를 그리지 못했습니다. 다시 시도해주세요.');
+        } finally {
+            setBusy(false);
+            setImportProgress(null);
+        }
+    }
+
+    /** Redraws the app-drawn pages (engraved sample, chord chart) in another key; marks stay put. */
     async function changeScoreKey(key: LeadSheetKey) {
         const current = documentRef.current;
-        if (!current?.score || current.score.key === key) return;
-        const from = current.score.key;
+        const from = current ? sheetKeyInfo(current)?.key : undefined;
+        if (!current || !from || from === key) return;
         setBusy(true);
         setImportProgress(`${keyLabel(key)} 키로 악보를 다시 그리는 중…`);
         try {
@@ -1315,7 +1348,12 @@ export default function SheetAnnotationWorkspace({
                     <Sparkles size={16} className="text-amber-500" />
                     체험용 샘플 악보 불러오기
                 </button>
+                <button type="button" className={button} disabled={busy || !loaded} aria-expanded={showChordChart} onClick={() => setShowChordChart((open) => !open)}>
+                    <Music2 size={16} />
+                    코드 악보 만들기
+                </button>
             </div>
+            {showChordChart && <ChordChartPanel initial={draft?.chart ?? null} busy={busy} onCreate={(settings) => void createChordChart(settings)} onClose={() => setShowChordChart(false)} />}
             <div className="flex flex-wrap gap-2" role="group" aria-label="필기 버전">
                 <button
                     className={`${button} ${view === 'draft' ? 'bg-primary text-primary-foreground' : ''}`}
@@ -1968,7 +2006,7 @@ export default function SheetAnnotationWorkspace({
                     )}
                 </div>
             </div>
-            {shown?.score && (
+            {keyInfo && (
                 <div className="flex flex-wrap items-center gap-2" role="group" aria-label="악보 키">
                     <span className="text-xs font-bold text-muted-foreground">키</span>
                     {view === 'draft' ? (
@@ -1978,13 +2016,13 @@ export default function SheetAnnotationWorkspace({
                                 className={button}
                                 disabled={busy}
                                 aria-label="반음 내리기"
-                                onClick={() => void changeScoreKey(stepKey(shown.score!.key, -1))}
+                                onClick={() => void changeScoreKey(stepKey(keyInfo.key, -1))}
                             >
                                 ▼ 반음
                             </button>
                             <select
                                 aria-label="악보 키 고르기"
-                                value={shown.score.key}
+                                value={keyInfo.key}
                                 disabled={busy}
                                 onChange={(e) => void changeScoreKey(e.target.value as LeadSheetKey)}
                                 className="tap-target rounded-xl border border-primary/15 bg-background/80 px-3 py-2 text-sm font-bold"
@@ -2000,15 +2038,15 @@ export default function SheetAnnotationWorkspace({
                                 className={button}
                                 disabled={busy}
                                 aria-label="반음 올리기 (키업)"
-                                onClick={() => void changeScoreKey(stepKey(shown.score!.key, 1))}
+                                onClick={() => void changeScoreKey(stepKey(keyInfo.key, 1))}
                             >
                                 ▲ 키업
                             </button>
                         </>
                     ) : (
-                        <span className="text-sm font-bold">{keyLabel(shown.score.key)}</span>
+                        <span className="text-sm font-bold">{keyLabel(keyInfo.key)}</span>
                     )}
-                    <span className="text-xs text-muted-foreground">{scoreKeyNote(shown.score)}</span>
+                    <span className="text-xs text-muted-foreground">{keyInfo.note}</span>
                 </div>
             )}
             {shown?.pages.length ? (

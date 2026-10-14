@@ -1,6 +1,8 @@
 import { isValidSongFormSections, layoutSectionMarker, layoutSongFormMarkup, SONG_FORM_MAX_ANCHOR_X } from './songFormMarkup';
 import { isLeadSheetKey, LEAD_SHEETS, SAMPLE_LEAD_SHEET, transposeLeadSheet, type LeadSheetKey } from './leadSheet';
 import { renderLeadSheetPages } from './leadSheetRender';
+import { isChartSettings, type ChartSettings } from './chordChart';
+import { updateChordChart } from './chordChartSheet';
 
 /**
  * 'songform' = song form band (I → V1 → C …); 'section' = one section chip placed at a measure (text = label);
@@ -32,6 +34,8 @@ export type SheetPage = {
     marks: SheetMark[];
     /** Set on pages the app engraved itself: which page of `SheetDocument.score` this is, so a key change can redraw it. */
     scorePage?: number;
+    /** Set on chord chart pages: which page of the chart in `SheetDocument.chart` this is, so edits to the chart redraw it. */
+    chartPage?: number;
 };
 export type SheetDocument = {
     version: 1;
@@ -40,6 +44,8 @@ export type SheetDocument = {
     updatedAt: string;
     /** A sheet the app engraves from data (the sample), and the key it is drawn in. */
     score?: { id: string; key: LeadSheetKey };
+    /** A chord chart (코드 악보) the app draws from text: its pages carry `chartPage`, and key, capo and view changes redraw them. */
+    chart?: ChartSettings;
 };
 
 export const SHEET_COLORS = ['#dc2626', '#2563eb', '#15803d', '#111827', '#eab308', '#9333ea'];
@@ -208,7 +214,11 @@ export function validateSheet(value: unknown): SheetDocument {
     if (doc.score !== undefined && (!doc.score || !(doc.score.id in LEAD_SHEETS) || !isLeadSheetKey(doc.score.key))) {
         throw new Error('악보 키 정보가 올바르지 않습니다.');
     }
+    if (doc.chart !== undefined && !isChartSettings(doc.chart)) throw new Error('코드 악보 정보가 올바르지 않습니다.');
     for (const page of doc.pages) {
+        if (page?.chartPage !== undefined && (!doc.chart || !Number.isInteger(page.chartPage) || page.chartPage < 0 || page.chartPage >= 20)) {
+            throw new Error('코드 악보 정보가 올바르지 않습니다.');
+        }
         if (page?.scorePage !== undefined && (!doc.score || !Number.isInteger(page.scorePage) || page.scorePage < 0 || page.scorePage >= LEAD_SHEETS[doc.score.id].pages.length)) {
             throw new Error('악보 키 정보가 올바르지 않습니다.');
         }
@@ -611,7 +621,7 @@ export async function createSampleSheetDocument(title = '은혜로다', key: Lea
 }
 
 /** Re-engraves the app-drawn pages of a sheet in another key; marks and any added pages stay as they are. */
-export async function rekeySheet(doc: SheetDocument, key: LeadSheetKey): Promise<SheetDocument> {
+async function rekeyScore(doc: SheetDocument, key: LeadSheetKey): Promise<SheetDocument> {
     const sheet = doc.score ? LEAD_SHEETS[doc.score.id] : undefined;
     if (!doc.score || !sheet || doc.score.key === key) return doc;
     const engraved = await renderLeadSheetPages(transposeLeadSheet(sheet, key), doc.title);
@@ -624,6 +634,15 @@ export async function rekeySheet(doc: SheetDocument, key: LeadSheetKey): Promise
             return next ? { ...page, image: next.image, width: next.width, height: next.height } : page;
         }),
     };
+}
+
+/**
+ * Moves a sheet to another key: the engraved sample and the chord chart are re-drawn, uploaded pages are left alone.
+ * Marks stay. A chart that now needs more or fewer pages follows the rule in `mergeChartPages`.
+ */
+export async function rekeySheet(doc: SheetDocument, key: LeadSheetKey): Promise<SheetDocument> {
+    const next = await rekeyScore(doc, key);
+    return next.chart && next.chart.key !== key ? updateChordChart(next, { key }) : next;
 }
 
 /**
@@ -674,8 +693,9 @@ export async function rotateSheetPage(page: SheetPage, angleDeg: 90 | 180 | 270 
     ctx.rotate((angleDeg * Math.PI) / 180);
     ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
     // A turned page no longer matches its engraving, so it drops out of key changes.
-    const { scorePage: _engraved, ...rest } = page;
+    const { scorePage: _engraved, chartPage: _charted, ...rest } = page;
     void _engraved;
+    void _charted;
     return {
         ...rest,
         image: canvas.toDataURL('image/jpeg', IMPORT_QUALITY),
