@@ -1,12 +1,18 @@
+import type { Metadata } from 'next';
 import CommunityRoutePage from '@/components/community/CommunityRoutePage';
 import { BookOpenCheck, HeartHandshake, MessageSquareText, Music2, UsersRound } from 'lucide-react';
+
+export const metadata: Metadata = {
+    title: '팀 커뮤니티',
+};
 
 export default function CommunityPage() {
     return (
         <CommunityRoutePage
-            eyebrow="팀 커뮤니티"
-            title="예배 후 말씀, 묵상, 피드백이 팀별로 이어집니다."
-            description="각 예배팀은 콘티와 라이브 큐 로그를 바탕으로 설교 묵상, 세션 피드백, 케어 follow-up, 다음 예배 준비를 같은 공간에서 나눕니다."
+            title="팀 커뮤니티"
+            description="예배 후 말씀, 묵상, 피드백이 팀별로 이어집니다."
+            summary="각 예배팀은 콘티와 라이브 큐 로그를 바탕으로 설교 묵상, 세션 피드백, 케어 follow-up, 다음 예배 준비를 같은 공간에서 나눕니다."
+            tone="sky"
             primaryAction={{ href: '/dashboard', label: '오늘 예배 보기' }}
             secondaryAction={{ href: '/dashboard/songs', label: '콘티 열기' }}
             metrics={[

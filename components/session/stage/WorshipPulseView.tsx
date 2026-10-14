@@ -11,6 +11,7 @@ import {
     RotateCcw,
     Timer,
 } from 'lucide-react';
+import BeatIndicator from '@/components/session/BeatIndicator';
 import { getStageBeatDurationStyle, useStageBeatPhase } from '@/hooks/useStageBeatPhase';
 import { buildTempoChart, formatStageElapsed, isUsableBpm } from '@/lib/stageTempo';
 import type { SongRow } from '@/types/session';
@@ -25,8 +26,6 @@ interface WorshipPulseViewProps {
     bpm: number | null;
     bpmEnabled: boolean;
     metronomeActive: boolean;
-    activeBeat: number;
-    blinkActive: boolean;
     canToggleTempo: boolean;
     onToggleTempo: () => void;
     sections: string[];
@@ -62,8 +61,6 @@ export default function WorshipPulseView({
     bpm,
     bpmEnabled,
     metronomeActive,
-    activeBeat,
-    blinkActive,
     canToggleTempo,
     onToggleTempo,
     sections,
@@ -254,12 +251,14 @@ export default function WorshipPulseView({
                                 <span className="text-xs text-white/65">{tempoBpm ? 'BPM · 4/4' : 'BPM 미설정'}</span>
                             </dd>
                             <dd aria-hidden="true" className="flex h-7 items-end gap-1.5">
-                                {[1, 2, 3, 4].map((beat) => (
-                                    <span
-                                        key={beat}
-                                        className={`stage-pulse-bar w-3 rounded-[3px] bg-(--stage-accent) ${beat === 1 ? 'h-7' : 'h-[1.125rem]'} ${metronomeActive && activeBeat === beat && blinkActive ? 'stage-pulse-bar--on' : ''}`}
-                                    />
-                                ))}
+                                <BeatIndicator bpm={bpm} enabled={metronomeActive}>
+                                    {(activeBeat, blinkActive) => [1, 2, 3, 4].map((beat) => (
+                                        <span
+                                            key={beat}
+                                            className={`stage-pulse-bar w-3 rounded-[3px] bg-(--stage-accent) ${beat === 1 ? 'h-7' : 'h-[1.125rem]'} ${metronomeActive && activeBeat === beat && blinkActive ? 'stage-pulse-bar--on' : ''}`}
+                                        />
+                                    ))}
+                                </BeatIndicator>
                             </dd>
                             <dd>
                                 <button

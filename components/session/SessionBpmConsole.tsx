@@ -3,6 +3,9 @@
 import type { ComponentType, CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import GlassCard from '@/components/ui/GlassCard';
+import { buttonVariants } from '@/components/ui/button';
+import { STATUS } from '@/components/ui/status';
+import { cn } from '@/lib/utils';
 import { AudioLines, Eye, EyeOff, Gauge, Music2, Zap } from 'lucide-react';
 
 interface SessionBpmConsoleProps {
@@ -39,10 +42,10 @@ export default function SessionBpmConsole({
             ? 'BPM 프리셋 대기'
             : '메트로놈 꺼짐';
     const statusTone = bpmEnabled && currentBpm
-        ? 'bg-emerald-500/10 text-emerald-700'
+        ? STATUS.ok.soft
         : bpmEnabled
-            ? 'bg-amber-500/10 text-amber-700'
-            : 'bg-primary/5 text-muted-foreground';
+            ? STATUS.warn.soft
+            : STATUS.idle.soft;
     const controlHelpText = !canControlLocally
         ? '현재 인도자가 공유 BPM 콘솔을 제어 중입니다.'
         : autoBpmSync
@@ -69,61 +72,59 @@ export default function SessionBpmConsole({
     const metronomeActive = bpmEnabled && isActive && Boolean(currentBpm);
 
     return (
-        <GlassCard className="border-primary/10">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-full ${displayBlink ? 'bg-secondary/20 text-secondary shadow-[0_0_22px_rgba(198,106,69,0.25)]' : 'bg-secondary/10 text-secondary'} transition duration-150`}>
-                        <AudioLines size={20} />
-                    </div>
-                    <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">드럼 BPM</p>
-                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                            밴드를 위한 시각 메트로놈입니다. 곡별 프리셋을 저장하면 예배 흐름에 따라 자동으로 불러옵니다.
-                        </p>
-                    </div>
-                </div>
-                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] ${statusTone}`}>
-                    {statusLabel}
+        <GlassCard>
+            <div className="flex items-center gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                    <AudioLines size={18} aria-hidden="true" />
                 </span>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                    <h2 className="text-[17px] font-semibold tracking-tight text-foreground">드럼 BPM</h2>
+                    <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-medium', statusTone)}>
+                        {statusLabel}
+                    </span>
+                </div>
             </div>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                밴드를 위한 시각 메트로놈입니다. 곡별 프리셋을 저장하면 예배 흐름에 따라 자동으로 불러옵니다.
+            </p>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-                <div className="rounded-3xl border border-primary/10 bg-[radial-gradient(circle_at_center,_rgba(212,175,55,0.18),_transparent_52%),linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.62))] p-5 dark:bg-[radial-gradient(circle_at_center,_rgba(226,182,141,0.18),_transparent_54%),linear-gradient(180deg,rgba(22,33,31,0.92),rgba(22,33,31,0.70))]">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">현재 박자</p>
+            <div className="mt-5 grid gap-5 sm:grid-cols-[1.05fr_0.95fr] xl:grid-cols-1">
+                <div className="rounded-3xl bg-muted/50 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="min-w-0">
+                            <p className="text-xs font-medium text-muted-foreground">현재 박자</p>
                             <p
-                                className={`mt-2 inline-block text-4xl font-semibold tabular-nums tracking-tight text-foreground ${metronomeActive ? 'bpm-digit-pulse' : ''}`}
+                                className={cn('mt-1 inline-block text-4xl font-semibold tabular-nums tracking-tight text-foreground', metronomeActive && 'bpm-digit-pulse')}
                                 style={beatDurationStyle}
                             >
                                 {currentBpm ?? '--'}
-                                <span className="ml-2 text-base font-semibold text-muted-foreground">BPM</span>
+                                <span className="ml-1.5 text-base font-medium text-muted-foreground">BPM</span>
                             </p>
-                            <p className="mt-2 text-sm text-muted-foreground">
+                            <p className="mt-1 truncate text-sm text-muted-foreground">
                                 {currentSongTitle ? `${currentSongTitle}` : '곡이 선택되지 않았습니다'}
                             </p>
                         </div>
                         <div ref={metronomeRef} className="flex flex-col items-center gap-3" style={beatDurationStyle}>
                             <div
-                                className={`relative h-24 w-28 overflow-hidden rounded-[1.25rem] border ${metronomeActive ? 'border-secondary/30 bg-secondary/10 shadow-[0_0_36px_rgba(198,106,69,0.22)]' : 'border-primary/10 bg-card/70'} transition duration-150`}
+                                className={cn('relative h-24 w-28 overflow-hidden rounded-2xl border border-border transition duration-150', metronomeActive ? 'bg-card' : 'bg-muted/40')}
                                 aria-label="BPM 시각 메트로놈"
                                 data-testid="bpm-metronome"
                             >
-                                <div className="absolute inset-x-5 bottom-4 h-1 rounded-full bg-primary/10" />
-                                <div className="absolute left-1/2 top-5 h-14 w-1 -translate-x-1/2 rounded-full bg-secondary/35" />
-                                <div className={`absolute left-1/2 top-5 h-14 w-1 -translate-x-1/2 rounded-full bg-secondary ${metronomeActive ? 'bpm-metronome-arm' : 'rotate-0 opacity-40'}`}>
-                                    <span className="absolute -top-1 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-secondary shadow-[0_0_18px_rgba(198,106,69,0.45)]" />
+                                <div className="absolute inset-x-5 bottom-4 h-1 rounded-full bg-foreground/10" />
+                                <div className="absolute left-1/2 top-5 h-14 w-1 -translate-x-1/2 rounded-full bg-foreground/20" />
+                                <div className={cn('absolute left-1/2 top-5 h-14 w-1 -translate-x-1/2 rounded-full bg-foreground', metronomeActive ? 'bpm-metronome-arm' : 'rotate-0 opacity-40')}>
+                                    <span className="absolute -top-1 left-1/2 size-3 -translate-x-1/2 rounded-full bg-foreground" />
                                 </div>
-                                <div className="absolute bottom-3 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full bg-secondary" />
+                                <div className="absolute bottom-3 left-1/2 size-4 -translate-x-1/2 rounded-full bg-foreground" />
                                 {metronomeActive ? (
                                     <>
-                                        <div className="bpm-beat-ring absolute bottom-1 left-1/2 h-12 w-12 -translate-x-1/2 rounded-full border border-secondary/40" />
+                                        <div className="bpm-beat-ring absolute bottom-1 left-1/2 size-12 -translate-x-1/2 rounded-full border border-foreground/20" />
                                         {displayBeat === 1 && displayBlink && (
-                                            <div className="animate-pulse-ring absolute bottom-1 left-1/2 h-12 w-12 -translate-x-1/2 rounded-full border-2 border-secondary/70" />
+                                            <div className="animate-pulse-ring absolute bottom-1 left-1/2 size-12 -translate-x-1/2 rounded-full border-2 border-brand/60" />
                                         )}
                                     </>
                                 ) : null}
-                                <div className={`absolute right-3 top-3 h-2.5 w-2.5 rounded-full ${displayBlink ? 'bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.45)]' : 'bg-primary/20'} transition duration-150`} />
+                                <div className={cn('absolute right-3 top-3 size-2.5 rounded-full transition duration-150', displayBlink ? 'bg-brand' : 'bg-foreground/15')} />
                             </div>
                             <div className="flex items-center gap-2">
                                 {beatDots.map((beat) => {
@@ -133,21 +134,15 @@ export default function SessionBpmConsole({
                                     return (
                                         <span
                                             key={beat}
-                                            className={`relative flex items-center justify-center transition-all ${isDownbeat ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5'}`}
+                                            className={cn('relative flex items-center justify-center transition-all', isDownbeat ? 'size-3.5' : 'size-2.5')}
                                         >
-                                            {isCurrentBeat && isDownbeat && (
-                                                <span className="animate-pulse-ring absolute inset-0 rounded-full bg-secondary/60" />
-                                            )}
                                             <span
-                                                className={`h-full w-full rounded-full transition-all duration-100 ${
+                                                className={cn(
+                                                    'size-full rounded-full transition-all duration-100',
                                                     isCurrentBeat
-                                                        ? isDownbeat
-                                                            ? 'scale-125 bg-secondary shadow-[0_0_14px_rgba(163,68,38,0.7)]'
-                                                            : 'scale-115 bg-secondary'
-                                                        : isDownbeat
-                                                            ? 'bg-primary/30 border border-primary/25'
-                                                            : 'bg-primary/15'
-                                                }`}
+                                                        ? isDownbeat ? 'scale-125 bg-brand' : 'scale-115 bg-foreground'
+                                                        : isDownbeat ? 'bg-foreground/25' : 'bg-foreground/15',
+                                                )}
                                             />
                                         </span>
                                     );
@@ -157,8 +152,8 @@ export default function SessionBpmConsole({
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                    <dl className="divide-y divide-border border-y border-border">
                         <ControlMetric
                             icon={Music2}
                             label="곡 프리셋"
@@ -169,57 +164,57 @@ export default function SessionBpmConsole({
                             label="자동 적용"
                             value={autoBpmSync ? '켜짐' : '꺼짐'}
                         />
-                    </div>
+                    </dl>
 
-                    <div className="rounded-3xl border border-primary/10 bg-card/70 p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">라이브 제어</p>
-                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{controlHelpText}</p>
+                    <h3 className="mt-5 text-sm font-semibold text-foreground">라이브 제어</h3>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{controlHelpText}</p>
 
-                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <button
-                                type="button"
-                                onClick={onToggleBpmEnabled}
-                                disabled={!isActive || !canControlLocally || (!currentBpm && !bpmEnabled)}
-                                className={`tap-target tap-bounce inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${bpmEnabled ? 'border-secondary/30 bg-secondary/10 text-secondary' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
-                            >
-                                {bpmEnabled ? <EyeOff size={16} /> : <Eye size={16} />}
-                                {bpmEnabled ? '메트로놈 끄기' : '메트로놈 켜기'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={onToggleAutoBpmSync}
-                                disabled={!isActive || !canControlLocally}
-                                className={`tap-target tap-bounce inline-flex items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-semibold transition ${autoBpmSync ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-primary/10 bg-background/80 text-primary hover:border-primary/20 hover:bg-card'} disabled:cursor-not-allowed disabled:opacity-45`}
-                            >
-                                <Zap size={16} />
-                                {autoBpmSync ? '자동 적용 켜짐' : '자동 적용 꺼짐'}
-                            </button>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                            {[-5, -1, 1, 5].map((delta) => (
-                                <button
-                                    key={delta}
-                                    type="button"
-                                    onClick={() => onAdjustBpm(delta)}
-                                    disabled={!isActive || !canControlLocally}
-                                    className="tap-target tap-bounce rounded-2xl border border-primary/10 bg-background/80 px-4 py-3 text-sm font-semibold text-primary transition hover:border-primary/20 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
-                                >
-                                    {delta > 0 ? `+${delta}` : delta}
-                                </button>
-                            ))}
-                        </div>
-
+                    <div className="mt-3 grid grid-cols-2 gap-2">
                         <button
                             type="button"
-                            onClick={onApplySongPreset}
-                            disabled={!isActive || !canControlLocally || !songPresetBpm}
-                            className="tap-target tap-bounce mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-surface transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
+                            onClick={onToggleBpmEnabled}
+                            disabled={!isActive || !canControlLocally || (!currentBpm && !bpmEnabled)}
+                            aria-pressed={bpmEnabled}
+                            className={cn(buttonVariants({ variant: bpmEnabled ? 'default' : 'outline', size: 'sm' }), 'h-10 px-3')}
                         >
-                            <AudioLines size={16} />
-                            현재 곡 BPM 적용
+                            {bpmEnabled ? <EyeOff size={15} /> : <Eye size={15} />}
+                            {bpmEnabled ? '메트로놈 끄기' : '메트로놈 켜기'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onToggleAutoBpmSync}
+                            disabled={!isActive || !canControlLocally}
+                            aria-pressed={autoBpmSync}
+                            className={cn(buttonVariants({ variant: autoBpmSync ? 'default' : 'outline', size: 'sm' }), 'h-10 px-3')}
+                        >
+                            <Zap size={15} />
+                            {autoBpmSync ? '자동 적용 켜짐' : '자동 적용 꺼짐'}
                         </button>
                     </div>
+
+                    <div className="mt-2 grid grid-cols-4 gap-2">
+                        {[-5, -1, 1, 5].map((delta) => (
+                            <button
+                                key={delta}
+                                type="button"
+                                onClick={() => onAdjustBpm(delta)}
+                                disabled={!isActive || !canControlLocally}
+                                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-10 px-0 tabular-nums')}
+                            >
+                                {delta > 0 ? `+${delta}` : delta}
+                            </button>
+                        ))}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onApplySongPreset}
+                        disabled={!isActive || !canControlLocally || !songPresetBpm}
+                        className={cn(buttonVariants({ size: 'sm' }), 'mt-2 h-10 w-full')}
+                    >
+                        <AudioLines size={15} />
+                        현재 곡 BPM 적용
+                    </button>
                 </div>
             </div>
         </GlassCard>
@@ -231,21 +226,15 @@ function ControlMetric({
     label,
     value,
 }: {
-    icon: ComponentType<{ size?: number }>;
+    icon: ComponentType<{ size?: number; className?: string }>;
     label: string;
     value: string;
 }) {
     return (
-        <div className="rounded-2xl border border-primary/10 bg-card/70 p-4">
-            <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/5 text-muted-foreground">
-                    <Icon size={16} />
-                </div>
-                <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-                    <p className="mt-1 text-sm font-semibold text-primary">{value}</p>
-                </div>
-            </div>
+        <div className="flex items-center gap-3 py-2.5">
+            <Icon size={15} className="shrink-0 text-muted-foreground" />
+            <dt className="text-sm text-muted-foreground">{label}</dt>
+            <dd className="ml-auto text-sm font-semibold tabular-nums text-foreground">{value}</dd>
         </div>
     );
 }

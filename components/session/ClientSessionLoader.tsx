@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import SessionWorkspace from './SessionWorkspace';
-import WorshipTeamMode from './WorshipTeamMode';
 import { readPrototypeLibrary } from '@/lib/libraryPrototypeStorage';
 import { getTeamSnapshot, parseTeamSnapshot } from '@/lib/teamPrototype';
 import { DEMO_SESSION_ID } from '@/lib/constants';
 import { normalizeSessionState, type SessionDetail } from '@/types/session';
 import { readSongForm } from '@/lib/songFormStorage';
+import { buttonVariants } from '@/components/ui/button';
+import Notice from '@/components/ui/Notice';
+import { SessionSkeleton, TeamModeSkeleton } from './SessionLoadingSkeleton';
+
+// 각 화면은 자기 모드만 내려받습니다 (준비 화면에 무대 화면 코드가, 무대 화면에 준비 화면 코드가 섞이지 않게).
+const SessionWorkspace = dynamic(() => import('./SessionWorkspace'), { loading: () => <SessionSkeleton /> });
+const WorshipTeamMode = dynamic(() => import('./WorshipTeamMode'), { loading: () => <TeamModeSkeleton /> });
 
 export default function ClientSessionLoader({ detail, setlistId, requestedTeamId, onlineTeamName, mode = 'workspace' }: {
     detail: SessionDetail; setlistId?: string; requestedTeamId?: string; onlineTeamName?: string; mode?: 'workspace' | 'team';
@@ -38,8 +44,15 @@ export default function ClientSessionLoader({ detail, setlistId, requestedTeamId
             });
         } catch (cause) { setError(cause instanceof Error ? cause.message : '콘티를 불러오지 못했습니다.'); }
     }, [detail, requestedTeamId, setlistId, onlineTeamName]);
-    if (error) return <main className="mx-auto max-w-xl space-y-4 p-8"><p role="alert">{error}</p><Link className="inline-flex min-h-12 items-center underline" href="/dashboard/songs">콘티로 돌아가기</Link></main>;
-    if (!resolved) return <p className="p-8" role="status">예배 콘티 불러오는 중…</p>;
+    if (error) {
+        return (
+            <main className="mx-auto max-w-xl space-y-4 px-4 py-10">
+                <Notice tone="error">{error}</Notice>
+                <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href="/dashboard/songs">콘티로 돌아가기</Link>
+            </main>
+        );
+    }
+    if (!resolved) return mode === 'team' ? <TeamModeSkeleton /> : <SessionSkeleton />;
     const { session, songs, team, setlist, currentState } = resolved;
     const sessionHref = setlistId ? `/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(setlistId)}&team=${encodeURIComponent(session.team_id!)}` : `/session/${session.id}`;
     const common = { session, songs, teamId: session.team_id!, initialState: currentState, teamName: team?.name ?? '예배팀', setlistTitle: setlist?.title ?? '라이브 예배' };

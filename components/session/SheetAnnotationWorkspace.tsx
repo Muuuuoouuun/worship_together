@@ -1,8 +1,12 @@
 'use client';
 
 import { createClientId } from '@/lib/clientId';
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react';
-import { BookOpen, ChevronRight, Delete, Download, Eraser, FileUp, Hand, Highlighter, ListMusic, Maximize2, Minimize2, Moon, Pencil, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
+import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react';
+import { BookOpen, ChevronRight, Delete, Download, Eraser, FileUp, Hand, Highlighter, Keyboard, ListMusic, Maximize2, Minimize2, Moon, Pencil, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
+import { buttonVariants } from '@/components/ui/button';
+import { fieldClass } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+import { getSheetMarkPath } from '@/components/session/sheetMarkPath';
 import { usePageTurner } from '@/hooks/usePageTurner';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
@@ -18,7 +22,6 @@ import {
     validateSheet,
     WORSHIP_STAMP_PRESETS,
     isPointNearMark,
-    pointsToSvgPath,
     type SheetDocument,
     type SheetMark,
     type SheetPage,
@@ -64,10 +67,24 @@ type SongFormDrag = {
 
 const isSongFormMark = (mark: SheetMark) => mark.kind === 'songform' || mark.kind === 'section';
 
-const button =
-    'tap-target inline-flex items-center justify-center gap-2 rounded-xl border border-primary/15 px-3 py-2 text-sm font-semibold disabled:opacity-40';
+/** Outline pill. aria-pressed is the one selected state: a black pill (white in dark mode). */
+const pill = cn(
+    buttonVariants({ variant: 'outline', size: 'sm' }),
+    'h-10 touch-manipulation px-3.5 text-sm font-medium aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90'
+);
+/** Selected look for toggles whose label flips with the state (not announced as pressed). */
+const pillOn = 'border-primary bg-primary text-primary-foreground hover:bg-primary/90';
+const dangerPill = cn(buttonVariants({ variant: 'destructive-outline', size: 'sm' }), 'h-10 touch-manipulation px-3.5 text-sm font-medium');
+/** Small option chips (선 굵기, 글자 크기, 프리셋 문구). */
+const chip = 'inline-flex h-8 shrink-0 items-center rounded-full px-3 text-xs font-medium transition-colors';
+const chipOff = 'bg-muted text-foreground hover:bg-muted/70';
+const chipOn = 'bg-primary text-primary-foreground';
+/** Rows that wrap on wider screens and scroll sideways on a phone instead of stacking 5–6 lines. */
+/** 내 필기 / 팀 공유본: the shared Segmented look (white chip on a gray track), kept as pressed buttons. */
+const segment = 'inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-xs';
+const scrollRow = 'no-scrollbar flex items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible';
 
-export default function SheetAnnotationWorkspace({
+function SheetAnnotationWorkspace({
     teamId,
     songId,
     title,
@@ -772,7 +789,7 @@ export default function SheetAnnotationWorkspace({
             return (
                 <path
                     key={mark.id}
-                    d={pointsToSvgPath(mark.points, ratio)}
+                    d={getSheetMarkPath(mark, ratio)}
                     fill="none"
                     stroke={mark.color}
                     strokeWidth={mark.strokeWidth || 16}
@@ -855,7 +872,7 @@ export default function SheetAnnotationWorkspace({
         return (
             <path
                 key={mark.id}
-                d={pointsToSvgPath(mark.points, ratio)}
+                d={getSheetMarkPath(mark, ratio)}
                 fill="none"
                 stroke={mark.color}
                 strokeWidth={mark.strokeWidth || 2.5}
@@ -939,18 +956,20 @@ export default function SheetAnnotationWorkspace({
     return (
         <section
             ref={sectionRef}
-            className={`min-w-0 space-y-4 ${isFullscreen ? 'fixed inset-0 z-50 overflow-y-auto bg-background p-4 sm:p-6 shadow-2xl' : ''}`}
+            className={cn('min-w-0 space-y-4', isFullscreen && 'fixed inset-0 z-50 overflow-y-auto bg-background p-4 sm:p-6')}
             aria-label="악보와 필기"
         >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-xl font-bold">악보 · 필기</h3>
-                <span className="text-xs text-muted-foreground">기기 저장 프로토타입</span>
+            <div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <h3 className="text-[17px] font-semibold tracking-tight text-foreground">악보 · 필기</h3>
+                    <span className="text-xs text-muted-foreground">기기 저장 프로토타입</span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    내 필기를 저장한 뒤 전체 공유본으로 확정하세요. 다른 기기로는 악보와 필기가 담긴 공유 파일을 전달합니다.
+                </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-                내 필기를 저장한 뒤 전체 공유본으로 확정하세요. 다른 기기로는 악보와 필기가 담긴 공유 파일을 전달합니다.
-            </p>
             <div className="flex flex-wrap gap-2">
-                <label className={`${button} cursor-pointer`}>
+                <label className={cn(pill, 'cursor-pointer has-[input:disabled]:opacity-40')}>
                     <FileUp size={16} /> PDF / 이미지 추가
                     <input
                         aria-label="악보 파일 추가"
@@ -965,7 +984,7 @@ export default function SheetAnnotationWorkspace({
                         }}
                     />
                 </label>
-                <label className={`${button} cursor-pointer`}>
+                <label className={cn(pill, 'cursor-pointer has-[input:disabled]:opacity-40')}>
                     공유 파일 열기
                     <input
                         aria-label="공유 악보 파일 열기"
@@ -981,7 +1000,7 @@ export default function SheetAnnotationWorkspace({
                 </label>
                 <button
                     type="button"
-                    className={`${button} border-amber-400/40 bg-amber-400/10 text-amber-700 dark:text-amber-300 hover:bg-amber-400/20`}
+                    className={pill}
                     disabled={busy || !loaded}
                     onClick={() => {
                         const sampleDoc = createSampleSheetDocument(title);
@@ -991,20 +1010,22 @@ export default function SheetAnnotationWorkspace({
                         setStatus('체험용 샘플 악보 2장을 불러왔습니다.');
                     }}
                 >
-                    <Sparkles size={16} className="text-amber-500" />
+                    <Sparkles size={16} className="text-brand" />
                     체험용 샘플 악보 불러오기
                 </button>
             </div>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="필기 버전">
+            <div className="inline-flex max-w-full gap-1 rounded-full bg-muted p-1" role="group" aria-label="필기 버전">
                 <button
-                    className={`${button} ${view === 'draft' ? 'bg-primary text-primary-foreground' : ''}`}
+                    type="button"
+                    className={segment}
                     aria-pressed={view === 'draft'}
                     onClick={() => setView('draft')}
                 >
                     내 필기
                 </button>
                 <button
-                    className={`${button} ${view === 'published' ? 'bg-primary text-primary-foreground' : ''}`}
+                    type="button"
+                    className={segment}
                     aria-pressed={view === 'published'}
                     onClick={() => setView('published')}
                 >
@@ -1012,31 +1033,31 @@ export default function SheetAnnotationWorkspace({
                 </button>
             </div>
             {showTools && view === 'draft' && (
-                <div className="space-y-3 rounded-2xl border border-primary/10 bg-card/40 p-3 animate-in fade-in duration-150">
-                    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="필기 도구">
-                        <button className={`${button} ${tool === 'move' ? 'bg-primary text-primary-foreground' : ''}`} aria-pressed={tool === 'move'} onClick={() => setTool('move')}>
+                <div className="space-y-3 border-y border-border py-3 animate-in fade-in duration-150">
+                    <div className={scrollRow} role="group" aria-label="필기 도구">
+                        <button type="button" className={pill} aria-pressed={tool === 'move'} onClick={() => setTool('move')}>
                             <Hand size={16} /> 이동
                         </button>
-                        <button className={`${button} ${tool === 'songform' ? 'bg-violet-500/20 border-violet-400 text-violet-700 dark:text-violet-300 font-bold' : ''}`} aria-pressed={tool === 'songform'} onClick={() => setTool('songform')}>
+                        <button type="button" className={pill} aria-pressed={tool === 'songform'} onClick={() => setTool('songform')}>
                             <ListMusic size={16} /> 송폼
                         </button>
-                        <button className={`${button} ${tool === 'pen' ? 'bg-primary text-primary-foreground' : ''}`} aria-pressed={tool === 'pen'} onClick={() => setTool('pen')}>
+                        <button type="button" className={pill} aria-pressed={tool === 'pen'} onClick={() => setTool('pen')}>
                             <Pencil size={16} /> 펜
                         </button>
-                        <button className={`${button} ${tool === 'highlighter' ? 'bg-amber-400/20 border-amber-400 text-amber-700 dark:text-amber-300 font-bold' : ''}`} aria-pressed={tool === 'highlighter'} onClick={() => setTool('highlighter')}>
+                        <button type="button" className={pill} aria-pressed={tool === 'highlighter'} onClick={() => setTool('highlighter')}>
                             <Highlighter size={16} /> 형광펜
                         </button>
-                        <button className={`${button} ${tool === 'text' ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 dark:text-emerald-300 font-bold' : ''}`} aria-pressed={tool === 'text'} onClick={() => setTool('text')}>
+                        <button type="button" className={pill} aria-pressed={tool === 'text'} onClick={() => setTool('text')}>
                             <Type size={16} /> 텍스트/코드
                         </button>
-                        <button className={`${button} ${tool === 'rect' ? 'bg-indigo-500/20 border-indigo-400 text-indigo-700 dark:text-indigo-300 font-bold' : ''}`} aria-pressed={tool === 'rect'} onClick={() => setTool('rect')}>
+                        <button type="button" className={pill} aria-pressed={tool === 'rect'} onClick={() => setTool('rect')}>
                             <Square size={16} /> 구역 박스
                         </button>
-                        <button className={`${button} ${tool === 'eraser' ? 'bg-rose-500/20 border-rose-400 text-rose-700 dark:text-rose-300 font-bold' : ''}`} aria-pressed={tool === 'eraser'} onClick={() => setTool('eraser')}>
+                        <button type="button" className={pill} aria-pressed={tool === 'eraser'} onClick={() => setTool('eraser')}>
                             <Eraser size={16} /> 지우개
                         </button>
 
-                        <div className="inline-flex items-center gap-1.5 rounded-xl border border-primary/15 bg-background/80 px-2.5 py-1.5 text-xs font-semibold">
+                        <div className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card pl-3.5 pr-1 text-sm">
                             <span className="text-muted-foreground">스탬프:</span>
                             <select
                                 aria-label="스탬프 문구 선택"
@@ -1045,7 +1066,7 @@ export default function SheetAnnotationWorkspace({
                                     setStamp(e.target.value);
                                     setTool('stamp');
                                 }}
-                                className="bg-transparent font-bold text-primary focus:outline-hidden"
+                                className="bg-transparent font-medium text-foreground focus:outline-hidden"
                             >
                                 {WORSHIP_STAMP_PRESETS.map((label) => (
                                     <option key={label} value={label}>{label}</option>
@@ -1053,21 +1074,24 @@ export default function SheetAnnotationWorkspace({
                             </select>
                             <button
                                 type="button"
-                                className={`rounded-lg px-2 py-1 text-xs font-bold transition ${tool === 'stamp' ? 'bg-primary text-primary-foreground' : 'hover:bg-primary/10'}`}
+                                aria-pressed={tool === 'stamp'}
+                                className={cn(chip, 'text-foreground hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground')}
                                 onClick={() => setTool('stamp')}
                             >
                                 찍기
                             </button>
                         </div>
 
-                        <button className={button} disabled={!activePage?.marks.length || busy} onClick={undo} title="실행 취소">
+                        <span className="mx-0.5 h-6 w-px shrink-0 bg-border" aria-hidden />
+                        <button type="button" className={pill} disabled={!activePage?.marks.length || busy} onClick={undo} title="실행 취소">
                             <Undo2 size={16} /> 되돌리기
                         </button>
-                        <button className={button} disabled={!redoStack.length || busy} onClick={redo} title="다시 실행">
+                        <button type="button" className={pill} disabled={!redoStack.length || busy} onClick={redo} title="다시 실행">
                             <Redo2 size={16} /> 다시 실행
                         </button>
                         <button
-                            className={button}
+                            type="button"
+                            className={pill}
                             disabled={!activePage?.marks.length || busy}
                             onClick={clearPageMarks}
                             title="현재 페이지의 모든 필기 삭제"
@@ -1077,7 +1101,7 @@ export default function SheetAnnotationWorkspace({
                     </div>
 
                     {/* Tool Detail Options (Colors & Stroke Widths) */}
-                    <div className="flex flex-wrap items-center gap-4 pt-1 border-t border-primary/10">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 empty:hidden">
                         {tool === 'songform' && (
                             <div className="w-full space-y-2.5" role="group" aria-label="송폼 칩">
                                 {(shown?.pages.length ?? 0) > 1 && (
@@ -1097,10 +1121,10 @@ export default function SheetAnnotationWorkspace({
                                                         if (canTurnPage) onPageChange(index + 1);
                                                         else setEditPage(index + 1);
                                                     }}
-                                                    className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground relative min-w-12`}
+                                                    className={cn(pill, 'relative min-w-12')}
                                                 >
                                                     {index + 1}p
-                                                    {hasMarkup && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-violet-500" aria-hidden />}
+                                                    {hasMarkup && <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-current" aria-hidden />}
                                                 </button>
                                             );
                                         })}
@@ -1108,10 +1132,10 @@ export default function SheetAnnotationWorkspace({
                                 )}
                                 <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="송폼 입력 방식">
                                     <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">방식</span>
-                                    <button type="button" aria-pressed={songFormMode === 'band'} onClick={() => setSongFormMode('band')} className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}>
+                                    <button type="button" aria-pressed={songFormMode === 'band'} onClick={() => setSongFormMode('band')} className={pill}>
                                         송폼 띠 (상단)
                                     </button>
-                                    <button type="button" aria-pressed={songFormMode === 'section'} onClick={() => setSongFormMode('section')} className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}>
+                                    <button type="button" aria-pressed={songFormMode === 'section'} onClick={() => setSongFormMode('section')} className={pill}>
                                         마디 섹션
                                     </button>
                                 </div>
@@ -1127,9 +1151,10 @@ export default function SheetAnnotationWorkspace({
                                                 aria-pressed={songFormMode === 'section' ? armed : undefined}
                                                 disabled={busy || !activePage || (songFormMode === 'band' && songFormSections.length >= SONG_FORM_MAX_SECTIONS)}
                                                 onClick={() => handleSongFormChip(chip.label)}
-                                                className={`tap-target min-w-12 rounded-xl px-3 text-sm font-black text-white shadow-xs transition hover:brightness-110 active:scale-95 disabled:opacity-40 ${
-                                                    armed ? 'scale-105 ring-4 ring-amber-400 ring-offset-2 ring-offset-background' : ''
-                                                }`}
+                                                className={cn(
+                                                    'inline-flex h-10 min-w-12 touch-manipulation items-center justify-center rounded-full px-3.5 text-sm font-bold text-white transition hover:brightness-110 active:scale-95 disabled:opacity-40',
+                                                    armed && 'ring-2 ring-foreground ring-offset-2 ring-offset-background'
+                                                )}
                                                 style={{ backgroundColor: songFormChipColor(chip.label) }}
                                             >
                                                 {chip.label}
@@ -1148,14 +1173,14 @@ export default function SheetAnnotationWorkspace({
                                                 disabled={busy || !songFormSections.length}
                                                 aria-pressed={splitRepeat(songFormSections[songFormSections.length - 1] ?? '').repeat === times}
                                                 onClick={() => repeatLastSongFormChip(times)}
-                                                className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground min-w-12`}
+                                                className={cn(pill, 'min-w-12')}
                                             >
                                                 ×{times}
                                             </button>
                                         ))}
                                         <button
                                             type="button"
-                                            className={button}
+                                            className={pill}
                                             disabled={busy || !songFormSections.length}
                                             onClick={() => removeSongFormChip(songFormSections.length - 1)}
                                         >
@@ -1163,7 +1188,7 @@ export default function SheetAnnotationWorkspace({
                                         </button>
                                         <button
                                             type="button"
-                                            className={`${button} text-rose-600 border-rose-300/40 hover:bg-rose-500/10`}
+                                            className={dangerPill}
                                             disabled={busy || !songFormSections.length}
                                             onClick={() => writeSongForm([])}
                                         >
@@ -1184,7 +1209,7 @@ export default function SheetAnnotationWorkspace({
                                                         title="눌러서 이 표시 빼기"
                                                         disabled={busy}
                                                         onClick={() => removeMark(marker.id)}
-                                                        className="group inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-xs font-black text-white transition active:scale-95"
+                                                        className="group inline-flex min-h-8 items-center gap-0.5 rounded-full px-2.5 text-xs font-bold text-white transition active:scale-95"
                                                         style={{ backgroundColor: songFormChipColor(marker.text ?? '') }}
                                                     >
                                                         {marker.text}
@@ -1197,7 +1222,7 @@ export default function SheetAnnotationWorkspace({
                                         {pageSectionMarkers.length > 0 && (
                                             <button
                                                 type="button"
-                                                className={`${button} text-rose-600 border-rose-300/40 hover:bg-rose-500/10`}
+                                                className={dangerPill}
                                                 disabled={busy}
                                                 onClick={() => replacePageMarks(currentPageMarks().filter((m) => m.kind !== 'section'))}
                                             >
@@ -1215,13 +1240,13 @@ export default function SheetAnnotationWorkspace({
                                             aria-pressed={songFormFontSize === size.fontSize}
                                             disabled={busy}
                                             onClick={() => applySongFormLook(size.fontSize, songFormTint)}
-                                            className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}
+                                            className={pill}
                                         >
                                             {size.label}
                                         </button>
                                     ))}
-                                    <span className="mx-1 h-6 w-px bg-primary/15" aria-hidden />
-                                    <button type="button" aria-pressed={!songFormTint} disabled={busy} onClick={() => applySongFormLook(songFormFontSize, false)} className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}>
+                                    <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
+                                    <button type="button" aria-pressed={!songFormTint} disabled={busy} onClick={() => applySongFormLook(songFormFontSize, false)} className={pill}>
                                         진하게
                                     </button>
                                     <button
@@ -1230,7 +1255,7 @@ export default function SheetAnnotationWorkspace({
                                         disabled={busy}
                                         title="악보가 비쳐 보이는 반투명 음영으로 표시합니다"
                                         onClick={() => applySongFormLook(songFormFontSize, true)}
-                                        className={`${button} aria-pressed:bg-primary aria-pressed:text-primary-foreground`}
+                                        className={pill}
                                     >
                                         반투명
                                     </button>
@@ -1243,7 +1268,7 @@ export default function SheetAnnotationWorkspace({
                                                 <button
                                                     key={preset.name}
                                                     type="button"
-                                                    className={button}
+                                                    className={pill}
                                                     title={preset.sections.join(' → ')}
                                                     disabled={busy || !activePage}
                                                     onClick={() => writeSongForm(preset.sections)}
@@ -1253,7 +1278,7 @@ export default function SheetAnnotationWorkspace({
                                             ))}
                                             <button
                                                 type="button"
-                                                className={button}
+                                                className={pill}
                                                 title="곡 라이브러리·유튜브 챕터로 저장한 송폼을 칩으로 가져옵니다"
                                                 disabled={busy || !activePage}
                                                 onClick={importSavedSongForm}
@@ -1263,7 +1288,7 @@ export default function SheetAnnotationWorkspace({
                                         </div>
                                         <ol
                                             aria-label="현재 페이지 송폼 순서"
-                                            className="flex min-h-11 flex-wrap items-center gap-1 rounded-xl border border-dashed border-primary/20 bg-background/60 px-2 py-1.5"
+                                            className="flex min-h-11 flex-wrap items-center gap-1 rounded-2xl border border-dashed border-border bg-background px-2 py-1.5"
                                         >
                                             {songFormSections.length ? (
                                                 songFormSections.map((label, index) => (
@@ -1275,7 +1300,7 @@ export default function SheetAnnotationWorkspace({
                                                             title="눌러서 이 칩 빼기"
                                                             disabled={busy}
                                                             onClick={() => removeSongFormChip(index)}
-                                                            className="group inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-xs font-black text-white transition active:scale-95"
+                                                            className="group inline-flex min-h-8 items-center gap-0.5 rounded-full px-2.5 text-xs font-bold text-white transition active:scale-95"
                                                             style={{ backgroundColor: songFormChipColor(label) }}
                                                         >
                                                             {label}
@@ -1293,7 +1318,7 @@ export default function SheetAnnotationWorkspace({
                         )}
 
                         {tool === 'pen' && (
-                            <div className="flex items-center gap-1.5 text-xs">
+                            <div className={cn(scrollRow, 'gap-1.5 text-xs')}>
                                 <span className="font-medium text-muted-foreground">선 굵기:</span>
                                 {[
                                     { label: '얇게 (1.5px)', val: 1.5 },
@@ -1304,9 +1329,8 @@ export default function SheetAnnotationWorkspace({
                                         key={w.val}
                                         type="button"
                                         onClick={() => setPenWidth(w.val)}
-                                        className={`rounded-lg px-2 py-0.5 text-xs font-bold transition ${
-                                            penWidth === w.val ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'
-                                        }`}
+                                        aria-pressed={penWidth === w.val}
+                                        className={cn(chip, penWidth === w.val ? chipOn : chipOff)}
                                     >
                                         {w.label}
                                     </button>
@@ -1315,7 +1339,7 @@ export default function SheetAnnotationWorkspace({
                         )}
 
                         {tool === 'highlighter' && (
-                            <div className="flex items-center gap-1.5 text-xs">
+                            <div className={cn(scrollRow, 'gap-1.5 text-xs')}>
                                 <span className="font-medium text-muted-foreground">형광펜 굵기:</span>
                                 {[
                                     { label: '보통 (16px)', val: 16 },
@@ -1326,9 +1350,8 @@ export default function SheetAnnotationWorkspace({
                                         key={w.val}
                                         type="button"
                                         onClick={() => setHighlighterWidth(w.val)}
-                                        className={`rounded-lg px-2 py-0.5 text-xs font-bold transition ${
-                                            highlighterWidth === w.val ? 'bg-amber-400 text-black' : 'bg-muted hover:bg-muted/80'
-                                        }`}
+                                        aria-pressed={highlighterWidth === w.val}
+                                        className={cn(chip, highlighterWidth === w.val ? chipOn : chipOff)}
                                     >
                                         {w.label}
                                     </button>
@@ -1337,7 +1360,7 @@ export default function SheetAnnotationWorkspace({
                         )}
 
                         {tool === 'text' && (
-                            <div className="flex items-center gap-1.5 text-xs">
+                            <div className={cn(scrollRow, 'gap-1.5 text-xs')}>
                                 <span className="font-medium text-muted-foreground">글자 크기:</span>
                                 {[
                                     { label: '작게 (16pt)', val: 16 },
@@ -1348,9 +1371,8 @@ export default function SheetAnnotationWorkspace({
                                         key={s.val}
                                         type="button"
                                         onClick={() => setTextFontSize(s.val)}
-                                        className={`rounded-lg px-2 py-0.5 text-xs font-bold transition ${
-                                            textFontSize === s.val ? 'bg-emerald-600 text-white' : 'bg-muted hover:bg-muted/80'
-                                        }`}
+                                        aria-pressed={textFontSize === s.val}
+                                        className={cn(chip, textFontSize === s.val ? chipOn : chipOff)}
                                     >
                                         {s.label}
                                     </button>
@@ -1359,36 +1381,40 @@ export default function SheetAnnotationWorkspace({
                         )}
 
                         {tool === 'highlighter' ? (
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-muted-foreground">색상:</span>
+                            <div className="flex items-center gap-1">
+                                <span className="mr-1 text-xs font-medium text-muted-foreground">색상:</span>
                                 {HIGHLIGHTER_COLORS.map((value, i) => (
                                     <button
                                         key={value}
                                         aria-label={`형광펜 색상 ${i + 1}`}
                                         aria-pressed={highlighterColor === value}
                                         onClick={() => setHighlighterColor(value)}
-                                        className={`tap-target flex items-center justify-center rounded-full border-2 ${
-                                            highlighterColor === value ? 'border-primary ring-2 ring-primary/30' : 'border-transparent'
-                                        }`}
+                                        type="button"
+                                        className={cn(
+                                            'flex size-10 touch-manipulation items-center justify-center rounded-full border-2',
+                                            highlighterColor === value ? 'border-foreground' : 'border-transparent'
+                                        )}
                                     >
-                                        <span className="h-6 w-6 rounded-full border border-black/10 shadow-xs" style={{ backgroundColor: value }} />
+                                        <span className="size-6 rounded-full ring-1 ring-black/10 ring-inset dark:ring-white/25" style={{ backgroundColor: value }} />
                                     </button>
                                 ))}
                             </div>
                         ) : tool === 'pen' || tool === 'stamp' || tool === 'text' || tool === 'rect' ? (
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-muted-foreground">색상:</span>
+                            <div className="flex items-center gap-1">
+                                <span className="mr-1 text-xs font-medium text-muted-foreground">색상:</span>
                                 {SHEET_COLORS.map((value, i) => (
                                     <button
                                         key={value}
                                         aria-label={`필기 색상 ${i + 1}`}
                                         aria-pressed={color === value}
                                         onClick={() => setColor(value)}
-                                        className={`tap-target flex items-center justify-center rounded-full border-2 ${
-                                            color === value ? 'border-primary ring-2 ring-primary/30' : 'border-transparent'
-                                        }`}
+                                        type="button"
+                                        className={cn(
+                                            'flex size-10 touch-manipulation items-center justify-center rounded-full border-2',
+                                            color === value ? 'border-foreground' : 'border-transparent'
+                                        )}
                                     >
-                                        <span className="h-5 w-5 rounded-full shadow-xs" style={{ backgroundColor: value }} />
+                                        <span className="size-6 rounded-full ring-1 ring-black/10 ring-inset dark:ring-white/25" style={{ backgroundColor: value }} />
                                     </button>
                                 ))}
                             </div>
@@ -1418,22 +1444,23 @@ export default function SheetAnnotationWorkspace({
                     </p>
                 </div>
             )}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+                <div className={scrollRow}>
                     <button
-                        className={button}
+                        type="button"
+                        className={pill}
                         disabled={!canTurnPage || page <= 1}
                         onClick={() => onPageChange(Math.max(1, page - (isDualPage ? 2 : 1)))}
                     >
                         이전
                     </button>
-                    <span className="text-sm font-bold">
+                    <span className="shrink-0 whitespace-nowrap px-1 text-sm font-semibold tabular-nums text-foreground">
                         {isDualPage && shown && page + 1 <= shown.pages.length ? `${page}-${page + 1}` : page} / {shown?.pages.length ?? 0}p
                     </span>
                     {isEditingOtherPage && (
                         <button
                             type="button"
-                            className={`${button} border-violet-400/50 bg-violet-500/10 text-violet-700 dark:text-violet-300`}
+                            className={cn(pill, 'bg-muted')}
                             title="라이브 진행 중인 페이지로 돌아갑니다"
                             onClick={() => setEditPage(null)}
                         >
@@ -1441,14 +1468,15 @@ export default function SheetAnnotationWorkspace({
                         </button>
                     )}
                     <button
-                        className={button}
+                        type="button"
+                        className={pill}
                         disabled={!canTurnPage || page >= (shown?.pages.length ?? 0)}
                         onClick={() => onPageChange(Math.min(shown?.pages.length ?? page, page + (isDualPage ? 2 : 1)))}
                     >
                         다음
                     </button>
                     {!isDualPage && (
-                        <button className={button} aria-label="악보 확대 전환" onClick={() => setZoom(zoom === 1 ? 1.5 : 1)}>
+                        <button type="button" className={pill} aria-label="악보 확대 전환" onClick={() => setZoom(zoom === 1 ? 1.5 : 1)}>
                             {zoom === 1 ? '확대 150%' : '맞춤'}
                         </button>
                     )}
@@ -1456,7 +1484,7 @@ export default function SheetAnnotationWorkspace({
                     {/* Page Rotation Button */}
                     <button
                         type="button"
-                        className={button}
+                        className={pill}
                         disabled={!activePage || busy}
                         onClick={() => void handleRotatePage()}
                         title="스마트폰/스캔 악보 방향을 시계방향으로 90도 회전합니다"
@@ -1469,7 +1497,7 @@ export default function SheetAnnotationWorkspace({
                     {(shown?.pages.length ?? 0) > 1 && (
                         <button
                             type="button"
-                            className={`${button} text-rose-600 hover:bg-rose-500/10 border-rose-300/40`}
+                            className={dangerPill}
                             disabled={busy}
                             onClick={handleDeletePage}
                             title="현재 페이지 삭제"
@@ -1480,66 +1508,76 @@ export default function SheetAnnotationWorkspace({
                     )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className={scrollRow}>
                     <button
-                        className={`${button} ${isDarkInverted ? 'border-amber-400/60 bg-amber-400/15 text-amber-600 dark:text-amber-300 font-bold' : ''}`}
+                        type="button"
+                        className={cn(pill, isDarkInverted && pillOn)}
                         title="무대 어두운 조명에서 눈부심을 방지하는 흑백 반전 모드"
                         onClick={() => setIsDarkInverted((prev) => !prev)}
                     >
                         {isDarkInverted ? <Sun size={16} /> : <Moon size={16} />}
-                        <span className="text-xs">{isDarkInverted ? '라이트' : '다크 악보'}</span>
+                        <span>{isDarkInverted ? '라이트' : '다크 악보'}</span>
                     </button>
 
                     <button
-                        className={`${button} ${isDualPage ? 'border-primary bg-primary text-primary-foreground font-bold' : ''}`}
+                        type="button"
+                        className={cn(pill, isDualPage && pillOn)}
                         title="가로 모드에서 2페이지 나란히 펼침 보기"
                         onClick={() => setIsDualPage((prev) => !prev)}
                     >
                         <BookOpen size={16} />
-                        <span className="text-xs">{isDualPage ? '1쪽 보기' : '2쪽 펼침'}</span>
+                        <span>{isDualPage ? '1쪽 보기' : '2쪽 펼침'}</span>
                     </button>
 
                     <button
-                        className={button}
+                        type="button"
+                        className={pill}
                         title="필기 도구 숨기기 / 펼치기"
                         onClick={() => setShowTools((prev) => !prev)}
                     >
-                        <span className="text-xs">{showTools ? '도구 숨김' : '도구 펼침'}</span>
+                        <span>{showTools ? '도구 숨김' : '도구 펼침'}</span>
                     </button>
 
                     {isWakeLockSupported && (
                         <button
-                            className={`${button} ${
-                                isWakeLockActive ? 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300' : ''
-                            }`}
+                            type="button"
+                            className={cn(pill, isWakeLockActive && pillOn)}
                             title="연주 중 화면이 꺼지지 않도록 방지합니다"
                             onClick={toggleWakeLock}
                         >
                             {isWakeLockActive ? <Sun size={16} /> : <SunDim size={16} />}
-                            <span className="text-xs">화면 {isWakeLockActive ? '켜짐 유지' : '자동 꺼짐'}</span>
+                            <span>화면 {isWakeLockActive ? '켜짐 유지' : '자동 꺼짐'}</span>
                         </button>
                     )}
                     {isFullscreenSupported && (
                         <button
-                            className={button}
+                            type="button"
+                            className={pill}
                             title="무대 모드: 브라우저 바를 숨기고 악보를 전체 화면으로 봅니다"
                             onClick={() => void toggleFullscreen(sectionRef.current || undefined)}
                         >
                             {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                            <span className="text-xs">{isFullscreen ? '전체화면 해제' : '무대 전체화면'}</span>
+                            <span>{isFullscreen ? '전체화면 해제' : '무대 전체화면'}</span>
                         </button>
                     )}
                 </div>
             </div>
             {shown?.pages.length ? (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span>💡</span>
+                    <Keyboard size={14} className="shrink-0" aria-hidden />
                     <span>블루투스 페달 또는 키보드 방향키(←, →), PageUp/Down으로 {isDualPage ? '2페이지씩' : '악보를'} 넘길 수 있습니다.</span>
                 </div>
             ) : null}
-            <div className={`relative overflow-auto rounded-xl border border-primary/15 transition-all ${
-                isDarkInverted ? 'bg-[#0a0f0e] dark-sheet-invert' : 'bg-white text-gray-900'
-            }`}>
+            <div
+                className={cn(
+                    'relative overflow-auto rounded-2xl border border-border transition-all',
+                    !activePage
+                        ? 'border-dashed border-input bg-muted/40'
+                        : isDarkInverted
+                            ? 'bg-[#0a0f0e] dark-sheet-invert'
+                            : 'bg-white text-gray-900'
+                )}
+            >
                 {/* Song Form Roadmap Overlay on Sheet Music — yields to a song form band burned into the page */}
                 {activePage && !isSongFormEditing && !activePage.marks.some((m) => m.kind === 'songform') && (
                     <SongFormScoreOverlay
@@ -1559,7 +1597,7 @@ export default function SheetAnnotationWorkspace({
                 )}
 
                 {isDualPage && shown ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-2 bg-neutral-900/10">
+                    <div className="grid grid-cols-1 gap-3 bg-foreground/5 p-2 md:grid-cols-2">
                         {/* 1번째 페이지 (page) */}
                         {activePage ? (
                             <div
@@ -1629,7 +1667,7 @@ export default function SheetAnnotationWorkspace({
                                 </span>
                             </div>
                         ) : (
-                            <div className="hidden md:flex items-center justify-center rounded-lg border border-dashed border-muted p-8 text-xs text-muted-foreground">
+                            <div className="hidden items-center justify-center rounded-2xl border border-dashed border-border p-8 text-xs text-muted-foreground md:flex">
                                 마지막 페이지입니다.
                             </div>
                         )}
@@ -1672,7 +1710,7 @@ export default function SheetAnnotationWorkspace({
                         </svg>
                     </div>
                 ) : (
-                    <div className="px-6 py-16 text-center text-sm text-gray-600">
+                    <div className="px-6 py-16 text-center text-sm text-muted-foreground">
                         {shown
                             ? '이 페이지에 악보가 없습니다. 페이지를 이동해주세요.'
                             : view === 'published'
@@ -1683,18 +1721,20 @@ export default function SheetAnnotationWorkspace({
             </div>
             <div className="flex flex-wrap gap-2">
                 <button
-                    className={`${button} bg-primary text-primary-foreground`}
+                    type="button"
+                    className={cn(buttonVariants({ size: 'sm' }), 'h-10 touch-manipulation px-4 text-sm')}
                     disabled={!draft || busy}
                     onClick={() => void publish()}
                 >
                     <Share2 size={16} /> 전체 공유본으로 저장
                 </button>
-                <button className={button} disabled={!published || busy} onClick={download}>
+                <button type="button" className={pill} disabled={!published || busy} onClick={download}>
                     <Download size={16} /> 공유 파일 내려받기
                 </button>
                 {view === 'published' && published && (
                     <button
-                        className={button}
+                        type="button"
+                        className={pill}
                         disabled={busy}
                         onClick={() => {
                             persist(structuredClone(published));
@@ -1712,16 +1752,16 @@ export default function SheetAnnotationWorkspace({
             {/* Text & Chord Input Dialog */}
             {textModal?.isOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-                    <div className="w-full max-w-sm rounded-2xl border border-primary/20 bg-background p-4 shadow-2xl space-y-3 animate-in zoom-in-95 duration-150">
-                        <div className="flex items-center justify-between border-b border-primary/10 pb-2">
-                            <span className="text-sm font-black flex items-center gap-1.5 text-foreground">
-                                <Type size={16} className="text-primary" />
+                    <div className="w-full max-w-sm space-y-3 rounded-3xl border border-border bg-card p-4 shadow-2xl animate-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b border-border pb-2">
+                            <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                                <Type size={16} className="text-muted-foreground" />
                                 <span>악보 텍스트 / 코드 입력</span>
                             </span>
                             <button
                                 type="button"
                                 onClick={() => setTextModal(null)}
-                                className="text-muted-foreground hover:text-foreground text-xs p-1"
+                                className="inline-flex size-8 items-center justify-center rounded-full text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                             >
                                 ✕
                             </button>
@@ -1738,30 +1778,30 @@ export default function SheetAnnotationWorkspace({
                                 }}
                                 placeholder="예: Capo 2, F#m7, 4마디 대기, 잔잔하게"
                                 maxLength={100}
-                                className="w-full rounded-xl border border-primary/25 bg-muted/40 px-3 py-2 text-sm font-bold text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+                                className={cn(fieldClass, 'font-semibold')}
                             />
                         </div>
                         {/* Quick Worship Chord & Memo Shortcuts */}
                         <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-muted-foreground">빠른 선택 프리셋:</span>
+                            <span className="text-[11px] font-medium text-muted-foreground">빠른 선택 프리셋:</span>
                             <div className="flex flex-wrap gap-1">
                                 {['Capo 1', 'Capo 2', 'Key Up (반음↑)', '간주 4마디', '빌드업', '잔잔하게', 'All Out', '드럼 킥 진입'].map((preset) => (
                                     <button
                                         key={preset}
                                         type="button"
                                         onClick={() => setTextModal({ ...textModal, text: preset })}
-                                        className="rounded-lg bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary hover:bg-primary/20 transition active:scale-95"
+                                        className={cn(chip, chipOff, 'h-7 px-2.5 text-[11px] active:scale-95')}
                                     >
                                         {preset}
                                     </button>
                                 ))}
                             </div>
                         </div>
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-primary/10">
+                        <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
                             <button
                                 type="button"
                                 onClick={() => setTextModal(null)}
-                                className="rounded-xl px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted transition"
+                                className={buttonVariants({ variant: 'ghost', size: 'sm' })}
                             >
                                 취소
                             </button>
@@ -1769,7 +1809,7 @@ export default function SheetAnnotationWorkspace({
                                 type="button"
                                 onClick={handleSaveTextMark}
                                 disabled={!textModal.text.trim()}
-                                className="rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-40 transition shadow"
+                                className={buttonVariants({ size: 'sm' })}
                             >
                                 악보에 삽입
                             </button>
@@ -1780,3 +1820,6 @@ export default function SheetAnnotationWorkspace({
         </section>
     );
 }
+
+// The prep page re-renders on every realtime and session-state change; the sheet only needs to when its own props do.
+export default memo(SheetAnnotationWorkspace);

@@ -10,7 +10,6 @@ import StageAccentPicker from '@/components/session/stage/StageAccentPicker';
 import WorshipCountIn from '@/components/session/stage/WorshipCountIn';
 import WorshipPulseView from '@/components/session/stage/WorshipPulseView';
 import WorshipStartScreen from '@/components/session/stage/WorshipStartScreen';
-import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
 import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRealtimeSession';
 import { isPrototypeSessionId } from '@/lib/constants';
 import { createClientId } from '@/lib/clientId';
@@ -263,8 +262,6 @@ export default function WorshipTeamMode({
     const cooldownTimeoutRefs = useRef<Record<string, number>>({});
     const appliedSessionStateRef = useRef(JSON.stringify(session.current_state) ?? '');
     const isDemoMode = isPrototypeSessionId(session.id);
-    const { activeBeat, blinkActive } = useVisualMetronome(bpmEnabled && isActive, currentBpm);
-    const nowTick = useNowTick(5000);
     const { sendFeedback, participants, localTransportAvailable, lastRealtimeAt, realtimeStatus } = useRealtimeSession({
         sessionId: session.id,
         teamId,
@@ -274,7 +271,6 @@ export default function WorshipTeamMode({
     const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen();
 
     const realtimeMeta = getRealtimeStatusMeta(realtimeStatus, localTransportAvailable);
-    const realtimeAgeLabel = formatRealtimeAge(lastRealtimeAt, nowTick);
     const latestCue = feedbackLog[feedbackLog.length - 1] ?? null;
     const currentSongIndex = songs.findIndex((song) => song.id === currentSongId);
     const nextSong = currentSongIndex >= 0 ? songs[currentSongIndex + 1] ?? null : songs[1] ?? null;
@@ -916,8 +912,6 @@ export default function WorshipTeamMode({
                             bpm={currentBpm}
                             bpmEnabled={bpmEnabled}
                             metronomeActive={metronomeActive}
-                            activeBeat={activeBeat}
-                            blinkActive={blinkActive}
                             canToggleTempo={isActive && Boolean(currentBpm)}
                             onToggleTempo={() => updateState({ bpmEnabled: !bpmEnabled })}
                             sections={sections}
@@ -949,7 +943,7 @@ export default function WorshipTeamMode({
                                 {latestCue?.message ?? '큐 대기'}
                             </p>
                             <span className="shrink-0 text-[10px] font-bold text-white/75">
-                                {latestCue ? ROLE_LABELS[latestCue.role] : realtimeAgeLabel}
+                                {latestCue ? ROLE_LABELS[latestCue.role] : <RealtimeAgeLabel at={lastRealtimeAt} />}
                             </span>
                         </div>
                     </aside>
@@ -1051,7 +1045,7 @@ export default function WorshipTeamMode({
                             <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold text-white/75">
                                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-2">
                                     <Radio size={13} />
-                                    {realtimeAgeLabel}
+                                    <RealtimeAgeLabel at={lastRealtimeAt} />
                                 </span>
                                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-2">
                                     <Timer size={13} />
@@ -1181,6 +1175,12 @@ function StageMetric({ label, value }: { label: string; value: string }) {
             <p className="mt-2 truncate text-sm font-black text-white">{value}</p>
         </div>
     );
+}
+
+/** Ticks on its own every 5s so the stage tree around the "N초 전" label does not re-render. */
+function RealtimeAgeLabel({ at }: { at: string | null }) {
+    const now = useNowTick(5000);
+    return <>{formatRealtimeAge(at, now)}</>;
 }
 
 function useNowTick(intervalMs: number) {

@@ -29,13 +29,13 @@ import {
 import { usePageTurner } from '@/hooks/usePageTurner';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
-import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
+import BeatIndicator from '@/components/session/BeatIndicator';
+import { getSheetMarkPath } from '@/components/session/sheetMarkPath';
 import { isStageAudioEnabled, setStageAudioEnabled, playStageCueSound } from '@/lib/stageAudioCue';
 import { readSongStageNote, saveSongStageNote, STAGE_NOTE_CHANGED_EVENT } from '@/lib/stageNotesStorage';
 import { getCueCategory } from '@/types/session';
 import {
     createSampleSheetDocument,
-    pointsToSvgPath,
     readSheet,
     saveSheet,
     sheetKey,
@@ -263,7 +263,9 @@ export default function LiveStageScoreViewer({
 
     const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen();
     const { isActive: isWakeLockActive, isSupported: isWakeLockSupported, toggle: toggleWakeLock } = useScreenWakeLock(isActive);
-    const { activeBeat, blinkActive } = useVisualMetronome(bpmEnabled && isActive, effectiveBpm);
+    // The beat dots, giant bar and edge flash each run the metronome in a BeatIndicator leaf,
+    // so a tick never re-renders the score page and its annotation layer.
+    const metronomeEnabled = bpmEnabled && isActive;
 
     const totalPages = sheet?.pages.length ?? 0;
     const activePage = sheet?.pages[page - 1];
@@ -545,7 +547,7 @@ export default function LiveStageScoreViewer({
                 return (
                     <path
                         key={mark.id}
-                        d={pointsToSvgPath(mark.points, ratio)}
+                        d={getSheetMarkPath(mark, ratio)}
                         fill="none"
                         stroke={mark.color}
                         strokeWidth={mark.strokeWidth || 16}
@@ -608,7 +610,7 @@ export default function LiveStageScoreViewer({
             return (
                 <path
                     key={mark.id}
-                    d={pointsToSvgPath(mark.points, ratio)}
+                    d={getSheetMarkPath(mark, ratio)}
                     fill="none"
                     stroke={mark.color}
                     strokeWidth={mark.strokeWidth || 2.5}
@@ -784,24 +786,26 @@ export default function LiveStageScoreViewer({
                                     ♩ {effectiveBpm}
                                 </span>
                                 <div className="flex items-center gap-1">
-                                    {[1, 2, 3, 4].map((beat) => {
-                                        const isDownbeat = beat === 1;
-                                        const isCurrent = activeBeat === beat && blinkActive;
-                                        return (
-                                            <span
-                                                key={beat}
-                                                className={`rounded-full transition-all duration-75 ${
-                                                    isCurrent
-                                                        ? isDownbeat
-                                                            ? 'h-2.5 w-2.5 bg-amber-300 shadow-[0_0_8px_#fde047]'
-                                                            : 'h-2 w-2 bg-emerald-400 shadow-[0_0_6px_#4ade80]'
-                                                        : isDownbeat
-                                                            ? 'h-2 w-2 bg-white/20'
-                                                            : 'h-1.5 w-1.5 bg-white/10'
-                                                }`}
-                                            />
-                                        );
-                                    })}
+                                    <BeatIndicator bpm={effectiveBpm} enabled={metronomeEnabled}>
+                                        {(activeBeat, blinkActive) => [1, 2, 3, 4].map((beat) => {
+                                            const isDownbeat = beat === 1;
+                                            const isCurrent = activeBeat === beat && blinkActive;
+                                            return (
+                                                <span
+                                                    key={beat}
+                                                    className={`rounded-full transition-all duration-75 ${
+                                                        isCurrent
+                                                            ? isDownbeat
+                                                                ? 'h-2.5 w-2.5 bg-amber-300 shadow-[0_0_8px_#fde047]'
+                                                                : 'h-2 w-2 bg-emerald-400 shadow-[0_0_6px_#4ade80]'
+                                                            : isDownbeat
+                                                                ? 'h-2 w-2 bg-white/20'
+                                                                : 'h-1.5 w-1.5 bg-white/10'
+                                                    }`}
+                                                />
+                                            );
+                                        })}
+                                    </BeatIndicator>
                                 </div>
                             </button>
 
@@ -1317,42 +1321,48 @@ export default function LiveStageScoreViewer({
                 {/* Giant 4-Beat Bar HUD */}
                 {bpmEnabled && pulseMode === 'giant' && (
                     <div className="grid grid-cols-4 gap-1.5 p-1.5 bg-black/80 border-b border-white/15 shrink-0 z-20">
-                        {[1, 2, 3, 4].map((beat) => {
-                            const isDownbeat = beat === 1;
-                            const isHit = activeBeat === beat && blinkActive;
-                            return (
-                                <div
-                                    key={beat}
-                                    className={`h-4 sm:h-5 rounded-lg transition-all duration-75 text-center flex items-center justify-center font-mono font-black text-xs ${
-                                        isHit
-                                            ? isDownbeat
-                                                ? 'bg-amber-400 text-black shadow-[0_0_20px_#fbbf24] scale-[1.02]'
-                                                : 'bg-emerald-400 text-black shadow-[0_0_12px_#34d399] scale-[1.02]'
-                                            : isDownbeat
-                                            ? 'bg-amber-400/20 text-amber-300/40'
-                                            : 'bg-white/10 text-white/30'
-                                    }`}
-                                >
-                                    {beat === 1 ? '1 ●' : beat}
-                                </div>
-                            );
-                        })}
+                        <BeatIndicator bpm={effectiveBpm} enabled={metronomeEnabled}>
+                            {(activeBeat, blinkActive) => [1, 2, 3, 4].map((beat) => {
+                                const isDownbeat = beat === 1;
+                                const isHit = activeBeat === beat && blinkActive;
+                                return (
+                                    <div
+                                        key={beat}
+                                        className={`h-4 sm:h-5 rounded-lg transition-all duration-75 text-center flex items-center justify-center font-mono font-black text-xs ${
+                                            isHit
+                                                ? isDownbeat
+                                                    ? 'bg-amber-400 text-black shadow-[0_0_20px_#fbbf24] scale-[1.02]'
+                                                    : 'bg-emerald-400 text-black shadow-[0_0_12px_#34d399] scale-[1.02]'
+                                                : isDownbeat
+                                                ? 'bg-amber-400/20 text-amber-300/40'
+                                                : 'bg-white/10 text-white/30'
+                                        }`}
+                                    >
+                                        {beat === 1 ? '1 ●' : beat}
+                                    </div>
+                                );
+                            })}
+                        </BeatIndicator>
                     </div>
                 )}
 
                 {/* BPM Pulse Overlay (Edge Strobe or Fullscreen Flash) */}
-                {bpmEnabled && blinkActive && (pulseMode === 'edge' || pulseMode === 'fullscreen') && (
-                    <div
-                        className={`pointer-events-none absolute inset-0 z-30 transition-all duration-75 ${
-                            pulseMode === 'edge'
-                                ? activeBeat === 1
-                                    ? 'border-4 border-amber-300 shadow-[inset_0_0_60px_rgba(251,191,36,0.7)]'
-                                    : 'border-2 border-emerald-400 shadow-[inset_0_0_30px_rgba(52,211,153,0.4)]'
-                                : activeBeat === 1
-                                ? 'bg-amber-400/25 backdrop-brightness-125'
-                                : 'bg-emerald-400/12'
-                        }`}
-                    />
+                {bpmEnabled && (pulseMode === 'edge' || pulseMode === 'fullscreen') && (
+                    <BeatIndicator bpm={effectiveBpm} enabled={metronomeEnabled}>
+                        {(activeBeat, blinkActive) => blinkActive ? (
+                            <div
+                                className={`pointer-events-none absolute inset-0 z-30 transition-all duration-75 ${
+                                    pulseMode === 'edge'
+                                        ? activeBeat === 1
+                                            ? 'border-4 border-amber-300 shadow-[inset_0_0_60px_rgba(251,191,36,0.7)]'
+                                            : 'border-2 border-emerald-400 shadow-[inset_0_0_30px_rgba(52,211,153,0.4)]'
+                                        : activeBeat === 1
+                                        ? 'bg-amber-400/25 backdrop-brightness-125'
+                                        : 'bg-emerald-400/12'
+                                }`}
+                            />
+                        ) : null}
+                    </BeatIndicator>
                 )}
 
                 {activePage ? (

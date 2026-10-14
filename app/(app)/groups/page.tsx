@@ -1,12 +1,18 @@
+import type { Metadata } from 'next';
 import CommunityRoutePage from '@/components/community/CommunityRoutePage';
 import { BookOpen, CalendarDays, UserPlus, UsersRound } from 'lucide-react';
+
+export const metadata: Metadata = {
+    title: '그룹',
+};
 
 export default function GroupsPage() {
     return (
         <CommunityRoutePage
-            eyebrow="그룹"
-            title="예배팀과 소그룹을 함께 묶어 다음 만남으로 연결합니다."
-            description="팀별 예배 준비, 예배 후 묵상, 새가족 후속 안내가 흩어지지 않도록 그룹 단위로 정리합니다."
+            title="그룹"
+            description="예배팀과 소그룹을 함께 묶어 다음 만남으로 연결합니다."
+            summary="팀별 예배 준비, 예배 후 묵상, 새가족 후속 안내가 흩어지지 않도록 그룹 단위로 정리합니다."
+            tone="mint"
             primaryAction={{ href: '/community', label: '팀 커뮤니티' }}
             secondaryAction={{ href: '/dashboard', label: '오늘 운영판' }}
             metrics={[
