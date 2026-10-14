@@ -18,6 +18,7 @@ export const SONG_FORM_CHIPS: ReadonlyArray<{ label: string; name: string }> = [
     { label: 'B', name: 'Bridge · 브릿지' },
     { label: '간주', name: 'Interlude · 간주' },
     { label: 'Tag', name: 'Tag · 끝 구절 반복' },
+    { label: 'Vamp', name: 'Vamp · 짧은 구절 계속 반복' },
     { label: 'O', name: 'Outro · 엔딩' },
 ];
 
@@ -50,6 +51,7 @@ export function songFormChipColor(label: string): string {
     if (/^B\d*$/i.test(base)) return '#15803d';
     if (/^(I|O|E)$/i.test(base)) return '#475569';
     if (/간주|^Int/i.test(base)) return '#b45309';
+    if (/^(Tag|Vamp)$/i.test(base)) return '#0f766e';
     return '#0f172a';
 }
 
@@ -73,6 +75,7 @@ export function abbreviateSectionLabel(raw: string): string {
     else if (/^(interlude|instrumental|간주)/.test(lower)) base = '간주';
     else if (/^(outro|ending|아웃트로|엔딩|후주)/.test(lower)) base = 'O';
     else if (/^tag/.test(lower)) base = 'Tag';
+    else if (/^(vamp|뱀프)/.test(lower)) base = 'Vamp';
     else base = text.slice(0, SONG_FORM_LABEL_MAX - suffix.length) || '?';
     return `${base}${suffix}`;
 }
@@ -85,7 +88,7 @@ const SECTION_WORDS: Readonly<Record<string, string>> = {
     후렴: 'C', 코러스: 'C', chorus: 'C', 후렴2: 'C2', chorus2: 'C2',
     브릿지: 'B', 브리지: 'B', bridge: 'B',
     인터: '간주', inter: '간주', interlude: '간주',
-    태그: 'Tag', 엔딩: 'O', 아웃트로: 'O', 후주: 'O', outro: 'O', ending: 'O', out: 'O',
+    태그: 'Tag', 뱀프: 'Vamp', 엔딩: 'O', 아웃트로: 'O', 후주: 'O', outro: 'O', ending: 'O', out: 'O',
 };
 
 function sectionLabelFor(token: string): string | null {

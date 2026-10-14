@@ -49,25 +49,20 @@ export const HIGHLIGHTER_COLORS = [
     'rgba(96, 165, 250, 0.45)',
     'rgba(244, 114, 182, 0.45)',
 ];
-export const WORSHIP_STAMP_PRESETS = [
-    '한 번 더',
-    '후렴 반복',
-    '브릿지',
-    '엔딩',
-    '작게 (p)',
-    '크게 (f)',
-    '기도 반주',
-    '자유 찬양',
-    '멘트',
-    'Coda 𝄌',
-    'Segno 𝄋',
-    'Fermata 𝄐',
-    'Fine',
-    'Drum In 🥁',
-    'All Out 🔥',
-    'Build Up 📈',
-    'Break 🔇',
-] as const;
+/** Stamps grouped the way a team reads a chart: the road through it, the band's dynamics, who sings. */
+export const WORSHIP_STAMP_GROUPS: ReadonlyArray<{ name: string; stamps: readonly string[] }> = [
+    { name: '진행', stamps: ['한 번 더', '후렴 반복', '×2', '×3', '마지막만', '브릿지', '엔딩', '멘트', '여기서 끝'] },
+    {
+        name: '악보 기호',
+        stamps: ['‖: 반복', '반복 :‖', '┌ 1.', '┌ 2.', 'D.S. al Coda', 'D.C. al Fine', 'To Coda 𝄌', 'Coda 𝄌', 'Segno 𝄋', 'Fermata 𝄐', 'Fine', 'rit.'],
+    },
+    {
+        name: '밴드·셈여림',
+        stamps: ['작게 (p)', '크게 (f)', 'Build Up 📈', 'Drum In 🥁', 'All Out 🔥', 'Break 🔇', '다 같이 Stop', '피아노만', '아카펠라', '키 업 (전조)', '기도 반주', '자유 찬양'],
+    },
+    { name: '보컬', stamps: ['다 같이', '남성', '여성', '인도자 솔로', '화음', '회중만'] },
+];
+export const WORSHIP_STAMP_PRESETS: readonly string[] = WORSHIP_STAMP_GROUPS.flatMap((group) => group.stamps);
 
 export const sheetKey = (teamId: string, songId: string, shared = false) => `${teamId}:${songId}:${shared ? 'published' : 'draft'}`;
 

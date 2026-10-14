@@ -6,6 +6,8 @@ import {
     distanceToSegment,
     isPointNearMark,
     createSampleSheetDocument,
+    WORSHIP_STAMP_GROUPS,
+    WORSHIP_STAMP_PRESETS,
     type SheetDocument,
     type SheetMark,
 } from '../lib/sheetAnnotations';
@@ -222,3 +224,18 @@ test('validateSheet and isPointNearMark accept text and rect marks', () => {
 
 
 
+
+test('stamp groups list every preset once, each short enough to save', () => {
+    const flat = WORSHIP_STAMP_GROUPS.flatMap((group) => group.stamps);
+    assert.deepEqual([...WORSHIP_STAMP_PRESETS], flat);
+    assert.equal(new Set(flat).size, flat.length);
+    for (const text of flat) {
+        const doc: SheetDocument = {
+            version: 1,
+            title: '은혜로다',
+            updatedAt: new Date().toISOString(),
+            pages: [{ image: 'data:image/png;base64,iVBORw0KGgo=', width: 1200, height: 1600, marks: [{ id: 's', kind: 'stamp', color: '#2563eb', text, points: [[100, 100]] }] }],
+        };
+        assert.doesNotThrow(() => validateSheet(doc), text);
+    }
+});

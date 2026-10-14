@@ -10,6 +10,7 @@ test('parseSongFormText reads chip labels, chat words and repeats', () => {
     assert.deepEqual(parseSongFormText('intro→verse→chorus 2번→bridge→outro').sections, ['I', 'V1', 'C×2', 'B', 'O']);
     assert.deepEqual(parseSongFormText('i v2 pc Cx3 c*2 간주 tag').sections, ['I', 'V2', 'PC', 'C×3', 'C×2', '간주', 'Tag']);
     assert.deepEqual(parseSongFormText('(I) V1, C | C').sections, ['I', 'V1', 'C', 'C']);
+    assert.deepEqual(parseSongFormText('B vamp x4 뱀프 Tag').sections, ['B', 'Vamp×4', 'Vamp', 'Tag']);
 });
 
 test('parseSongFormText keeps unknown words as their own chips and reports them', () => {

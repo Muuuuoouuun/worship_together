@@ -19,6 +19,7 @@ import {
     sheetKey,
     SHEET_COLORS,
     validateSheet,
+    WORSHIP_STAMP_GROUPS,
     WORSHIP_STAMP_PRESETS,
     isPointNearMark,
     appendStrokePoint,
@@ -31,6 +32,7 @@ import {
     type SheetPage,
 } from '@/lib/sheetAnnotations';
 import { renderSheetPageImage, sheetFileStem } from '@/lib/sheetRender';
+import { canRedo, canUndo, EMPTY_HISTORY, recordSheetChange, redoPage, undoPage, type SheetHistory } from '@/lib/markHistory';
 import { keyInterval, keyLabel, LEAD_SHEET_KEYS, LEAD_SHEETS, type LeadSheetKey } from '@/lib/leadSheet';
 import {
     abbreviateSectionLabel,
@@ -167,7 +169,8 @@ export default function SheetAnnotationWorkspace({
     const [penWidth, setPenWidth] = useState<number>(3);
     const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
     const [textFontSize, setTextFontSize] = useState<number>(20);
-    const [redoStack, setRedoStack] = useState<SheetMark[]>([]);
+    /** Per-page undo/redo of the draft's marks. */
+    const [history, setHistory] = useState<SheetHistory>(EMPTY_HISTORY);
     const [textModal, setTextModal] = useState<{ isOpen: boolean; x: number; y: number; text: string } | null>(null);
     const [rectStart, setRectStart] = useState<[number, number] | null>(null);
     const [songFormDrag, setSongFormDrag] = useState<SongFormDrag | null>(null);
@@ -259,6 +262,24 @@ export default function SheetAnnotationWorkspace({
         enabled: canTurnPage && Boolean(shown?.pages.length) && !selectedSongFormMark,
     });
 
+    // Ctrl/⌘+Z undoes and Ctrl/⌘+Shift+Z or Ctrl+Y redoes, outside text fields.
+    useEffect(() => {
+        if (view !== 'draft') return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (isTypingTarget(event.target) || !(event.metaKey || event.ctrlKey) || event.altKey || busy) return;
+            const key = event.key.toLowerCase();
+            if (key === 'z' && !event.shiftKey) {
+                event.preventDefault();
+                undo();
+            } else if ((key === 'z' && event.shiftKey) || (key === 'y' && !event.metaKey)) {
+                event.preventDefault();
+                redo();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    });
+
     // 송폼 tool: arrow keys nudge the selected band or marker (Shift for bigger steps), Delete removes a marker.
     useEffect(() => {
         if (!selectedSongFormMark) return;
@@ -328,6 +349,7 @@ export default function SheetAnnotationWorkspace({
                 if (!active) return;
                 documentRef.current = local;
                 setDraft(local);
+                setHistory(EMPTY_HISTORY);
                 setPublished(shared);
                 setLoaded(true);
                 setStatus(local ? '이 기기에 저장된 악보' : 'PDF 또는 이미지를 추가해주세요.');
@@ -359,8 +381,14 @@ export default function SheetAnnotationWorkspace({
         onPageCountChange?.(shown?.pages.length ?? 0);
     }, [shown?.pages.length, onPageCountChange]);
 
-    /** `lazy` holds the write until edits pause (arrow-key nudges), so a held key doesn't rewrite the sheet every step. */
-    function persist(next: SheetDocument, lazy = false) {
+    /**
+     * `lazy` holds the write until edits pause (arrow-key nudges), so a held key doesn't rewrite the sheet every step;
+     * those nudges also undo as one move. Undo and redo pass `record: false` because they set the history themselves.
+     */
+    function persist(next: SheetDocument, lazy = false, record = true) {
+        const prev = documentRef.current;
+        const now = Date.now();
+        if (record) setHistory((current) => recordSheetChange(current, prev, next, now, lazy));
         documentRef.current = next;
         setDraft(next);
         setStatus('저장 중…');
@@ -438,7 +466,6 @@ export default function SheetAnnotationWorkspace({
     function addMark(mark: SheetMark) {
         const current = documentRef.current;
         if (!current?.pages[page - 1] || current.pages[page - 1].marks.length >= 2000) return;
-        setRedoStack([]); // New action resets redo stack
         persist({
             ...current,
             updatedAt: new Date().toISOString(),
@@ -476,7 +503,6 @@ export default function SheetAnnotationWorkspace({
     function replacePageMarks(marks: SheetMark[], lazy = false) {
         const current = documentRef.current;
         if (!current?.pages[page - 1]) return;
-        setRedoStack([]);
         persist(
             {
                 ...current,
@@ -913,35 +939,20 @@ export default function SheetAnnotationWorkspace({
 
     function undo() {
         const current = documentRef.current;
-        if (!current) return;
-        const pageMarks = current.pages[page - 1]?.marks ?? [];
-        if (!pageMarks.length) return;
-        const lastMark = pageMarks[pageMarks.length - 1];
-        setRedoStack((prev) => [...prev, lastMark]);
-        persist({
-            ...current,
-            updatedAt: new Date().toISOString(),
-            pages: current.pages.map((item, index) =>
-                index === page - 1 ? { ...item, marks: item.marks.slice(0, -1) } : item
-            ),
-        });
-        setStatus('마지막 필기가 취소되었습니다.');
+        const result = current && undoPage(history, current, page - 1);
+        if (!result) return;
+        setHistory(result.history);
+        persist(result.doc, false, false);
+        setStatus('되돌렸습니다. (Ctrl+Z · 다시 실행은 Ctrl+Shift+Z)');
     }
 
     function redo() {
-        if (!redoStack.length) return;
-        const markToRestore = redoStack[redoStack.length - 1];
-        setRedoStack((prev) => prev.slice(0, -1));
         const current = documentRef.current;
-        if (!current?.pages[page - 1]) return;
-        persist({
-            ...current,
-            updatedAt: new Date().toISOString(),
-            pages: current.pages.map((item, index) =>
-                index === page - 1 ? { ...item, marks: [...item.marks, markToRestore] } : item
-            ),
-        });
-        setStatus('필기를 다시 실행했습니다.');
+        const result = current && redoPage(history, current, page - 1);
+        if (!result) return;
+        setHistory(result.history);
+        persist(result.doc, false, false);
+        setStatus('다시 실행했습니다.');
     }
 
     async function handleRotatePage() {
@@ -1360,8 +1371,12 @@ export default function SheetAnnotationWorkspace({
                                 }}
                                 className="bg-transparent font-bold text-primary focus:outline-hidden"
                             >
-                                {WORSHIP_STAMP_PRESETS.map((label) => (
-                                    <option key={label} value={label}>{label}</option>
+                                {WORSHIP_STAMP_GROUPS.map((group) => (
+                                    <optgroup key={group.name} label={group.name}>
+                                        {group.stamps.map((label) => (
+                                            <option key={label} value={label}>{label}</option>
+                                        ))}
+                                    </optgroup>
                                 ))}
                             </select>
                             <button
@@ -1373,10 +1388,10 @@ export default function SheetAnnotationWorkspace({
                             </button>
                         </div>
 
-                        <button className={button} disabled={!activePage?.marks.length || busy} onClick={undo} title="실행 취소">
+                        <button className={button} disabled={!canUndo(history, page - 1) || busy} onClick={undo} title="실행 취소 (Ctrl+Z)">
                             <Undo2 size={16} /> 되돌리기
                         </button>
-                        <button className={button} disabled={!redoStack.length || busy} onClick={redo} title="다시 실행">
+                        <button className={button} disabled={!canRedo(history, page - 1) || busy} onClick={redo} title="다시 실행 (Ctrl+Shift+Z)">
                             <Redo2 size={16} /> 다시 실행
                         </button>
                         <button
