@@ -12,7 +12,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --font-sans: var(--font-geist-sans), "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-serif: var(--font-merriweather), Georgia, serif;
+  --font-serif: Georgia, "Times New Roman", serif;
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -152,10 +152,6 @@
     padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
   }
 
-  .app-bottom-space {
-    padding-bottom: max(5rem, calc(env(safe-area-inset-bottom) + 4rem));
-  }
-
   .dark-sheet-invert {
     filter: invert(0.92) hue-rotate(180deg) contrast(1.05);
   }
@@ -171,27 +167,6 @@
   .tap-target {
     min-height: 3rem;
     touch-action: manipulation;
-  }
-
-  .card-elevated {
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 4px 12px -2px rgba(0, 0, 0, 0.05);
-  }
-
-  .dark .card-elevated {
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 4px 16px -2px rgba(0, 0, 0, 0.4);
-  }
-
-  .card-interactive {
-    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease;
-  }
-
-  .card-interactive:hover {
-    transform: translateY(-1.5px);
-    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.07);
-  }
-
-  .dark .card-interactive:hover {
-    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
   }
 
   .sync-pulse {
@@ -213,110 +188,6 @@
 
   .bpm-step-dot {
     animation: bpm-step-dot var(--beat-duration, 0.75s) ease-out infinite;
-  }
-
-  .stage-bpm-panel {
-    box-shadow: inset 0 0 0 0 rgb(255 224 184 / 0);
-    transition: border-color 180ms ease, box-shadow 240ms ease;
-  }
-
-  .stage-bpm-panel--beat {
-    animation: stage-bpm-panel-beat 180ms ease-out both;
-  }
-
-  .stage-bpm-panel--downbeat {
-    animation-name: stage-bpm-panel-downbeat;
-  }
-
-  .stage-bpm-value {
-    transform-origin: 0 80%;
-    will-change: transform, filter;
-  }
-
-  .stage-bpm-value--beat {
-    animation: stage-bpm-value-hit 180ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
-  }
-
-  .stage-bpm-value--downbeat {
-    animation-name: stage-bpm-value-downbeat;
-  }
-
-  .stage-beat-track {
-    background: rgb(255 255 255 / 0.16);
-    box-shadow: 0 0 0 rgb(255 224 184 / 0);
-    transform-origin: 50% 50%;
-    transition: background-color 160ms ease, box-shadow 220ms ease;
-  }
-
-  .stage-beat-track--active {
-    animation: stage-beat-track-hit 180ms ease-out both;
-  }
-
-  .stage-beat-track--downbeat {
-    animation-name: stage-beat-track-downbeat;
-  }
-
-  .stage-metronome-shell {
-    transition: border-color 180ms ease, box-shadow 240ms ease;
-  }
-
-  .stage-metronome-shell--beat {
-    animation: stage-metronome-shell-hit 180ms ease-out both;
-  }
-
-  .stage-cue-backdrop {
-    background: rgb(2 7 6 / 0.72);
-    backdrop-filter: blur(3px);
-    animation: stage-cue-backdrop 2.2s ease both;
-  }
-
-  .stage-cue-shell {
-    border-color: rgb(var(--cue-accent) / 0.38);
-    background: rgb(5 14 12 / 0.94);
-    box-shadow: 0 1.25rem 5rem rgb(0 0 0 / 0.54), 0 0 4.5rem rgb(var(--cue-accent) / 0.14), inset 0 0 0 1px rgb(255 255 255 / 0.035);
-    color: rgb(var(--cue-accent));
-    animation: stage-cue-shell 2.2s cubic-bezier(0.2, 0.82, 0.22, 1) both;
-  }
-
-  .stage-cue-mark {
-    border-color: rgb(var(--cue-accent) / 0.42);
-    background: rgb(var(--cue-accent) / 0.12);
-    box-shadow: 0 0 2rem rgb(var(--cue-accent) / 0.16);
-    animation: stage-cue-mark 480ms cubic-bezier(0.2, 1.35, 0.35, 1) 60ms both;
-  }
-
-  .stage-cue-kicker,
-  .stage-cue-title,
-  .stage-cue-message,
-  .stage-cue-meta {
-    animation: stage-cue-content 420ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
-  }
-
-  .stage-cue-kicker {
-    animation-delay: 110ms;
-    color: rgb(var(--cue-accent) / 0.7);
-  }
-
-  .stage-cue-title {
-    animation-delay: 150ms;
-    color: rgb(255 255 255 / 0.98);
-    text-shadow: 0 0 2.5rem rgb(var(--cue-accent) / 0.18);
-  }
-
-  .stage-cue-message {
-    animation-delay: 190ms;
-  }
-
-  .stage-cue-meta {
-    animation-delay: 230ms;
-    color: rgb(var(--cue-accent) / 0.62);
-  }
-
-  .stage-cue-timer {
-    background: rgb(var(--cue-accent) / 0.82);
-    box-shadow: 0 0 1.25rem rgb(var(--cue-accent) / 0.28);
-    transform-origin: 0 50%;
-    animation: stage-cue-timer 2.2s linear both;
   }
 
   .stage-action-sent {
@@ -379,49 +250,12 @@
     animation: stage-count-pop 280ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
   }
 
-  /* Modern Glassmorphic & Tactile Polish Tokens */
-  .glass-card {
-    background: color-mix(in srgb, var(--card) 88%, transparent);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  }
-
-  .glass-panel {
-    background: color-mix(in srgb, var(--background) 78%, transparent);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  }
-
-  .tactile-btn {
-    transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, background-color 0.15s ease;
-  }
-  .tactile-btn:active {
-    transform: scale(0.97);
-  }
-
-  .glow-primary {
-    box-shadow: 0 0 24px -4px color-mix(in srgb, var(--primary) 35%, transparent);
-  }
-
-  .glow-secondary {
-    box-shadow: 0 0 24px -4px color-mix(in srgb, var(--secondary) 35%, transparent);
-  }
-
   /* Micro-interactions & Tap feedback */
   .tap-bounce {
     transition: transform 140ms cubic-bezier(0.2, 0.8, 0.4, 1), box-shadow 140ms ease;
   }
   .tap-bounce:active {
     transform: scale(0.965);
-  }
-
-  .hover-lift {
-    transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease, border-color 220ms ease;
-  }
-  .hover-lift:hover {
-    transform: translateY(-2px);
   }
 
   /* Motion Feedback Classes */
@@ -536,168 +370,6 @@
   100% {
     opacity: 0.35;
     transform: scale(1);
-  }
-}
-
-@keyframes stage-bpm-panel-beat {
-  0% {
-    border-color: rgb(255 224 184 / 0.42);
-    box-shadow: inset 0 0 0 1px rgb(255 224 184 / 0.11), 0 0 2.25rem rgb(240 181 107 / 0.08);
-  }
-
-  100% {
-    border-color: rgb(240 181 107 / 0.2);
-    box-shadow: inset 0 0 0 0 rgb(255 224 184 / 0), 0 0 0 rgb(240 181 107 / 0);
-  }
-}
-
-@keyframes stage-bpm-panel-downbeat {
-  0% {
-    border-color: rgb(255 224 184 / 0.68);
-    box-shadow: inset 0 0 0 2px rgb(255 224 184 / 0.14), 0 0 3rem rgb(240 181 107 / 0.13);
-  }
-
-  100% {
-    border-color: rgb(240 181 107 / 0.2);
-    box-shadow: inset 0 0 0 0 rgb(255 224 184 / 0), 0 0 0 rgb(240 181 107 / 0);
-  }
-}
-
-@keyframes stage-bpm-value-hit {
-  0% {
-    filter: brightness(1.32);
-    transform: scale(1.045);
-  }
-
-  100% {
-    filter: brightness(1);
-    transform: scale(1);
-  }
-}
-
-@keyframes stage-bpm-value-downbeat {
-  0% {
-    filter: brightness(1.5) drop-shadow(0 0 1.4rem rgb(255 224 184 / 0.26));
-    transform: scale(1.075);
-  }
-
-  100% {
-    filter: brightness(1) drop-shadow(0 0 0 rgb(255 224 184 / 0));
-    transform: scale(1);
-  }
-}
-
-@keyframes stage-beat-track-hit {
-  0% {
-    background: rgb(255 224 184 / 1);
-    box-shadow: 0 0 1.5rem rgb(255 224 184 / 0.5);
-    transform: scaleY(1.22);
-  }
-
-  100% {
-    background: rgb(255 255 255 / 0.16);
-    box-shadow: 0 0 0 rgb(255 224 184 / 0);
-    transform: scaleY(1);
-  }
-}
-
-@keyframes stage-beat-track-downbeat {
-  0% {
-    background: rgb(255 241 219 / 1);
-    box-shadow: 0 0 2rem rgb(255 224 184 / 0.68);
-    transform: scaleY(1.34);
-  }
-
-  100% {
-    background: rgb(255 255 255 / 0.16);
-    box-shadow: 0 0 0 rgb(255 224 184 / 0);
-    transform: scaleY(1);
-  }
-}
-
-@keyframes stage-metronome-shell-hit {
-  0% {
-    border-color: rgb(255 224 184 / 0.44);
-    box-shadow: inset 0 0 1.5rem rgb(255 224 184 / 0.08), 0 0 1.75rem rgb(255 224 184 / 0.08);
-  }
-
-  100% {
-    border-color: rgb(255 224 184 / 0.2);
-    box-shadow: inset 0 0 0 rgb(255 224 184 / 0), 0 0 0 rgb(255 224 184 / 0);
-  }
-}
-
-@keyframes stage-cue-backdrop {
-  0%,
-  100% {
-    opacity: 0;
-  }
-
-  9%,
-  88% {
-    opacity: 1;
-  }
-}
-
-@keyframes stage-cue-shell {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 0.85rem, 0) scale(0.94);
-  }
-
-  9% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1.012);
-  }
-
-  14%,
-  88% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate3d(0, -0.45rem, 0) scale(1.012);
-  }
-}
-
-@keyframes stage-cue-mark {
-  0% {
-    opacity: 0;
-    transform: scale(0.56) rotate(-12deg);
-  }
-
-  70% {
-    opacity: 1;
-    transform: scale(1.08) rotate(2deg);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0);
-  }
-}
-
-@keyframes stage-cue-content {
-  0% {
-    opacity: 0;
-    transform: translateY(0.55rem);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes stage-cue-timer {
-  0% {
-    transform: scaleX(1);
-  }
-
-  100% {
-    transform: scaleX(0);
   }
 }
 
@@ -921,14 +593,6 @@
     transition-duration: 0.01ms !important;
   }
 
-  .stage-cue-backdrop,
-  .stage-cue-shell,
-  .stage-cue-mark,
-  .stage-cue-kicker,
-  .stage-cue-title,
-  .stage-cue-message,
-  .stage-cue-meta,
-  .stage-cue-timer,
   .animate-check-pop,
   .animate-send-fly,
   .animate-pulse-ring,

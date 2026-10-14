@@ -42,7 +42,7 @@ const errorMessages: Record<string, string> = {
 
 export default async function SongArchivePage({ searchParams }: LibraryPageProps) {
     const params = await searchParams;
-    const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID), getCurrentUser()]);
+    const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID, { withSongs: false }), getCurrentUser()]);
     const hasSupabase = Boolean(supabase);
     const onlineTeams = user ? getTeamRepository().list(user.id).map(team => ({ id: team.id, name: team.name })) : [];
     const createdKey = getParam(params.created);

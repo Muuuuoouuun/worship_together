@@ -23,7 +23,7 @@ export default async function SongsPage({ searchParams }: SongsPageProps) {
     const { screen, setlistId } = resolveScreen(tab, setlist);
 
     // 곡 보관함과 같은 데이터를 같은 규칙으로 읽습니다.
-    const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID), getCurrentUser()]);
+    const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID, { withSongs: false }), getCurrentUser()]);
     const onlineTeams = user ? getTeamRepository().list(user.id).map((item) => ({ id: item.id, name: item.name })) : [];
 
     return (

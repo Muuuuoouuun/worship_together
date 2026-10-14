@@ -55,6 +55,8 @@ export function usePlanning(source: PlanningSource): PlanningConnection {
     /** 지금 읽는 중인 소스 / 저장 중인 소스 */
     const loading = useRef<number | null>(null);
     const saving = useRef<number | null>(null);
+    /** 마지막으로 화면에 반영한 온라인 응답 (같으면 다시 그리지 않음) */
+    const lastPayload = useRef('');
 
     const refresh = useCallback(async () => {
         const current = sourceRef.current;
@@ -70,8 +72,13 @@ export function usePlanning(source: PlanningSource): PlanningConnection {
                 const result = await loadPlanningContext(current.teamId);
                 if (!fresh()) return;
                 if (!result.ok) throw new Error(result.error);
-                setMembers(result.value.members);
-                setState(result.value.state);
+                // 15초마다 같은 내용이 오면 화면 전체를 다시 그리지 않습니다.
+                const payload = JSON.stringify(result.value);
+                if (payload !== lastPayload.current) {
+                    lastPayload.current = payload;
+                    setMembers(result.value.members);
+                    setState(result.value.state);
+                }
             } else {
                 const full = readLocal(planningStorageKey(current.teamId));
                 if (!fresh()) return;
@@ -92,6 +99,7 @@ export function usePlanning(source: PlanningSource): PlanningConnection {
 
     useEffect(() => {
         epoch.current += 1;
+        lastPayload.current = '';
         setReady(source.kind === 'none');
         setError('');
         if (source.kind === 'none') {
@@ -135,7 +143,10 @@ export function usePlanning(source: PlanningSource): PlanningConnection {
                 const result = await updateTeamPlanning(current.teamId, command);
                 if (!result.ok) throw new Error(result.error);
                 // 저장하는 사이에 다른 팀으로 바꿨다면 그 팀의 화면에 이전 팀 결과를 보여주지 않습니다.
-                if (epoch.current === myEpoch) setState(result.value);
+                if (epoch.current === myEpoch) {
+                    lastPayload.current = '';
+                    setState(result.value);
+                }
             } else {
                 const storageKey = planningStorageKey(current.teamId);
                 const full = applyPlanningCommand(readLocal(storageKey), current.members, current.userId, command);

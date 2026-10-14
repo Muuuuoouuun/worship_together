@@ -564,7 +564,7 @@ function AlertsView() {
             <section aria-label="잠금 화면 알림" className="rounded-3xl bg-gradient-to-br from-sky-100 via-violet-50 to-orange-50 p-4 dark:from-sky-400/15 dark:via-violet-400/10 dark:to-orange-400/10">
                 <Eyebrow className="px-1">앱을 닫았을 때 · 잠금 화면</Eyebrow>
                 <div className="mt-2 flex gap-3 rounded-2xl bg-card/85 p-3.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary font-serif text-sm font-bold text-primary-foreground">W</span>
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">W</span>
                     <div className="min-w-0 flex-1">
                         <p className={cn('flex justify-between gap-2 text-[11px]', sub)}><span>Worship Together</span><span>{push.time}</span></p>
                         <p className={cn('mt-0.5 truncate text-[13px] font-semibold', ink)}>{push.who ? `${push.who}${push.message}` : push.message}</p>
