@@ -1,21 +1,29 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, CheckCheck, CircleCheck, Clock, Inbox, MessageCircle, PencilLine, Upload, UserCheck, UserX, type LucideIcon } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Bell, BellRing, CheckCheck, CircleCheck, ExternalLink, Hand, Inbox, ListMusic, MessageCircle, Repeat, UserCheck, UserX, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NOTICE_KIND, member, type Notice, type NoticeCategory, type NoticeKind } from './mockData';
+import type { ScreenId } from './model';
 import { useConti } from './context';
+import type { Notice, NoticeCategory, NoticeGroup, NoticeKind } from './planningBridge';
+import { PlanningError, useDispatch } from './planningUi';
 import { Avatar, Eyebrow, RoundIconButton, SampleChip, TONE_BLOCK, TONE_ICON, body, chip, ink, line, sub } from './ui';
+import type { Tone } from './model';
 
-export const NOTICE_ICON: Record<NoticeKind, LucideIcon> = {
-    request: Inbox,
-    comment: MessageCircle,
-    decline: UserX,
-    accept: UserCheck,
-    pending: Clock,
-    confirm: CircleCheck,
-    upload: Upload,
-    edit: PencilLine,
+const NOTICE_META: Record<NoticeKind, { icon: LucideIcon; tone: Tone }> = {
+    request: { icon: Inbox, tone: 'peach' },
+    reply: { icon: MessageCircle, tone: 'sky' },
+    invite: { icon: BellRing, tone: 'sand' },
+    accept: { icon: UserCheck, tone: 'mint' },
+    decline: { icon: UserX, tone: 'peach' },
+    substitute: { icon: Hand, tone: 'peach' },
+    volunteer: { icon: Hand, tone: 'mint' },
+    conti: { icon: ListMusic, tone: 'mint' },
+    schedule: { icon: Bell, tone: 'sky' },
+    rotation: { icon: Repeat, tone: 'lilac' },
+    comment: { icon: MessageCircle, tone: 'sky' },
+    other: { icon: Bell, tone: 'sky' },
 };
 
 const FILTERS: { id: 'all' | NoticeCategory; label: string }[] = [
@@ -25,13 +33,39 @@ const FILTERS: { id: 'all' | NoticeCategory; label: string }[] = [
     { id: 'request', label: '요청' },
 ];
 
-const GROUPS: Notice['group'][] = ['오늘', '어제', '이번 주'];
+const GROUPS: NoticeGroup[] = ['오늘', '어제', '이번 주', '이전'];
 
-export default function AlertsScreen({ notices, onRead, onReadAll, onBack }: { notices: Notice[]; onRead: (id: string) => void; onReadAll: () => void; onBack: () => void }) {
-    const { sampleSections } = useConti();
+export default function AlertsScreen({ onBack, openOrder, go }: { onBack: () => void; openOrder: (id: string) => void; go: (screen: ScreenId) => void }) {
+    const { planning, setlists } = useConti();
+    const { send, busy } = useDispatch();
     const [filter, setFilter] = useState<'all' | NoticeCategory>('all');
-    const unread = notices.filter((notice) => notice.unread).length;
-    const shown = notices.filter((notice) => filter === 'all' || NOTICE_KIND[notice.kind].category === filter);
+    const notices = planning.notices;
+    const unread = planning.unreadCount;
+    const shown = notices.filter((notice) => filter === 'all' || notice.category === filter);
+
+    function read(notice: Notice) {
+        if (!notice.unread) return;
+        if (notice.kind === 'comment') planning.actions?.markFeedSeen(notice.createdAt);
+        else void send({ type: 'notification.read', notificationId: notice.id });
+    }
+
+    function readAll() {
+        planning.actions?.markFeedSeen(new Date().toISOString());
+        if (notices.some((notice) => notice.kind !== 'comment' && notice.unread)) void send({ type: 'notification.readAll' });
+    }
+
+    function open(notice: Notice) {
+        read(notice);
+        if (notice.target === 'conti') {
+            if (setlists.some((item) => item.id === notice.entityId)) openOrder(notice.entityId);
+            else go('conti');
+            return;
+        }
+        if (notice.target === 'requests') go('requests');
+        else if (notice.target === 'schedule') go('team');
+    }
+
+    const rotationHref = planning.planningHref.includes('?') ? `${planning.planningHref}&tab=rotation` : `${planning.planningHref}?tab=rotation`;
 
     return (
         <div className="space-y-5">
@@ -40,7 +74,7 @@ export default function AlertsScreen({ notices, onRead, onReadAll, onBack }: { n
                     <ArrowLeft size={18} />
                 </RoundIconButton>
                 <div className="min-w-0 flex-1">
-                    <Eyebrow>알림 {sampleSections && <SampleChip className="ml-1" />}</Eyebrow>
+                    <Eyebrow>알림 {planning.sample && <SampleChip className="ml-1" />}</Eyebrow>
                     <h1 className={cn('mt-0.5 text-[17px] font-semibold tracking-tight', ink)}>
                         팀 소식
                         {unread > 0 && <span className={cn('ml-1.5 font-normal', sub)}>새 소식 {unread}</span>}
@@ -48,14 +82,15 @@ export default function AlertsScreen({ notices, onRead, onReadAll, onBack }: { n
                 </div>
                 <button
                     type="button"
-                    onClick={onReadAll}
-                    disabled={!unread}
+                    onClick={readAll}
+                    disabled={!unread || busy || !planning.actions}
                     className={cn('inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition disabled:opacity-40', line, ink)}
                 >
                     <CheckCheck size={14} aria-hidden="true" />
                     모두 읽음
                 </button>
             </header>
+            <PlanningError />
 
             <div role="tablist" aria-label="알림 종류" className={cn('flex gap-6 border-b', line)}>
                 {FILTERS.map((item) => {
@@ -75,64 +110,97 @@ export default function AlertsScreen({ notices, onRead, onReadAll, onBack }: { n
                 })}
             </div>
 
-            {GROUPS.map((group) => {
-                const items = shown.filter((notice) => notice.group === group);
-                if (!items.length) return null;
-                return (
-                    <section key={group} aria-label={group}>
-                        <Eyebrow>{group}</Eyebrow>
-                        <ul className="mt-1">
-                            {items.map((notice) => (
-                                <NoticeRow key={notice.id} notice={notice} onRead={onRead} />
-                            ))}
-                        </ul>
-                    </section>
-                );
-            })}
-            {!shown.length && <p className={cn('py-10 text-center text-sm', sub)}>새로운 소식이 없어요</p>}
+            {!planning.ready ? (
+                <p className={cn('py-10 text-center text-sm', sub)}>소식을 불러오는 중…</p>
+            ) : (
+                <>
+                    {GROUPS.map((group) => {
+                        const items = shown.filter((notice) => notice.group === group);
+                        if (!items.length) return null;
+                        return (
+                            <section key={group} aria-label={group}>
+                                <Eyebrow>{group}</Eyebrow>
+                                <ul className="mt-1">
+                                    {items.map((notice) => (
+                                        <NoticeRow key={notice.id} notice={notice} onOpen={() => open(notice)} onRead={() => read(notice)} rotationHref={rotationHref} />
+                                    ))}
+                                </ul>
+                            </section>
+                        );
+                    })}
+                    {!shown.length && <p className={cn('py-10 text-center text-sm', sub)}>{planning.viewer ? '새로운 소식이 없어요' : '로그인하거나 팀을 등록하면 팀 소식이 보여요'}</p>}
+                </>
+            )}
         </div>
     );
 }
 
 export function NoticeAvatar({ notice, size = 'md' }: { notice: Notice; size?: 'sm' | 'md' }) {
-    const Icon = NOTICE_ICON[notice.kind];
-    const tone = NOTICE_KIND[notice.kind].tone;
+    const meta = NOTICE_META[notice.kind];
+    const Icon = meta.icon;
+    if (!notice.actor) {
+        return (
+            <span className={cn('flex shrink-0 items-center justify-center rounded-full', size === 'sm' ? 'size-7' : 'size-9', TONE_BLOCK[meta.tone])}>
+                <Icon size={size === 'sm' ? 13 : 16} className={TONE_ICON[meta.tone]} aria-hidden="true" />
+            </span>
+        );
+    }
     return (
         <span className="relative inline-flex shrink-0 self-start">
-            <Avatar id={notice.actor} size={size} />
+            <Avatar name={notice.actor} size={size} />
             <span
                 className={cn(
                     'absolute flex items-center justify-center rounded-full bg-white ring-2 ring-white dark:bg-neutral-900 dark:ring-neutral-900',
                     size === 'sm' ? '-bottom-1.5 -right-1.5 size-4' : '-bottom-1 -right-1 size-[1.125rem]',
                 )}
             >
-                <span className={cn('flex size-full items-center justify-center rounded-full', TONE_BLOCK[tone])}>
-                    <Icon size={size === 'sm' ? 9 : 10} strokeWidth={2.5} className={TONE_ICON[tone]} aria-hidden="true" />
+                <span className={cn('flex size-full items-center justify-center rounded-full', TONE_BLOCK[meta.tone])}>
+                    <Icon size={size === 'sm' ? 9 : 10} strokeWidth={2.5} className={TONE_ICON[meta.tone]} aria-hidden="true" />
                 </span>
             </span>
         </span>
     );
 }
 
-function NoticeRow({ notice, onRead }: { notice: Notice; onRead: (id: string) => void }) {
-    const actor = member(notice.actor);
+function NoticeRow({ notice, onOpen, onRead, rotationHref }: { notice: Notice; onOpen: () => void; onRead: () => void; rotationHref: string }) {
+    const action =
+        notice.target === 'conti' ? '콘티 보기' : notice.target === 'requests' ? '요청 보기' : notice.target === 'schedule' ? '팀 배치 보기' : null;
     return (
         <li className={cn('flex gap-3.5 border-b py-4 last:border-b-0', line)}>
             <NoticeAvatar notice={notice} />
             <div className="min-w-0 flex-1">
-                <button type="button" onClick={() => onRead(notice.id)} className="block w-full text-left">
+                <button type="button" onClick={onRead} className="block w-full text-left">
                     <p className="text-sm leading-snug">
-                        <span className={cn('font-semibold', ink)}>{actor?.name}</span>
-                        <span className={body}>님이 {notice.message}</span>
+                        {notice.actor && <span className={cn('font-semibold', ink)}>{notice.actor}님 · </span>}
+                        <span className={cn(notice.actor ? body : cn('font-medium', ink))}>{notice.title}</span>
+                        {notice.urgent && notice.unread && <span className="ml-1.5 rounded-full bg-orange-500 px-1.5 text-[10px] font-bold leading-4 text-white">긴급</span>}
                     </p>
-                    {notice.quote && <p className={cn('mt-2 rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[13px] leading-relaxed', chip, body)}>{notice.quote}</p>}
+                    {notice.quote ? (
+                        <p className={cn('mt-2 rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[13px] leading-relaxed', chip, body)}>{notice.quote}</p>
+                    ) : (
+                        notice.message && notice.message !== notice.title && <p className={cn('mt-1 text-xs leading-relaxed', sub)}>{notice.message}</p>
+                    )}
                     <p className={cn('mt-1.5 text-[11px]', sub)}>{notice.ago}</p>
                 </button>
-                {notice.action && (
-                    <button type="button" className={cn('mt-2.5 inline-flex h-8 items-center rounded-full border px-3.5 text-xs font-semibold', line, ink)}>
-                        {notice.action}
-                    </button>
-                )}
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {action && (
+                        <button type="button" onClick={onOpen} className={cn('inline-flex h-8 items-center rounded-full border px-3.5 text-xs font-semibold', line, ink)}>
+                            {action}
+                        </button>
+                    )}
+                    {notice.target === 'rotation' && (
+                        <Link href={rotationHref} className={cn('inline-flex h-8 items-center gap-1 rounded-full border px-3.5 text-xs font-semibold', line, ink)}>
+                            <ExternalLink size={12} aria-hidden="true" />
+                            로테이션 보기
+                        </Link>
+                    )}
+                    {notice.unread && notice.kind !== 'comment' && (
+                        <button type="button" onClick={onRead} className={cn('inline-flex h-8 items-center gap-1 px-2 text-xs font-medium', sub)}>
+                            <CircleCheck size={13} aria-hidden="true" />
+                            확인
+                        </button>
+                    )}
+                </div>
             </div>
             <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', notice.unread ? 'bg-orange-500' : 'bg-transparent')} aria-label={notice.unread ? '읽지 않음' : undefined} />
         </li>

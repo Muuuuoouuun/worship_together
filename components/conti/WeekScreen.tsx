@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Bell, CalendarDays, ChevronRight, CircleDashed, ListMusic, MapPin, MessageCircle, Plus } from 'lucide-react';
+import { Bell, ChevronRight, ListMusic, MapPin, MessageCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { EVENTS, EVENT_KIND, member, type EventKind, type Notice, type TeamRequest } from './mockData';
 import {
     SETLIST_STATUS,
     commentsOf,
@@ -12,6 +11,7 @@ import {
     dayOf,
     displayTitle,
     formatTimeLabel,
+    md,
     monthOf,
     nextSunday,
     songsOf,
@@ -21,29 +21,25 @@ import {
     type ScreenId,
 } from './model';
 import { useConti } from './context';
+import { EVENT_KIND } from './planningUi';
 import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, SampleChip, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_DOT, TONE_ICON, body, ink, line, selected, sub, todayText } from './ui';
 import { NoticeAvatar } from './AlertsScreen';
 
-const EVENT_ICON: Record<EventKind, typeof Bell> = {
-    rehearsal: CircleDashed,
-    service: CalendarDays,
-    prayer: Bell,
-};
-
-export default function WeekScreen({ requests, notices, go, openOrder }: { requests: TeamRequest[]; notices: Notice[]; go: (screen: ScreenId) => void; openOrder: (id: string) => void }) {
-    const { today, setlists, thisWeekId, editor, sampleSections } = useConti();
+export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) => void; openOrder: (id: string) => void }) {
+    const { today, setlists, thisWeekId, editor, planning } = useConti();
     const setlist = setlists.find((item) => item.id === thisWeekId) ?? null;
-    const anchor = setlist?.date ?? nextSunday(today);
+    const anchor = nextSunday(today);
     const dates = weekDates(anchor);
     const [day, setDay] = useState(anchor);
     const songs = setlist ? songsOf(setlist.items) : [];
     const comments = setlist ? commentsOf(setlist.items) : [];
     const setlistDates = new Set(setlists.map((item) => item.date));
-    const events = EVENTS.filter((event) => event.date === day);
-    const openRequests = requests.filter((request) => !request.done);
-    const unread = notices.filter((notice) => notice.unread).length;
-    const sample = sampleSections ? <SampleChip /> : null;
+    const events = planning.events.filter((event) => event.date === day);
+    const unread = planning.unreadCount;
+    const sample = planning.sample ? <SampleChip /> : null;
     const dayName = (date: string) => (weekday(date) === '일' ? '주일' : `${weekday(date)}요일`);
+    const manageHref = planning.planningHref.includes('?') ? `${planning.planningHref}&tab=schedule` : `${planning.planningHref}?tab=schedule`;
+    const openRequests = planning.requests.filter((request) => !request.done);
 
     return (
         <div className="space-y-7">
@@ -59,7 +55,7 @@ export default function WeekScreen({ requests, notices, go, openOrder }: { reque
                             </RoundIconButton>
                             {unread > 0 && <span className="absolute right-2 top-2 size-2 rounded-full bg-orange-500 ring-2 ring-white dark:ring-neutral-900" aria-hidden="true" />}
                         </span>
-                        <AddButton label="일정 추가" />
+                        <AddButton label="일정 추가 (일정·요청 화면)" href={manageHref} />
                     </>
                 }
             />
@@ -67,7 +63,7 @@ export default function WeekScreen({ requests, notices, go, openOrder }: { reque
             <ol className="grid grid-cols-7 text-center" aria-label="이번 주 날짜">
                 {dates.map((date) => {
                     const active = date === day;
-                    const kinds = Array.from(new Set(EVENTS.filter((event) => event.date === date).map((event) => event.kind)));
+                    const kinds = Array.from(new Set(planning.events.filter((event) => event.date === date).map((event) => event.kind)));
                     const hasSetlist = setlistDates.has(date);
                     return (
                         <li key={date}>
@@ -106,7 +102,7 @@ export default function WeekScreen({ requests, notices, go, openOrder }: { reque
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <Eyebrow>
-                                    이번 주 콘티 · <span className={SETLIST_STATUS[setlist.status].text}>{SETLIST_STATUS[setlist.status].label}</span>
+                                    {setlist.date === anchor ? '이번 주 콘티' : `${md(setlist.date)} ${dayName(setlist.date)} 콘티`} · <span className={SETLIST_STATUS[setlist.status].text}>{SETLIST_STATUS[setlist.status].label}</span>
                                 </Eyebrow>
                                 <h2 className={cn('mt-1 text-lg font-semibold tracking-tight', ink)}>{displayTitle(setlist)}</h2>
                                 <p className={cn('mt-0.5 text-xs', sub)}>
@@ -171,19 +167,20 @@ export default function WeekScreen({ requests, notices, go, openOrder }: { reque
                     action={<button type="button" onClick={() => go('alerts')} className={cn('text-xs font-medium underline-offset-2 hover:underline', body)}>모두 보기</button>}
                 />
                 <ul>
-                    {notices.slice(0, 3).map((notice) => (
+                    {planning.notices.slice(0, 3).map((notice) => (
                         <li key={notice.id} className={cn('flex gap-3 border-b py-3.5 last:border-b-0', line)}>
                             <NoticeAvatar notice={notice} size="sm" />
                             <div className="min-w-0 flex-1">
                                 <p className="truncate text-[13px]">
-                                    <span className={cn('font-semibold', ink)}>{member(notice.actor)?.name}</span>
-                                    <span className={body}>님이 {notice.message}</span>
+                                    {notice.actor && <span className={cn('font-semibold', ink)}>{notice.actor}님 · </span>}
+                                    <span className={notice.actor ? body : cn('font-medium', ink)}>{notice.title}</span>
                                 </p>
-                                {notice.quote && <p className={cn('mt-0.5 truncate text-xs', sub)}>“{notice.quote}”</p>}
+                                {(notice.quote || notice.message !== notice.title) && <p className={cn('mt-0.5 truncate text-xs', sub)}>{notice.quote ? `“${notice.quote}”` : notice.message}</p>}
                             </div>
                             <span className={cn('shrink-0 text-[11px]', sub)}>{notice.ago}</span>
                         </li>
                     ))}
+                    {planning.ready && !planning.notices.length && <li className={cn('py-4 text-sm', sub)}>아직 팀 소식이 없어요</li>}
                 </ul>
             </section>
 
@@ -197,7 +194,7 @@ export default function WeekScreen({ requests, notices, go, openOrder }: { reque
                 <ul className={cn('divide-y', 'divide-neutral-100 dark:divide-neutral-800')}>
                     {events.map((event) => {
                         const kind = EVENT_KIND[event.kind];
-                        const Icon = EVENT_ICON[event.kind];
+                        const Icon = kind.icon;
                         return (
                             <li key={event.id} className="flex gap-3.5 py-4">
                                 <Icon size={18} className={cn('mt-4 shrink-0', TONE_ICON[kind.tone])} aria-hidden="true" />
@@ -206,21 +203,25 @@ export default function WeekScreen({ requests, notices, go, openOrder }: { reque
                                     <p className={cn('mt-0.5 text-[15px] font-medium', ink)}>{event.title}</p>
                                     <p className={cn('mt-1.5 flex items-center gap-1 text-xs tabular-nums', sub)}>
                                         {event.start} - {event.end}
-                                        <span aria-hidden="true">·</span>
-                                        <MapPin size={12} aria-hidden="true" />
-                                        {event.place}
+                                        {event.place && (
+                                            <>
+                                                <span aria-hidden="true">·</span>
+                                                <MapPin size={12} aria-hidden="true" />
+                                                {event.place}
+                                            </>
+                                        )}
                                     </p>
                                 </div>
                                 <div className="flex flex-col items-end justify-center gap-1">
-                                    <AvatarStack ids={event.attendees} max={3} size="xs" />
+                                    {event.attendees.length > 0 && <AvatarStack names={event.attendees} max={3} size="xs" />}
                                     <span className={cn('text-[11px] tabular-nums', sub)}>
-                                        {event.attendees.length}/{event.expected}명
+                                        {event.expected ? `${event.attendees.length}/${event.expected}명` : '인원 미정'}
                                     </span>
                                 </div>
                             </li>
                         );
                     })}
-                    {!events.length && <li className={cn('py-8 text-center text-sm', sub)}>이 날은 일정이 없어요</li>}
+                    {!events.length && <li className={cn('py-8 text-center text-sm', sub)}>{planning.ready ? '이 날은 일정이 없어요' : '일정을 불러오는 중…'}</li>}
                 </ul>
             </section>
 
@@ -229,12 +230,12 @@ export default function WeekScreen({ requests, notices, go, openOrder }: { reque
                 onClick={() => go('requests')}
                 className={cn('flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition active:scale-[0.99]', line)}
             >
-                <span className={cn('flex size-2 rounded-full', TONE_DOT.peach)} aria-hidden="true" />
+                <span className={cn('flex size-2 rounded-full', openRequests.length ? TONE_DOT.peach : 'bg-neutral-300 dark:bg-neutral-600')} aria-hidden="true" />
                 <span className={cn('flex-1 text-sm', ink)}>
                     확인할 요청 <span className="font-semibold tabular-nums">{openRequests.length}건</span>
                     {sample && <span className="ml-2">{sample}</span>}
                 </span>
-                <AvatarStack ids={openRequests.map((request) => request.from)} max={3} size="xs" />
+                <AvatarStack names={openRequests.map((request) => request.author).filter((name): name is string => Boolean(name))} max={3} size="xs" />
                 <ChevronRight size={16} className={sub} aria-hidden="true" />
             </button>
         </div>

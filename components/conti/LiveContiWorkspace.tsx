@@ -19,9 +19,13 @@ import { SONG_FORM_CHANGED_EVENT, readSongForm, saveSongForm } from '@/lib/songF
 import { SONG_LINKS_CHANGED_EVENT, readSongLinks, saveSongLinks } from '@/lib/songLinksStorage';
 import type { SongForm } from '@/lib/songForm';
 import { getTeamServerSnapshot, getTeamSnapshot, parseTeamSnapshot, selectPrototypeTeam, subscribeToTeams } from '@/lib/teamPrototype';
+import { demoMembers, readLocalActor, writeLocalActor } from '@/lib/planningDemo';
+import type { TeamMember } from '@/types/team';
 import ContiWorkspace from './ContiWorkspace';
 import { buildContiSetlists, planSave } from './liveData';
 import { seoulDateTime, upcomingSetlistId, type ScreenId } from './model';
+import { EMPTY_PLANNING_VIEW, buildPlanningView, type PlanningView } from './planningBridge';
+import { usePlanning, type PlanningSource } from './usePlanning';
 import type { ContiData, ContiEditor, SaveResult } from './context';
 
 interface ServerSetlist {
@@ -42,6 +46,8 @@ interface Props {
     onlineTeams: { id: string; name: string }[];
     onlineTeamId?: string;
     viewerName: string | null;
+    /** 로그인한 사용자 id (온라인 팀 일정·요청에 필요) */
+    viewerId: string | null;
     initialScreen: ScreenId;
     initialSetlistId?: string;
 }
@@ -53,6 +59,33 @@ interface Source {
     teams: { id: string; name: string }[];
     roster: string[];
     seed: PrototypeLibrary;
+    /** 일정·요청 데이터를 읽을 곳 (일정·요청 화면과 같은 규칙) */
+    planning: PlanningSource;
+    /** 로그인 없이 볼 때 고를 수 있는 '보는 사람' 목록 */
+    viewers: TeamMember[];
+}
+
+const feedSeenStorageKey = (teamId: string) => `worship:conti-feed-seen:v1:${encodeURIComponent(teamId)}`;
+
+function readStored(key: string): string | null {
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function writeStored(key: string, value: string): void {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // 저장 공간 문제는 화면을 막지 않습니다.
+    }
+}
+
+/** 팀원 중 저장된 선택이 있으면 그 사람, 없으면 첫 번째 (일정·요청 화면과 같은 기본값) */
+function pickViewer(members: TeamMember[], stored: string | null): string {
+    return members.some((member) => member.userId === stored) ? stored! : members[0]?.userId ?? '';
 }
 
 const EVENTS = ['storage', LIBRARY_CHANGED_EVENT, SETLIST_DETAILS_CHANGED_EVENT, SONG_FORM_CHANGED_EVENT, SONG_LINKS_CHANGED_EVENT];
@@ -82,7 +115,7 @@ interface Loaded {
     forms: Record<string, SongForm | null>;
     links: ReturnType<typeof readSongLinks>;
     today: string;
-    data: Omit<ContiData, 'editor' | 'roster' | 'sampleSections'>;
+    data: Omit<ContiData, 'editor' | 'roster' | 'planning'>;
 }
 
 function legacyOf(setlist: LibrarySetlist) {
@@ -105,16 +138,15 @@ export default function LiveContiWorkspace(props: Props) {
     const [onlineId, setOnlineId] = useState(props.onlineTeamId ?? props.onlineTeams[0]?.id ?? '');
     const [version, setVersion] = useState(0);
     const [teamError, setTeamError] = useState('');
+    /** 로그인 없이 볼 때 '보는 사람' (팀별로 이 브라우저에 기억) */
+    const [viewerChoice, setViewerChoice] = useState<Record<string, string>>({});
 
     const source = useMemo<Source>(() => {
         const empty: PrototypeLibrary = { version: 1, songs: [], setlists: [] };
-        if (props.onlineTeams.length) {
-            const team = props.onlineTeams.find((item) => item.id === onlineId) ?? props.onlineTeams[0];
-            return { kind: 'online', teamId: team.id, teams: props.onlineTeams, roster: [], seed: empty };
-        }
-        if (props.hasBackend) {
-            return { kind: 'server', teamId: DEMO_TEAM_ID, teams: [], roster: [], seed: seedFrom(DEMO_TEAM_ID, props.initialSongs, props.initialSetlists) };
-        }
+        const local = (teamId: string, members: TeamMember[]): Pick<Source, 'planning' | 'viewers'> => {
+            const userId = pickViewer(members, viewerChoice[teamId] ?? (isClient ? readLocalActor(teamId) : null));
+            return { planning: userId ? { kind: 'local', teamId, members, userId } : { kind: 'none' }, viewers: members };
+        };
         let state = null;
         try {
             state = parseTeamSnapshot(rawTeams);
@@ -122,22 +154,69 @@ export default function LiveContiWorkspace(props: Props) {
             state = null;
         }
         const team = state?.teams.find((item) => item.id === state?.activeTeamId) ?? state?.teams[0];
+        // 일정·요청 화면과 같은 규칙: 첫 번째 팀원이 관리자
+        const prototypeMembers = (members: { id: string; name: string; role: TeamMember['role'] }[]): TeamMember[] =>
+            members.map((member, index) => ({ userId: member.id, name: member.name, role: member.role, permission: index === 0 ? 'owner' : 'member' }));
+        if (props.onlineTeams.length) {
+            const team = props.onlineTeams.find((item) => item.id === onlineId) ?? props.onlineTeams[0];
+            return {
+                kind: 'online',
+                teamId: team.id,
+                teams: props.onlineTeams,
+                roster: [],
+                seed: empty,
+                planning: props.viewerId ? { kind: 'online', teamId: team.id, userId: props.viewerId } : { kind: 'none' },
+                viewers: [],
+            };
+        }
+        if (props.hasBackend) {
+            // 서버 콘티를 보더라도 로그인 전의 일정·요청은 일정·요청 화면과 같은 팀(만든 팀이 있으면 그 팀)을 씁니다.
+            return {
+                kind: 'server',
+                teamId: DEMO_TEAM_ID,
+                teams: [],
+                roster: [],
+                seed: seedFrom(DEMO_TEAM_ID, props.initialSongs, props.initialSetlists),
+                ...(team ? local(team.id, prototypeMembers(team.members)) : local(DEMO_TEAM_ID, demoMembers)),
+            };
+        }
         if (state && team) {
+            const members = prototypeMembers(team.members);
             return {
                 kind: 'prototype',
                 teamId: team.id,
                 teams: state.teams.map((item) => ({ id: item.id, name: item.name })),
                 roster: team.members.map((member) => member.name),
                 seed: empty,
+                ...local(team.id, members),
             };
         }
-        return { kind: 'demo', teamId: DEMO_TEAM_ID, teams: [], roster: [], seed: seedFrom(DEMO_TEAM_ID, props.initialSongs, props.initialSetlists) };
-    }, [props.onlineTeams, props.hasBackend, props.initialSongs, props.initialSetlists, onlineId, rawTeams]);
+        return { kind: 'demo', teamId: DEMO_TEAM_ID, teams: [], roster: [], seed: seedFrom(DEMO_TEAM_ID, props.initialSongs, props.initialSetlists), ...local(DEMO_TEAM_ID, demoMembers) };
+    }, [props.onlineTeams, props.hasBackend, props.initialSongs, props.initialSetlists, props.viewerId, onlineId, rawTeams, viewerChoice, isClient]);
+
+    const planning = usePlanning(source.planning);
+    const planningTeamId = source.planning.kind === 'none' ? source.teamId : source.planning.teamId;
+    const [feedSeenAt, setFeedSeenAt] = useState<Record<string, string | null>>({});
+    /** 코멘트 작성자 이름: 팀 명단의 내 이름 (로그인 없이 볼 때는 '보는 사람') */
+    const viewerUserId = source.planning.kind === 'none' ? null : source.planning.userId;
+    const authorName = planning.members.find((member) => member.userId === viewerUserId)?.name ?? props.viewerName ?? '나';
 
     useEffect(() => {
         const refresh = () => setVersion((value) => value + 1);
         EVENTS.forEach((name) => window.addEventListener(name, refresh));
-        return () => EVENTS.forEach((name) => window.removeEventListener(name, refresh));
+        // 자정이 지나면 '오늘'이 바뀌므로 화면을 다시 계산합니다.
+        let day = seoulDateTime(new Date()).date;
+        const clock = setInterval(() => {
+            const next = seoulDateTime(new Date()).date;
+            if (next !== day) {
+                day = next;
+                refresh();
+            }
+        }, 60_000);
+        return () => {
+            clearInterval(clock);
+            EVENTS.forEach((name) => window.removeEventListener(name, refresh));
+        };
     }, []);
 
     const loaded = useMemo(() => {
@@ -191,7 +270,7 @@ export default function LiveContiWorkspace(props: Props) {
                     updateSetlistDetails(
                         source.teamId,
                         setlistId,
-                        { comments: [...(current?.comments ?? []), { id: createClientId(), songId, author: props.viewerName ?? '나', text: body, createdAt: new Date().toISOString() }] },
+                        { comments: [...(current?.comments ?? []), { id: createClientId(), songId, author: authorName, text: body, createdAt: new Date().toISOString() }] },
                         legacyOf(setlist),
                     );
                     return { ok: true };
@@ -200,7 +279,7 @@ export default function LiveContiWorkspace(props: Props) {
                 }
             },
         };
-    }, [loaded, source, props.viewerName]);
+    }, [loaded, source, authorName]);
 
     function chooseTeam(id: string) {
         if (source.kind === 'online') {
@@ -215,9 +294,38 @@ export default function LiveContiWorkspace(props: Props) {
         }
     }
 
+    function chooseViewer(userId: string) {
+        writeLocalActor(planningTeamId, userId);
+        setViewerChoice((current) => ({ ...current, [planningTeamId]: userId }));
+    }
+
+    const planningView = useMemo<PlanningView>(() => {
+        if (!loaded?.ok) return EMPTY_PLANNING_VIEW;
+        const userId = source.planning.kind === 'none' ? null : source.planning.userId;
+        if (!userId) return { ...EMPTY_PLANNING_VIEW, ready: true };
+        const seen = feedSeenAt[planningTeamId] ?? readStored(feedSeenStorageKey(planningTeamId));
+        const built = buildPlanningView({ state: planning.state, members: planning.members, userId, today: loaded.value.today, now: new Date(), setlists: loaded.value.data.setlists, feedSeenAt: seen });
+        return {
+            ...built,
+            sample: false,
+            ready: planning.ready,
+            busy: planning.busy,
+            error: planning.error,
+            actions: {
+                dispatch: planning.dispatch,
+                markFeedSeen: (at) => {
+                    writeStored(feedSeenStorageKey(planningTeamId), at);
+                    setFeedSeenAt((current) => ({ ...current, [planningTeamId]: at }));
+                },
+            },
+            planningHref: `/dashboard/planning?team=${encodeURIComponent(planningTeamId)}`,
+        };
+    }, [loaded, source.planning, planningTeamId, planning, feedSeenAt]);
+
     const data: ContiData | null = loaded?.ok
-        ? { ...loaded.value.data, editor, sampleSections: true, roster: source.roster }
+        ? { ...loaded.value.data, editor, roster: source.roster.length ? source.roster : planningView.roster.map((member) => member.name), planning: planningView }
         : null;
+    const localViewerId = source.planning.kind === 'local' ? source.planning.userId : null;
 
     return (
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
@@ -231,7 +339,7 @@ export default function LiveContiWorkspace(props: Props) {
                         콘티 마감 알림 목업 보기 →
                     </Link>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                     {source.teams.length > 1 && (
                         <label className="sr-only" htmlFor="conti-team">
                             팀 선택
@@ -250,6 +358,24 @@ export default function LiveContiWorkspace(props: Props) {
                                 </option>
                             ))}
                         </select>
+                    )}
+                    {localViewerId && source.viewers.length > 1 && (
+                        <label className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card pl-3 pr-2 text-xs font-semibold text-foreground">
+                            <span className="text-muted-foreground">보는 사람</span>
+                            <select
+                                aria-label="보는 사람"
+                                value={localViewerId}
+                                onChange={(event) => chooseViewer(event.target.value)}
+                                className="max-w-32 bg-transparent text-xs font-semibold text-foreground outline-none"
+                            >
+                                {source.viewers.map((member) => (
+                                    <option key={member.userId} value={member.userId}>
+                                        {member.name}
+                                        {member.permission === 'owner' ? ' · 관리자' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
                     )}
                     <Link
                         href="/dashboard/songs/library"

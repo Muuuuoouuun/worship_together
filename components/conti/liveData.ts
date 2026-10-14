@@ -76,7 +76,7 @@ export function buildContiSetlists(sources: LiveSources): ContiSetlist[] {
                 comments: (details?.comments ?? [])
                     .filter((comment) => comment.songId === songId)
                     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-                    .map((comment) => ({ id: comment.id, author: comment.author, text: comment.text, ago: relativeTime(comment.createdAt, sources.now) })),
+                    .map((comment) => ({ id: comment.id, author: comment.author, text: comment.text, ago: relativeTime(comment.createdAt, sources.now), createdAt: comment.createdAt })),
             });
         });
         return {

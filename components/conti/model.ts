@@ -4,6 +4,14 @@
  */
 
 export type ScreenId = 'week' | 'conti' | 'order' | 'team' | 'requests' | 'alerts';
+export const SCREEN_IDS: ScreenId[] = ['week', 'conti', 'order', 'team', 'requests', 'alerts'];
+
+/** URL 의 tab·setlist 로 처음 보여줄 화면을 정합니다. 서버와 브라우저가 같은 규칙을 써야 화면이 튀지 않습니다. */
+export function resolveScreen(tab: string | null | undefined, setlist: string | null | undefined): { screen: ScreenId; setlistId?: string } {
+    const screen = SCREEN_IDS.find((item) => item === tab) ?? 'week';
+    const setlistId = setlist || undefined;
+    return { screen: screen === 'order' && !setlistId ? 'conti' : screen, setlistId };
+}
 export type Tone = 'sky' | 'mint' | 'peach' | 'lilac' | 'sand';
 export type SetlistStatus = 'done' | 'confirmed' | 'writing' | 'empty';
 export type LinkKind = 'video' | 'sheet' | 'mr' | 'other';
@@ -21,6 +29,8 @@ export interface SongComment {
     author: string;
     text: string;
     ago: string;
+    /** 남긴 시각 (ISO). 팀 소식에 올리고 새 소식 여부를 가릴 때 씁니다. */
+    createdAt?: string;
 }
 
 export interface ContiSong {
