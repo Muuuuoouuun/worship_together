@@ -40,7 +40,7 @@ import {
     type LinkKind,
 } from './model';
 import { useConti, type SetlistDraft, type SongDraft } from './context';
-import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, TONE_BLOCK, TONE_ICON, body, chip, ink, line, selected, sub } from './ui';
+import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, TONE_BLOCK, TONE_ICON, body, chip, ink, line, selected, sub, STATUS, attention } from './ui';
 
 const LINK_ICON: Record<LinkKind, LucideIcon> = {
     video: CirclePlay,
@@ -49,7 +49,7 @@ const LINK_ICON: Record<LinkKind, LucideIcon> = {
     other: Link2,
 };
 
-const field = 'h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm text-neutral-900 placeholder:text-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50';
+const field = 'h-10 w-full rounded-xl border border-input bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground/70';
 
 function draftFromSetlist(setlist: ContiSetlist): SetlistDraft {
     const songs = songsOf(setlist.items);
@@ -175,7 +175,7 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
                                     setPicking(false);
                                     setMessage(null);
                                 }}
-                                className={cn('flex w-full items-center gap-3 px-4 py-3 text-left text-sm', item.id === setlist.id && 'bg-neutral-50 dark:bg-neutral-800/60')}
+                                className={cn('flex w-full items-center gap-3 px-4 py-3 text-left text-sm', item.id === setlist.id && 'bg-muted/60')}
                             >
                                 <span className={cn('w-10 tabular-nums', sub)}>{md(item.date)}</span>
                                 <span className={cn('flex-1 truncate font-medium', ink)}>{displayTitle(item)}</span>
@@ -187,7 +187,7 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
             )}
 
             {message && (
-                <p role="status" className={cn('rounded-2xl px-4 py-3 text-sm', message.tone === 'ok' ? cn(TONE_BLOCK.mint, TONE_ICON.mint) : 'bg-rose-50 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300')}>
+                <p role="status" className={cn('rounded-2xl px-4 py-3 text-sm', message.tone === 'ok' ? STATUS.ok.soft : 'bg-destructive/10 text-destructive')}>
                     {message.text}
                 </p>
             )}
@@ -212,7 +212,7 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
                                             role="radio"
                                             aria-checked={draft.status === status}
                                             onClick={() => setDraft({ ...draft, status })}
-                                            className={cn('rounded-lg text-xs font-semibold transition', draft.status === status ? 'bg-white text-neutral-900 shadow-xs dark:bg-neutral-700 dark:text-white' : sub)}
+                                            className={cn('rounded-lg text-xs font-semibold transition', draft.status === status ? 'bg-card text-foreground shadow-xs' : sub)}
                                         >
                                             {status === 'writing' ? '작성 중' : '확정'}
                                         </button>
@@ -338,7 +338,7 @@ function EditActions({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
 function FormChip({ code, onRemove }: { code: string; onRemove?: () => void }) {
     const className = cn(
         'flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-md px-1.5 text-[11px] font-semibold tabular-nums',
-        code === 'C' || code === 'Tag' ? selected : code === 'B' ? cn('border border-neutral-900 dark:border-white', ink) : cn(chip, body),
+        code === 'C' || code === 'Tag' ? selected : code === 'B' ? cn('border border-foreground', ink) : cn(chip, body),
     );
     if (!onRemove) {
         return (
@@ -379,7 +379,7 @@ function SongCard({ song, number, setlistId }: { song: ContiSong; number: number
     return (
         <li className={cn('rounded-3xl border p-4', line)}>
             <div className="flex items-start gap-3">
-                <span className="w-6 shrink-0 pt-px text-[15px] font-semibold tabular-nums text-neutral-300 dark:text-neutral-600">{String(number).padStart(2, '0')}</span>
+                <span className="w-6 shrink-0 pt-px text-[15px] font-semibold tabular-nums text-muted-foreground/50">{String(number).padStart(2, '0')}</span>
                 <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                         <h3 className={cn('text-[15px] font-semibold leading-snug', ink)}>{song.title}</h3>
@@ -408,12 +408,12 @@ function SongCard({ song, number, setlistId }: { song: ContiSong; number: number
                         <ul aria-label="링크" className="mt-3 flex flex-wrap gap-1.5">
                             {song.links.map((link) => {
                                 const Icon = LINK_ICON[link.kind];
-                                const className = cn('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition hover:bg-neutral-50 dark:hover:bg-neutral-800', line, ink);
+                                const className = cn('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition hover:bg-muted', line, ink);
                                 const content = (
                                     <>
                                         <Icon size={14} aria-hidden="true" />
                                         {link.label}
-                                        {link.fresh && <span className="rounded-full bg-orange-500 px-1.5 text-[9px] font-bold leading-4 text-white">NEW</span>}
+                                        {link.fresh && <span className={cn('rounded-full px-1.5 text-[9px] font-bold leading-4', attention)}>NEW</span>}
                                     </>
                                 );
                                 return (
@@ -477,13 +477,13 @@ function SongCard({ song, number, setlistId }: { song: ContiSong; number: number
                                     onChange={(event) => setText(event.target.value)}
                                     placeholder="코멘트 남기기…"
                                     aria-label={`${song.title} 코멘트`}
-                                    className={cn('h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-neutral-400', ink)}
+                                    className={cn('h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70', ink)}
                                 />
                                 <button type="submit" disabled={!text.trim()} aria-label="코멘트 등록" className={cn('flex size-8 shrink-0 items-center justify-center rounded-full disabled:opacity-30', selected)}>
                                     <ArrowUp size={15} />
                                 </button>
                             </div>
-                            {error && <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">{error}</p>}
+                            {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
                         </form>
                     ) : (
                         <button type="button" onClick={() => setWriting(true)} disabled={!editor} className={cn('mt-3 inline-flex h-8 items-center gap-1.5 text-xs font-medium', sub)}>
@@ -517,7 +517,7 @@ function SongEditCard({
     return (
         <li className={cn('space-y-4 rounded-3xl border p-4', line)}>
             <div className="flex items-start gap-3">
-                <span className="w-6 shrink-0 pt-px text-[15px] font-semibold tabular-nums text-neutral-300 dark:text-neutral-600">{String(number).padStart(2, '0')}</span>
+                <span className="w-6 shrink-0 pt-px text-[15px] font-semibold tabular-nums text-muted-foreground/50">{String(number).padStart(2, '0')}</span>
                 <div className="min-w-0 flex-1">
                     <h3 className={cn('text-[15px] font-semibold leading-snug', ink)}>{song.title}</h3>
                     <p className={cn('mt-0.5 text-xs', sub)}>원곡 Key {song.originalKey || '-'}</p>
@@ -605,10 +605,10 @@ function SongEditCard({
 
 function LinkInput({ icon: Icon, label, value, onChange }: { icon: LucideIcon; label: string; value: string; onChange: (value: string) => void }) {
     return (
-        <label className={cn('flex h-10 items-center gap-2 rounded-xl border px-3', 'border-neutral-200 dark:border-neutral-700')}>
+        <label className={cn('flex h-10 items-center gap-2 rounded-xl border border-input px-3 focus-within:ring-2 focus-within:ring-ring/30')}>
             <Icon size={15} className={sub} aria-hidden="true" />
             <span className="sr-only">{label}</span>
-            <input type="url" inputMode="url" value={value} placeholder={label} onChange={(event) => onChange(event.target.value)} className={cn('h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-neutral-400', ink)} />
+            <input type="url" inputMode="url" value={value} placeholder={label} onChange={(event) => onChange(event.target.value)} className={cn('h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70', ink)} />
         </label>
     );
 }

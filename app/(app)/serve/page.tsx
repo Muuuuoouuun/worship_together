@@ -4,7 +4,6 @@ import { BadgeCheck, CalendarDays, CheckCircle2, ClipboardList } from 'lucide-re
 export default function ServePage() {
     return (
         <CommunityRoutePage
-            currentPath="/serve"
             eyebrow="섬김"
             title="예배 후 마음이 실제 섬김 약속으로 이어지게 합니다."
             description="필요한 역할, 시간, 준비사항, 담당자를 명확히 보여주어 예배팀과 공동체 섬김이 자연스럽게 연결됩니다."

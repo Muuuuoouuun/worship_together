@@ -29,10 +29,10 @@ export default async function SetlistDraftsPage({ searchParams }: SetlistDraftsP
     const screen: ScreenId = SCREENS.has(requested as ScreenId) ? (requested as ScreenId) : 'week';
 
     return (
-        <main className="min-h-dvh bg-neutral-100 dark:bg-neutral-950">
+        <main className="min-h-dvh bg-muted dark:bg-background">
             {/* 휴대폰·태블릿: 실제 앱처럼 한 화면 */}
             <div className="lg:hidden">
-                <div className="mx-auto min-h-dvh max-w-md bg-white shadow-sm dark:bg-neutral-900">
+                <div className="mx-auto min-h-dvh max-w-md bg-card shadow-sm">
                     <MockContiWorkspace initialScreen={screen} mode="app" />
                 </div>
             </div>
@@ -41,16 +41,16 @@ export default async function SetlistDraftsPage({ searchParams }: SetlistDraftsP
             <div className="hidden px-10 py-12 lg:block">
                 <header className="mx-auto flex max-w-[1240px] flex-wrap items-end justify-between gap-4">
                     <div>
-                        <Link href="/dashboard/songs" className="inline-flex min-h-9 items-center gap-1 text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white">
+                        <Link href="/dashboard/songs" className="inline-flex min-h-9 items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
                             <ChevronLeft size={14} />
                             콘티·악보로 돌아가기
                         </Link>
-                        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">콘티 · 순서 리디자인</h1>
-                        <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+                        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">콘티 · 순서 리디자인</h1>
+                        <p className="mt-2 text-sm text-muted-foreground">
                             흰 바탕과 여백, 한 가지 강조색. 주차별 담당부터 순서·악기 담당·요청·팀 소식까지 한 흐름으로 이어집니다.
                         </p>
                     </div>
-                    <span className="rounded-full bg-white px-3 py-1.5 text-xs text-neutral-500 ring-1 ring-neutral-200 dark:bg-neutral-900 dark:text-neutral-400 dark:ring-neutral-800">
+                    <span className="rounded-full bg-card px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border">
                         목업 데이터 · 기준일 2026.10.12 (월)
                     </span>
                 </header>
@@ -58,15 +58,15 @@ export default async function SetlistDraftsPage({ searchParams }: SetlistDraftsP
                 <div className="mx-auto mt-12 grid max-w-[1240px] grid-cols-[repeat(auto-fit,375px)] justify-center gap-x-10 gap-y-16">
                     {FRAMES.map((frame, index) => (
                         <figure key={frame.screen}>
-                            <div className="h-[780px] w-[375px] overflow-hidden rounded-[2.75rem] bg-white shadow-[0_40px_80px_-32px_rgba(15,23,42,0.28)] ring-1 ring-black/5 dark:bg-neutral-900 dark:ring-white/10">
+                            <div className="h-[780px] w-[375px] overflow-hidden rounded-[2.75rem] bg-card shadow-[0_40px_80px_-32px_rgba(15,23,42,0.28)] ring-1 ring-border">
                                 <MockContiWorkspace initialScreen={frame.screen} mode="framed" />
                             </div>
                             <figcaption className="mt-5 px-2">
-                                <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                                    <span className="mr-2 tabular-nums text-neutral-400">{String(index + 1).padStart(2, '0')}</span>
+                                <p className="text-sm font-semibold text-foreground">
+                                    <span className="mr-2 tabular-nums text-muted-foreground/70">{String(index + 1).padStart(2, '0')}</span>
                                     {frame.title}
                                 </p>
-                                <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{frame.detail}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{frame.detail}</p>
                             </figcaption>
                         </figure>
                     ))}

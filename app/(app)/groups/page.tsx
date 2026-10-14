@@ -4,7 +4,6 @@ import { BookOpen, CalendarDays, UserPlus, UsersRound } from 'lucide-react';
 export default function GroupsPage() {
     return (
         <CommunityRoutePage
-            currentPath="/groups"
             eyebrow="그룹"
             title="예배팀과 소그룹을 함께 묶어 다음 만남으로 연결합니다."
             description="팀별 예배 준비, 예배 후 묵상, 새가족 후속 안내가 흩어지지 않도록 그룹 단위로 정리합니다."

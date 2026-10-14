@@ -1,7 +1,5 @@
 import Link from 'next/link';
-import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import GlassCard from '@/components/ui/GlassCard';
-import MeshBackground from '@/components/ui/MeshBackground';
 import { Badge } from '@/components/ui/Badge';
 import { ArrowRight, ChevronRight, type LucideIcon } from 'lucide-react';
 
@@ -26,7 +24,6 @@ interface RouteSection {
 }
 
 interface CommunityRoutePageProps {
-    currentPath: string;
     description: string;
     eyebrow: string;
     metrics: RouteMetric[];
@@ -37,7 +34,6 @@ interface CommunityRoutePageProps {
 }
 
 export default function CommunityRoutePage({
-    currentPath,
     description,
     eyebrow,
     metrics,
@@ -47,16 +43,15 @@ export default function CommunityRoutePage({
     title,
 }: CommunityRoutePageProps) {
     return (
-        <DashboardLayout currentPath={currentPath}>
-            <MeshBackground />
-            <div className="mx-auto flex max-w-7xl flex-col gap-8 animate-in fade-in duration-300">
+        <>
+            <div className="flex flex-col gap-8">
                 <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-end">
                     <div className="space-y-5">
                         <Badge variant="secondary" size="default">
                             {eyebrow}
                         </Badge>
                         <div className="space-y-3">
-                            <h1 className="max-w-4xl text-3xl font-serif font-black tracking-tight text-foreground sm:text-4xl md:text-5xl">
+                            <h1 className="max-w-3xl text-2xl font-semibold tracking-tight text-foreground">
                                 {title}
                             </h1>
                             <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-base">
@@ -88,7 +83,7 @@ export default function CommunityRoutePage({
                                 <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                                     {metric.label}
                                 </p>
-                                <p className="mt-1 text-2xl font-serif font-black text-foreground">{metric.value}</p>
+                                <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">{metric.value}</p>
                                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{metric.detail}</p>
                             </GlassCard>
                         ))}
@@ -105,7 +100,7 @@ export default function CommunityRoutePage({
                                         <Icon size={20} />
                                     </div>
                                     <div>
-                                        <h2 className="text-base font-serif font-bold text-foreground">{section.title}</h2>
+                                        <h2 className="text-[15px] font-semibold text-foreground">{section.title}</h2>
                                         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{section.description}</p>
                                     </div>
                                 </div>
@@ -138,6 +133,6 @@ export default function CommunityRoutePage({
                     })}
                 </section>
             </div>
-        </DashboardLayout>
+        </>
     );
 }

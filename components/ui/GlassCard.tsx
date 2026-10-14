@@ -8,17 +8,18 @@ interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const GlassCard: React.FC<GlassCardProps> = ({ children, className, variant = 'light', ...props }) => {
+    // 기준 디자인: 흰 카드 + 가는 테두리 (그림자·블러 없음). dark = 회색 바탕, gold = 옅은 강조 바탕.
     const variantStyles = {
-        light: 'border-border/80 bg-card/85 backdrop-blur-md text-card-foreground shadow-sm',
-        dark: 'border-border/80 bg-muted/80 backdrop-blur-md text-foreground shadow-sm',
-        gold: 'border-secondary/40 bg-secondary/10 backdrop-blur-md text-card-foreground shadow-sm',
+        light: 'border-border/70 bg-card text-card-foreground',
+        dark: 'border-transparent bg-muted text-foreground',
+        gold: 'border-transparent bg-amber-50 text-card-foreground dark:bg-amber-400/10',
     };
 
     return (
         <div
             {...props}
             className={cn(
-                'rounded-2xl border p-6 transition-all duration-200',
+                'rounded-3xl border p-5 sm:p-6',
                 variantStyles[variant],
                 className
             )}

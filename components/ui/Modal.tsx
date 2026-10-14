@@ -65,7 +65,7 @@ function Modal({
       {/* 모달 창 */}
       <div
         className={cn(
-          "relative z-50 w-full max-h-[90dvh] overflow-y-auto border border-border bg-card p-6 shadow-xl transition-all sm:max-w-lg sm:rounded-2xl",
+          "relative z-50 w-full max-h-[90dvh] overflow-y-auto border border-border/70 bg-card p-6 shadow-xl transition-all sm:max-w-lg sm:rounded-3xl",
           isBottomSheetOnMobile
             ? "rounded-t-3xl pb-[calc(env(safe-area-inset-bottom)+1.5rem)] animate-in slide-in-from-bottom duration-200 sm:slide-in-from-bottom-0 sm:fade-in"
             : "rounded-2xl animate-in zoom-in-95 duration-150",

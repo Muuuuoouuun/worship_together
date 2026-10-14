@@ -120,7 +120,7 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
     const estimatedMinutes = songCount * 4;
 
     return (
-        <div className="mx-auto max-w-5xl space-y-5 sm:space-y-6 animate-in fade-in duration-300">
+        <div className="space-y-6">
             {/* 상단 웰컴 & 팀 상태 헤더 */}
             <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-3 sm:pb-4">
                 <div>
@@ -132,7 +132,7 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
                             {team ? team.name : '기본 예배팀'}
                         </Badge>
                     </div>
-                    <h1 className="mt-1 text-xl font-serif font-black tracking-tight text-foreground sm:text-2xl md:text-3xl">
+                    <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-foreground">
                         {team ? `${team.name}의 준비 현황` : '우리 팀의 예배 준비'}
                     </h1>
                 </div>

@@ -93,7 +93,7 @@ export default function SessionBpmConsole({
                         <div>
                             <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">현재 박자</p>
                             <p
-                                className={`mt-2 inline-block text-4xl font-serif font-black text-primary ${metronomeActive ? 'bpm-digit-pulse' : ''}`}
+                                className={`mt-2 inline-block text-4xl font-semibold tabular-nums tracking-tight text-foreground ${metronomeActive ? 'bpm-digit-pulse' : ''}`}
                                 style={beatDurationStyle}
                             >
                                 {currentBpm ?? '--'}

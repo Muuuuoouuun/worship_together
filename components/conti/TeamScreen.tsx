@@ -8,12 +8,12 @@ import { dayOf, md, monthOf, shortWeekLabel, weekDates, weekday } from './model'
 import { useConti } from './context';
 import { pickServices, type PartAssignment, type ServiceDay } from './planningBridge';
 import { AbsenceReasons, EVENT_KIND, PlanningError, ROLE_ICON, pill, pillOn, useDispatch } from './planningUi';
-import { AddButton, Avatar, AvatarStack, Eyebrow, SampleChip, ScreenTitle, SectionTitle, TONE_BLOCK, chip, ink, line, selected, sub } from './ui';
+import { AddButton, Avatar, AvatarStack, Eyebrow, SampleChip, ScreenTitle, SectionTitle, TONE_BLOCK, chip, ink, line, selected, sub, STATUS, attentionText, dashed } from './ui';
 
 const STATUS_TEXT = {
-    confirmed: { label: '참석 확정', className: 'text-emerald-600 dark:text-emerald-400' },
-    pending: { label: '응답 대기', className: 'text-amber-600 dark:text-amber-400' },
-    declined: { label: '불참', className: 'text-rose-600 dark:text-rose-400' },
+    confirmed: { label: '참석 확정', className: STATUS.ok.text },
+    pending: { label: '응답 대기', className: STATUS.warn.text },
+    declined: { label: '불참', className: STATUS.danger.text },
 } as const;
 
 export default function TeamScreen({ openOrder }: { openOrder: (id: string) => void }) {
@@ -33,7 +33,7 @@ export default function TeamScreen({ openOrder }: { openOrder: (id: string) => v
             {!planning.ready ? (
                 <p className={cn('py-10 text-center text-sm', sub)}>팀 배치를 불러오는 중…</p>
             ) : !services.length ? (
-                <div className={cn('rounded-3xl border border-dashed px-5 py-8 text-center', 'border-neutral-300 dark:border-neutral-700')}>
+                <div className={cn('rounded-3xl px-5 py-8 text-center', dashed)}>
                     <p className={cn('text-[15px] font-medium', ink)}>아직 예배 일정이 없어요</p>
                     <p className={cn('mt-1 text-xs', sub)}>일정·요청 화면에서 예배 일정과 역할을 만들면 여기에 보여요</p>
                     <Link href={manageHref} className={cn('mt-4 inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-semibold', selected)}>
@@ -105,19 +105,19 @@ function ServiceSection({ service, openOrder }: { service: ServiceDay; openOrder
                                     key={item.slotId}
                                     className={cn(
                                         'flex-1',
-                                        item.status === null && 'bg-neutral-200 dark:bg-neutral-700',
-                                        item.status === 'confirmed' && 'bg-emerald-500',
-                                        item.status === 'pending' && 'bg-amber-400',
-                                        item.status === 'declined' && 'bg-rose-400',
+                                        item.status === null && STATUS.idle.bar,
+                                        item.status === 'confirmed' && STATUS.ok.bar,
+                                        item.status === 'pending' && STATUS.warn.bar,
+                                        item.status === 'declined' && STATUS.danger.bar,
                                     )}
                                 />
                             ))}
                         </div>
                         <p className={cn('flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums', sub)}>
-                            <Dot className="bg-emerald-500" label={`확정 ${counts.confirmed}`} />
-                            <Dot className="bg-amber-400" label={`대기 ${counts.pending}`} />
-                            <Dot className="bg-rose-400" label={`불참 ${counts.declined}`} />
-                            <Dot className="bg-neutral-300 dark:bg-neutral-600" label={`빈자리 ${counts.vacant}`} />
+                            <Dot className={STATUS.ok.dot} label={`확정 ${counts.confirmed}`} />
+                            <Dot className={STATUS.warn.dot} label={`대기 ${counts.pending}`} />
+                            <Dot className={STATUS.danger.dot} label={`불참 ${counts.declined}`} />
+                            <Dot className={STATUS.idle.dot} label={`빈자리 ${counts.vacant}`} />
                         </p>
                     </>
                 )}
@@ -167,12 +167,12 @@ function AssignmentRow({ service, item }: { service: ServiceDay; item: PartAssig
                 <div className="min-w-0 flex-1">
                     <p className={cn('text-[15px] font-medium', ink)}>
                         {item.roleLabel}
-                        {item.mine && <span className={cn('ml-1.5 text-[11px] font-semibold', 'text-primary')}>나</span>}
+                        {item.mine && <span className={cn('ml-1.5 text-[11px] font-semibold', 'text-brand')}>나</span>}
                     </p>
                     <p className="mt-0.5 truncate text-xs">
                         {status ? <span className={status.className}>{status.label}</span> : <span className={sub}>빈자리</span>}
                         {item.note && <span className={sub}> · {item.note}</span>}
-                        {item.substituteOpen && <span className="text-orange-600 dark:text-orange-300"> · 대체 모집 중</span>}
+                        {item.substituteOpen && <span className={attentionText}> · 대체 모집 중</span>}
                     </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -339,7 +339,7 @@ function WeekEvents({ date }: { date: string }) {
                     })}
                 </ul>
             ) : (
-                <Link href={manageHref} className={cn('flex h-14 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed text-sm', 'border-neutral-300 dark:border-neutral-600', sub)}>
+                <Link href={manageHref} className={cn('flex h-14 w-full items-center justify-center gap-1.5 rounded-2xl text-sm', dashed, sub)}>
                     <ExternalLink size={15} aria-hidden="true" />
                     일정·요청 화면에서 연습 일정 추가
                 </Link>

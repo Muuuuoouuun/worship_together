@@ -28,7 +28,7 @@ export default function ThemeToggle() {
 
                 applyTheme(nextTheme);
             }}
-            className="tap-target inline-flex min-w-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 py-3 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
+            className="inline-flex h-10 min-w-10 shrink-0 items-center justify-center gap-2 rounded-full border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
         >
             <Moon size={16} className="dark:hidden" />
             <Sun size={16} className="hidden dark:block" />

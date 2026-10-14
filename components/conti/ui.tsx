@@ -5,16 +5,36 @@ import { cn } from '@/lib/utils';
 import { member } from './mockData';
 import { avatarLabel, toneForName, type Tone } from './model';
 
-/** 시안 공통 색: 흰 바탕 + 중립 회색 + 브랜드 primary 한 가지 강조색. */
-export const ink = 'text-neutral-900 dark:text-neutral-50';
-export const body = 'text-neutral-600 dark:text-neutral-300';
-export const sub = 'text-neutral-500 dark:text-neutral-400';
-export const line = 'border-neutral-100 dark:border-neutral-800';
-export const chip = 'bg-neutral-100 dark:bg-neutral-800';
-/** 선택된 날짜·탭: 레퍼런스처럼 검정 알약 */
-export const selected = 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900';
+/**
+ * 앱 전체의 기준 디자인(흰 바탕 + 중립 회색 + 한 가지 강조색).
+ * 값은 app/globals.css 의 토큰에서 오므로 다른 화면과 같은 색을 씁니다.
+ */
+export const ink = 'text-foreground';
+export const body = 'text-foreground/75';
+export const sub = 'text-muted-foreground';
+export const line = 'border-border/70';
+export const chip = 'bg-muted';
+/** 선택된 날짜·탭·주요 버튼: 검정 알약 (다크 모드에서는 흰 알약) */
+export const selected = 'bg-primary text-primary-foreground';
 /** 오늘 날짜: 선택과 헷갈리지 않도록 테두리 대신 강조색 글자 */
-export const todayText = 'font-semibold text-primary';
+export const todayText = 'font-semibold text-brand';
+/** 카드·시트 바탕 */
+export const panel = 'bg-card text-card-foreground';
+/** 아바타·점 테두리 (바탕색과 같은 색의 링) */
+export const ringCard = 'ring-2 ring-card';
+/** 새 소식·확인할 개수 같은 주의 표시 */
+export const attention = 'bg-secondary text-secondary-foreground';
+export const attentionText = 'text-secondary';
+/** 밑줄 탭: 선택 = 검정 글씨 + 검정 밑줄 */
+export const tabOn = 'border-foreground font-semibold text-foreground';
+export const tabOff = 'border-transparent text-muted-foreground hover:text-foreground';
+/** 빈 상태·추가 자리의 점선 테두리 */
+export const dashed = 'border border-dashed border-input';
+/** 목록 구분선 */
+export const divide = 'divide-y divide-border/70';
+
+/** 상태 색 (확정·대기·불참·빈자리)은 components/ui/status.ts 한 곳에서 정합니다. */
+export { STATUS } from '@/components/ui/status';
 
 export const TONE_BLOCK: Record<Tone, string> = {
     sky: 'bg-sky-50 dark:bg-sky-400/10',
@@ -66,7 +86,7 @@ export function Avatar({ id, name, size = 'sm', ring = false, className }: { id?
                 'inline-flex shrink-0 items-center justify-center rounded-full font-semibold tracking-tight',
                 AVATAR_SIZE[size],
                 TONE_AVATAR[person.tone],
-                ring && 'ring-2 ring-white dark:ring-neutral-900',
+                ring && ringCard,
                 className,
             )}
         >
@@ -85,7 +105,7 @@ export function AvatarStack({ ids = [], names = [], max = 3, size = 'sm' }: { id
                 <Avatar key={person.key} id={person.id} name={person.name} size={size} ring />
             ))}
             {rest > 0 && (
-                <span className={cn('inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white dark:ring-neutral-900', AVATAR_SIZE[size], selected)}>
+                <span className={cn('inline-flex items-center justify-center rounded-full font-semibold', ringCard, AVATAR_SIZE[size], selected)}>
                     {rest}+
                 </span>
             )}
@@ -98,7 +118,7 @@ export function Eyebrow({ children, className }: { children: ReactNode; classNam
 }
 
 export function AddButton({ label, onClick, href }: { label: string; onClick?: () => void; href?: string }) {
-    const className = 'inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition active:scale-95';
+    const className = 'inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground transition active:scale-95';
     if (href) {
         return (
             <Link href={href} aria-label={label} title={label} className={className}>
@@ -149,10 +169,10 @@ export function ScreenTitle({ eyebrow, title, trailing, aside }: { eyebrow?: Rea
         <header className="flex items-center justify-between gap-3">
             <div className="min-w-0">
                 {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-                <h1 className={cn('mt-0.5 truncate text-[17px] font-semibold tracking-tight', ink)}>
+                <h2 className={cn('mt-0.5 truncate text-[17px] font-semibold tracking-tight', ink)}>
                     {title}
                     {trailing && <span className={cn('ml-1.5 font-normal', sub)}>{trailing}</span>}
-                </h1>
+                </h2>
             </div>
             {aside && <div className="flex shrink-0 items-center gap-2">{aside}</div>}
         </header>

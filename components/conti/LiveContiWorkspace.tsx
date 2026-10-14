@@ -21,6 +21,7 @@ import type { SongForm } from '@/lib/songForm';
 import { getTeamServerSnapshot, getTeamSnapshot, parseTeamSnapshot, selectPrototypeTeam, subscribeToTeams } from '@/lib/teamPrototype';
 import { demoMembers, readLocalActor, writeLocalActor } from '@/lib/planningDemo';
 import type { TeamMember } from '@/types/team';
+import PageHeader from '@/components/ui/PageHeader';
 import ContiWorkspace from './ContiWorkspace';
 import { buildContiSetlists, planSave } from './liveData';
 import { seoulDateTime, upcomingSetlistId, type ScreenId } from './model';
@@ -328,18 +329,19 @@ export default function LiveContiWorkspace(props: Props) {
     const localViewerId = source.planning.kind === 'local' ? source.planning.userId : null;
 
     return (
-        <div className="mx-auto flex max-w-3xl flex-col gap-4">
-            <section className="flex flex-wrap items-end justify-between gap-3 px-1">
-                <div className="min-w-0">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">콘티·악보</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
+        <div className="flex w-full max-w-3xl flex-col gap-5">
+            <PageHeader
+                title="콘티·악보"
+                description={
+                    <>
                         {source.kind === 'server' ? '서버에 저장된 콘티' : '곡 보관함에 저장된 콘티'}를 이번 주 순서·송폼·특이사항과 함께 봐요
-                    </p>
-                    <Link href="/dashboard/songs/deadline" className="mt-1.5 inline-flex min-h-8 items-center text-xs font-semibold text-primary underline-offset-2 hover:underline">
-                        콘티 마감 알림 목업 보기 →
-                    </Link>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <Link href="/dashboard/songs/deadline" className="ml-1.5 inline-flex items-center text-xs font-semibold text-brand underline-offset-2 hover:underline">
+                            마감 알림 목업 →
+                        </Link>
+                    </>
+                }
+                actions={
+                    <>
                     {source.teams.length > 1 && (
                         <label className="sr-only" htmlFor="conti-team">
                             팀 선택
@@ -360,7 +362,7 @@ export default function LiveContiWorkspace(props: Props) {
                         </select>
                     )}
                     {localViewerId && source.viewers.length > 1 && (
-                        <label className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card pl-3 pr-2 text-xs font-semibold text-foreground">
+                        <label className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card pl-3 pr-2 text-xs font-semibold text-foreground focus-within:ring-2 focus-within:ring-ring/30">
                             <span className="text-muted-foreground">보는 사람</span>
                             <select
                                 aria-label="보는 사람"
@@ -384,8 +386,9 @@ export default function LiveContiWorkspace(props: Props) {
                         <Library size={15} aria-hidden="true" />
                         곡 보관함
                     </Link>
-                </div>
-            </section>
+                    </>
+                }
+            />
             {teamError && <p role="alert" className="px-1 text-sm text-destructive">{teamError}</p>}
 
             {!loaded ? (
@@ -395,7 +398,7 @@ export default function LiveContiWorkspace(props: Props) {
             ) : !loaded.ok ? (
                 <div role="alert" className="rounded-[2rem] bg-card px-6 py-12 text-center">
                     <p className="text-sm font-semibold text-foreground">{loaded.error}</p>
-                    <Link href="/dashboard/songs/library" className="mt-3 inline-flex min-h-10 items-center text-sm font-semibold text-primary underline-offset-2 hover:underline">
+                    <Link href="/dashboard/songs/library" className="mt-3 inline-flex min-h-10 items-center text-sm font-semibold text-brand underline-offset-2 hover:underline">
                         곡 보관함에서 확인하기
                     </Link>
                 </div>

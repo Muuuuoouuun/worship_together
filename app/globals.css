@@ -12,10 +12,16 @@
   --color-muted-foreground: var(--muted-foreground);
   --font-sans: var(--font-geist-sans), "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-serif: var(--font-merriweather), "Noto Serif KR", Georgia, serif;
+  --font-serif: var(--font-merriweather), Georgia, serif;
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-surface: var(--surface);
   --color-accent: var(--accent);
@@ -34,48 +40,67 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+/*
+ * 디자인 기준: 콘티·순서 리디자인(/dashboard/songs/drafts) — "흰 바탕과 여백, 한 가지 강조색".
+ * - primary  : 선택·주요 버튼의 검정 알약 (다크 모드에서는 흰 알약)
+ * - brand    : 단 하나의 강조색(짙은 초록) — 추가(+) 버튼, 오늘 날짜, 확정 상태
+ * - secondary: 주의 표시(주황) — 새 소식 점, 확인할 개수
+ * - success / warning / destructive: 상태 색 (확정 / 대기 / 불참·오류)
+ */
 :root {
   --radius: 0.625rem;
-  --background: #F8F6F1;
-  --foreground: #1D2827;
-  --primary: #153E3B;
-  --primary-foreground: #FFFDF8;
-  --secondary: #A04124;
-  --secondary-foreground: #FFFDF8;
-  --surface: #FFFDF8;
+  --background: #FFFFFF;
+  --foreground: #171717;
+  --card: #FFFFFF;
+  --card-foreground: #171717;
+  --surface: #FAFAFA;
+  --muted: #F5F5F5;
+  --muted-foreground: #737373;
+  --border: #EBEBEB;
+  --input: #D4D4D4;
+  --ring: #171717;
+  --primary: #171717;
+  --primary-foreground: #FFFFFF;
+  --brand: #153E3B;
+  --brand-foreground: #FFFFFF;
+  --secondary: #EA580C;
+  --secondary-foreground: #FFFFFF;
   --accent: #456885;
-  --accent-foreground: #FFFDF8;
-  --border: #D2D9D3;
-  --card: #FFFDF9;
-  --card-foreground: #1D2827;
-  --muted: #EBE6DC;
-  --muted-foreground: #50615E;
-  --input: #7B8F87;
-  --ring: #153E3B;
-  --destructive: #BD3E0A;
+  --accent-foreground: #FFFFFF;
+  --success: #059669;
+  --success-foreground: #FFFFFF;
+  --warning: #D97706;
+  --warning-foreground: #FFFFFF;
+  --destructive: #E11D48;
   --destructive-foreground: #FFFFFF;
   color-scheme: light;
 }
 
 .dark {
-  --background: #0F1716;
-  --foreground: #F6F4ED;
-  --primary: #E2B68D;
-  --primary-foreground: #0F1716;
-  --secondary: #9EC7B5;
-  --secondary-foreground: #0F1716;
-  --surface: #15201E;
+  --background: #121212;
+  --foreground: #FAFAFA;
+  --card: #181818;
+  --card-foreground: #FAFAFA;
+  --surface: #1C1C1C;
+  --muted: #262626;
+  --muted-foreground: #A3A3A3;
+  --border: #2A2A2A;
+  --input: #404040;
+  --ring: #FAFAFA;
+  --primary: #FAFAFA;
+  --primary-foreground: #171717;
+  --brand: #9EC7B5;
+  --brand-foreground: #0F1716;
+  --secondary: #FB923C;
+  --secondary-foreground: #1C0F05;
   --accent: #95B2C7;
   --accent-foreground: #0F1716;
-  --border: #2A3B37;
-  --card: #15201E;
-  --card-foreground: #F6F4ED;
-  --muted: #1E2D2A;
-  --muted-foreground: #AFC1B8;
-  --input: #627F75;
-  --ring: #E2B68D;
-  --destructive: #FFAD91;
-  --destructive-foreground: #33160D;
+  --success: #34D399;
+  --success-foreground: #04140D;
+  --warning: #FBBF24;
+  --warning-foreground: #1C1203;
+  --destructive: #FB7185;
+  --destructive-foreground: #2A0710;
   color-scheme: dark;
 }
 

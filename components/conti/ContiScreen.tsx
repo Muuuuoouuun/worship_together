@@ -108,7 +108,7 @@ export default function ContiScreen({ openOrder }: { openOrder: (id: string) => 
                                     className={cn(
                                         'flex w-[8.25rem] shrink-0 flex-col rounded-2xl p-3.5 text-left transition active:scale-[0.98]',
                                         current ? TONE_BLOCK.mint : cn('border', line),
-                                        setlist.date === picked && !current && 'border-neutral-900 dark:border-white',
+                                        setlist.date === picked && !current && 'border-foreground',
                                     )}
                                 >
                                     <Eyebrow>
@@ -155,7 +155,7 @@ export default function ContiScreen({ openOrder }: { openOrder: (id: string) => 
                                     onClick={() => openOrder(setlist.id)}
                                     className={cn(
                                         '-mx-3 flex w-[calc(100%+1.5rem)] items-center gap-4 rounded-2xl px-3 py-4 text-left transition disabled:cursor-default',
-                                        setlist.date === picked && 'bg-neutral-50 dark:bg-neutral-800/60',
+                                        setlist.date === picked && 'bg-muted/60',
                                     )}
                                 >
                                     <span className="w-9 shrink-0 text-center leading-none">

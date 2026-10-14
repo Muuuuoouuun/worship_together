@@ -4,7 +4,6 @@ import { ClipboardList, HandHeart, MessageCircle, ShieldCheck } from 'lucide-rea
 export default function CarePage() {
     return (
         <CommunityRoutePage
-            currentPath="/care"
             eyebrow="케어"
             title="기도와 돌봄 요청은 공개 범위와 담당자를 분명히 합니다."
             description="예배 후 말씀과 묵상에서 이어지는 기도제목을 안전하게 받고, 리더가 놓치지 않도록 후속조치를 큐로 관리합니다."

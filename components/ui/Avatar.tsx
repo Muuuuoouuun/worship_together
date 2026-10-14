@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const avatarVariants = cva(
-  "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold select-none",
+  "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold tracking-tight select-none",
   {
     variants: {
       size: {
@@ -14,12 +14,13 @@ const avatarVariants = cva(
         xl: "size-16 text-xl",
       },
       roleVariant: {
-        default: "border border-border/80 bg-muted text-foreground",
-        leader: "ring-2 ring-secondary bg-secondary/15 text-secondary border-transparent",
-        vocal: "ring-2 ring-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-transparent",
-        band: "ring-2 ring-accent/60 bg-accent/15 text-accent dark:text-teal-300 border-transparent",
-        media: "ring-2 ring-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-transparent",
-        primary: "ring-2 ring-primary bg-primary/15 text-primary border-transparent",
+        // 콘티·악보 화면의 파스텔 아바타와 같은 색
+        default: "bg-muted text-foreground",
+        leader: "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/25 dark:text-emerald-100",
+        vocal: "bg-sky-100 text-sky-800 dark:bg-sky-400/25 dark:text-sky-100",
+        band: "bg-violet-100 text-violet-800 dark:bg-violet-400/25 dark:text-violet-100",
+        media: "bg-amber-100 text-amber-800 dark:bg-amber-400/25 dark:text-amber-100",
+        primary: "bg-primary text-primary-foreground",
       },
     },
     defaultVariants: {
@@ -42,6 +43,8 @@ function getInitials(name?: string): string {
   if (!name) return "?";
   const trimmed = name.trim();
   if (trimmed.length <= 2) return trimmed;
+  // 세 글자 한글 이름은 콘티 화면처럼 성을 빼고 이름 두 글자 (김찬양 → 찬양)
+  if (/^[가-힣]{3}$/.test(trimmed)) return trimmed.slice(1);
   // 한글의 경우 보통 앞 2자 또는 성+이름
   const parts = trimmed.split(/\s+/);
   if (parts.length > 1) {

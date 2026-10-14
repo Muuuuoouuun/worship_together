@@ -1,9 +1,6 @@
 import type { Metadata } from 'next';
-import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
-import MeshBackground from '@/components/ui/MeshBackground';
-import GlassCard from '@/components/ui/GlassCard';
+import Notice from '@/components/ui/Notice';
+import PageHeader from '@/components/ui/PageHeader';
 import { DEMO_TEAM_ID } from '@/lib/constants';
 import { getSetlistsByTeam, getSongsByTeam } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
@@ -45,47 +42,29 @@ const errorMessages: Record<string, string> = {
 
 export default async function SongArchivePage({ searchParams }: LibraryPageProps) {
     const params = await searchParams;
-    const [songs, setlists] = await Promise.all([
-        getSongsByTeam(DEMO_TEAM_ID),
-        getSetlistsByTeam(DEMO_TEAM_ID),
-    ]);
+    const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID), getCurrentUser()]);
     const hasSupabase = Boolean(supabase);
-    const user = await getCurrentUser();
     const onlineTeams = user ? getTeamRepository().list(user.id).map(team => ({ id: team.id, name: team.name })) : [];
     const createdKey = getParam(params.created);
     const errorKey = getParam(params.error);
 
     return (
-        <DashboardLayout currentPath="/dashboard/songs">
-            <MeshBackground />
-            <div className="mx-auto flex max-w-7xl flex-col gap-6">
-                <section>
-                    <Link href="/dashboard/songs" className="inline-flex min-h-10 items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground">
-                        <ChevronLeft size={14} />
-                        콘티·악보로 돌아가기
-                    </Link>
-                    <h1 className="text-2xl font-serif font-black tracking-tight text-primary sm:text-3xl">
-                        곡 보관함
-                    </h1>
-                    <p className="mt-1 text-sm text-muted-foreground">곡 등록·송폼·BPM 관리와 콘티 만들기</p>
-                </section>
+        <>
+            <div className="flex flex-col gap-6">
+                <PageHeader back={{ href: '/dashboard/songs', label: '콘티·악보' }} title="곡 보관함" description="곡 등록·송폼·BPM 관리와 콘티 만들기" />
 
-                {createdKey && successMessages[createdKey] && (
-                    <GlassCard className="border-emerald-500/20 bg-emerald-500/10 text-emerald-700">
-                        <p className="text-sm font-semibold">{successMessages[createdKey]}</p>
-                    </GlassCard>
-                )}
+                {createdKey && successMessages[createdKey] && <Notice tone="success">{successMessages[createdKey]}</Notice>}
+                {errorKey && errorMessages[errorKey] && <Notice tone="error">{errorMessages[errorKey]}</Notice>}
 
-                {errorKey && errorMessages[errorKey] && (
-                    <GlassCard className="border-red-500/20 bg-red-500/10 text-red-600">
-                        <p className="text-sm font-semibold">{errorMessages[errorKey]}</p>
-                    </GlassCard>
-                )}
-
-                <LibraryTeamWorkspace initialSongs={songs} initialSetlists={setlists} teamId={DEMO_TEAM_ID} hasBackend={hasSupabase} onlineTeams={onlineTeams} onlineTeamId={getParam(params.team) ?? undefined} />
+                <LibraryTeamWorkspace initialSongs={withoutMusicXml(songs)} initialSetlists={setlists} teamId={DEMO_TEAM_ID} hasBackend={hasSupabase} onlineTeams={onlineTeams} onlineTeamId={getParam(params.team) ?? undefined} />
             </div>
-        </DashboardLayout>
+        </>
     );
+}
+
+/** 악보 XML 은 이 화면에서 쓰지 않으므로 브라우저로 보내지 않습니다. */
+function withoutMusicXml<T extends { data_xml: string | null }>(songs: T[]): T[] {
+    return songs.map((song) => ({ ...song, data_xml: null }));
 }
 
 function getParam(value: string | string[] | undefined): string | null {

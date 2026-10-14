@@ -14,7 +14,7 @@ export default function SignOutButton() {
     catch { setFailed(true); setPending(false); }
   }
   return <>
-    <button type="button" className={styles.button} disabled={pending} onClick={() => void logout()}>{pending ? "로그아웃 중…" : "로그아웃"}</button>
+    <button type="button" className={styles.loginLink} disabled={pending} onClick={() => void logout()}>{pending ? "로그아웃 중…" : "로그아웃"}</button>
     {failed ? <p className={styles.error} role="alert">로그아웃하지 못했습니다. 다시 시도해 주세요.</p> : null}
   </>;
 }

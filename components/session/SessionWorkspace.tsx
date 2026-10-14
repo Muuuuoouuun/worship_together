@@ -13,7 +13,6 @@ import SessionBpmConsole from '@/components/session/SessionBpmConsole';
 import SessionCueToasts from '@/components/session/SessionCueToasts';
 import SheetAnnotationWorkspace from '@/components/session/SheetAnnotationWorkspace';
 import GlassCard from '@/components/ui/GlassCard';
-import MeshBackground from '@/components/ui/MeshBackground';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRealtimeSession';
 import { isPrototypeSessionId } from '@/lib/constants';
@@ -736,7 +735,6 @@ export default function SessionWorkspace({
 
     return (
         <div className="safe-area-x relative min-h-screen overflow-x-hidden bg-background py-6 pb-32 text-primary sm:px-6 sm:py-8 sm:pb-36 md:px-10 lg:pb-10">
-            <MeshBackground />
             <SessionCueToasts entries={feedbackLog} isActive={isActive} currentClientId={clientId} />
             {sessionError && <p role="alert" className="mx-auto mb-4 max-w-7xl rounded-xl border border-red-400/30 bg-red-50 p-4 text-sm text-red-700">{sessionError}</p>}
 
@@ -771,7 +769,7 @@ export default function SessionWorkspace({
                             )}
                         </div>
                         <div>
-                            <h1 className="break-words text-2xl font-serif font-black tracking-tight text-primary sm:text-4xl md:text-5xl">
+                            <h1 className="break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
                                 {setlistTitle}
                             </h1>
                             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground md:text-base">
@@ -869,7 +867,7 @@ export default function SessionWorkspace({
                             <p className="truncate text-[11px] font-bold text-muted-foreground">
                                 {currentSection ?? 'Prelude'}
                             </p>
-                            <h2 className="truncate text-xl font-serif font-black text-primary">
+                            <h2 className="truncate text-lg font-semibold tracking-tight text-foreground">
                                 {currentSong?.title ?? '곡 선택 대기'}
                             </h2>
                         </div>
@@ -879,7 +877,7 @@ export default function SessionWorkspace({
                                 <span className={`h-1.5 w-1.5 rounded-full bg-secondary/70 ${mobileBpmActive ? 'bpm-step-dot' : ''}`} />
                                 <span className={`h-1.5 w-1.5 rounded-full bg-secondary/35 ${mobileBpmActive ? 'bpm-step-dot [animation-delay:120ms]' : ''}`} />
                             </div>
-                            <p className={`mt-1 inline-block font-serif text-2xl font-black leading-none text-secondary ${mobileBpmActive ? 'bpm-digit-pulse' : ''}`}>
+                            <p className={`mt-1 inline-block text-2xl font-semibold leading-none tabular-nums text-foreground ${mobileBpmActive ? 'bpm-digit-pulse' : ''}`}>
                                 {mobileBpmLabel}
                             </p>
                         </div>
@@ -933,7 +931,7 @@ export default function SessionWorkspace({
                                 예배 중 핵심
                             </p>
                             <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <h2 className="text-2xl font-serif font-black text-primary">
+                                <h2 className="text-xl font-semibold tracking-tight text-foreground">
                                     연결 · BPM · 악보
                                 </h2>
                                 <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${autoAdvanceEnabled ? 'bg-emerald-500/10 text-emerald-700' : 'bg-primary/5 text-muted-foreground'}`}>
@@ -1046,7 +1044,7 @@ export default function SessionWorkspace({
                                         <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted-foreground">
                                             현재 곡
                                         </p>
-                                        <h2 className="mt-2 break-words text-2xl font-serif font-black text-primary sm:text-3xl">
+                                        <h2 className="mt-2 break-words text-2xl font-semibold tracking-tight text-foreground">
                                             {currentSong?.title ?? '곡이 선택되지 않았습니다'}
                                         </h2>
                                         <p className="mt-2 text-sm text-muted-foreground">{formatSongMeta(currentSong)}</p>
@@ -1632,7 +1630,7 @@ export default function SessionWorkspace({
                                         <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                                             예배 후
                                         </p>
-                                        <h2 className="mt-2 text-2xl font-serif font-black text-primary">
+                                        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
                                             찬양 이후에도 팀의 연결을 이어갑니다.
                                         </h2>
                                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">

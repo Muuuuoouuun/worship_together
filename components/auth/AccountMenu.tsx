@@ -6,7 +6,7 @@ import styles from "./AuthControls.module.css";
 /** Server component: render in a server layout, or pass as a slot to a client layout. */
 export default async function AccountMenu() {
   const user = await getCurrentUser();
-  if (!user) return <Link href="/login" className={styles.button}>로그인</Link>;
+  if (!user) return <Link href="/login" className={styles.loginLink}>로그인</Link>;
   return <details className={styles.account}>
     <summary aria-label={`${user.name} 계정 메뉴`}>
       <span className={styles.avatar} aria-hidden="true">{Array.from(user.name)[0]}</span>

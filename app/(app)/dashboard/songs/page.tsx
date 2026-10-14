@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import LiveContiWorkspace from '@/components/conti/LiveContiWorkspace';
 import { resolveScreen } from '@/components/conti/model';
 import { getCurrentUser } from '@/lib/auth';
@@ -28,9 +27,9 @@ export default async function SongsPage({ searchParams }: SongsPageProps) {
     const onlineTeams = user ? getTeamRepository().list(user.id).map((item) => ({ id: item.id, name: item.name })) : [];
 
     return (
-        <DashboardLayout currentPath="/dashboard/songs">
+        <>
             <LiveContiWorkspace
-                initialSongs={songs}
+                initialSongs={songs.map((song) => ({ ...song, data_xml: null }))}
                 initialSetlists={setlists.map(({ songs: _songs, ...row }) => {
                     void _songs;
                     return row;
@@ -43,6 +42,6 @@ export default async function SongsPage({ searchParams }: SongsPageProps) {
                 initialScreen={screen}
                 initialSetlistId={setlistId}
             />
-        </DashboardLayout>
+        </>
     );
 }
