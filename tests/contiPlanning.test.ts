@@ -88,7 +88,7 @@ test('참석 확정·불참·대체 요청이 배치 상태와 요청 목록에 
 
     const absence = leaderView.requests.find((item) => item.source === 'alert')!;
     assert.equal(absence.kind, 'absence');
-    assert.equal(absence.kindLabel, '결석');
+    assert.equal(absence.kindLabel, '불참 알림');
     assert.equal(absence.author, '한믿음');
     assert.equal(absence.context, '10/18 주일 2부 예배');
     assert.equal(absence.canResolve, true, '관리자는 긴급 요청을 마감할 수 있다');
@@ -210,4 +210,21 @@ test('팀 배치 주일은 지난 1개와 다가오는 3개를 고른다', () =>
     assert.deepEqual(pickServices(services, TODAY).map((item) => item.date), ['2026-10-11', '2026-10-18', '2026-10-25', '2026-11-01']);
     assert.deepEqual(pickServices(services, '2026-12-01').map((item) => item.date), ['2026-10-18', '2026-10-25', '2026-11-01', '2026-11-08'], '다가오는 주일이 없으면 최근 것들');
     assert.deepEqual(pickServices(services.slice(0, 2), TODAY).map((item) => item.date), ['2026-09-27', '2026-10-04']);
+});
+
+test('겹치는 시간의 다른 일정에 배치된 사람에게는 지원 버튼을 보여주지 않는다', () => {
+    const { state: base, eventId, slots } = seed();
+    // 주일 예배(11:00-12:10)와 겹치는 리허설(10:00-11:30)에 최요셉을 배치
+    let state = send(base, 'u-lead', {
+        type: 'event.save',
+        input: { title: '예배 전 리허설', kind: 'rehearsal', startsAt: '2026-10-18T10:00:00+09:00', endsAt: '2026-10-18T11:30:00+09:00', location: '본당', notes: '' },
+    });
+    const rehearsalId = state.events.find((event) => event.title === '예배 전 리허설')!.id;
+    state = send(state, 'u-lead', { type: 'slot.save', eventId: rehearsalId, role: 'guitar', memberId: 'u-guitar2' });
+
+    const vocal = (userId: string) => view(state, userId).services[0].assignments.find((item) => item.role === 'vocal')!;
+    assert.equal(vocal('u-guitar2').canVolunteer, false, '겹치는 리허설에 배치된 최요셉은 지원할 수 없다 (규칙과 동일)');
+    assert.equal(vocal('u-vocal').canVolunteer, true, '어디에도 배치되지 않은 이소망은 지원할 수 있다');
+    assert.throws(() => send(state, 'u-guitar2', { type: 'slot.volunteer', eventId, slotId: slots.vocal }), /겹치는 일정/);
+    assert.doesNotThrow(() => send(state, 'u-vocal', { type: 'slot.volunteer', eventId, slotId: slots.vocal }));
 });

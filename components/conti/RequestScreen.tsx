@@ -128,6 +128,7 @@ function RequestRow({ request, expanded, onToggle }: { request: RequestItem; exp
                 <button type="button" onClick={onToggle} aria-expanded={expanded} className="block w-full text-left">
                     <Eyebrow>
                         {request.kindLabel} · {request.context}
+                        {request.status === 'reviewing' && <span className="ml-1 text-orange-600 dark:text-orange-300">· {request.statusLabel}</span>}
                         {request.mine && <span className="ml-1 text-primary">· 내 요청</span>}
                     </Eyebrow>
                     <p className={cn('mt-0.5 text-[15px] font-medium leading-snug', request.done ? cn('line-through decoration-1', sub) : ink)}>{request.title}</p>

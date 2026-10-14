@@ -339,7 +339,7 @@ export default function LiveContiWorkspace(props: Props) {
                         콘티 마감 알림 목업 보기 →
                     </Link>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                     {source.teams.length > 1 && (
                         <label className="sr-only" htmlFor="conti-team">
                             팀 선택

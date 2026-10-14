@@ -3,7 +3,7 @@
  * 순수 함수만 있어 서버·브라우저·테스트 어디서나 같은 결과를 냅니다.
  */
 
-import { requestKinds, type PlanningCommand, type PlanningNotification, type PlanningState, type SetlistRequest, type TeamSchedule, type UrgentAlert } from '@/types/planning';
+import { requestKinds, requestStatuses, type PlanningCommand, type PlanningNotification, type PlanningState, type SetlistRequest, type TeamSchedule, type UrgentAlert } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { canManagePlanning } from '@/types/planning';
 import { diffDays, relativeTime, seoulDateTime, type ContiSetlist } from './model';
@@ -86,6 +86,8 @@ export interface RequestItem {
     ago: string;
     done: boolean;
     status: SetlistRequest['status'];
+    /** 접수 · 확인 중 · 완료 (일정·요청 화면과 같은 이름) */
+    statusLabel: string;
     replies: RequestReply[];
     mine: boolean;
     canReply: boolean;
@@ -182,7 +184,8 @@ export interface BuildInput {
 
 export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount'>;
 
-const ALERT_KIND_LABEL: Record<UrgentAlert['kind'], string> = { absence: '결석', substitute: '대체 요청', notice: '긴급 안내' };
+/** 일정·요청 화면(SchedulePanel)과 같은 이름을 씁니다. */
+const ALERT_KIND_LABEL: Record<UrgentAlert['kind'], string> = { absence: '불참 알림', substitute: '대체 인원 요청', notice: '긴급 공지' };
 
 export function buildPlanningView(input: BuildInput): BuiltPlanning {
     const { state, members, userId, today, now } = input;
@@ -194,12 +197,12 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
 
     const live = state.events.filter((event) => !event.cancelled);
     const openAlert = (eventId: string, slotId: string) => state.alerts.some((alert) => alert.eventId === eventId && alert.slotId === slotId && !alert.resolvedAt);
-    /** 같은 일정의 다른 자리에 이미 배치된 사람은 지원할 수 없습니다 (일정·요청 규칙과 동일). */
+    /** 겹치는 시간의 다른 일정(또는 같은 일정의 다른 자리)에 이미 배치된 사람은 지원할 수 없습니다 (lib/planning 의 available 과 같은 규칙). */
+    const overlaps = (a: TeamSchedule, b: TeamSchedule) => Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
+    const placedElsewhere = (event: TeamSchedule, slot: TeamSchedule['slots'][number]) =>
+        live.some((other) => overlaps(other, event) && other.slots.some((item) => item.id !== slot.id && item.memberId === userId && item.attendance !== 'absent'));
     const canVolunteerFor = (event: TeamSchedule, slot: TeamSchedule['slots'][number]) =>
-        Boolean(me) &&
-        slot.memberId !== userId &&
-        (!slot.memberId || slot.attendance === 'absent' || openAlert(event.id, slot.id)) &&
-        !event.slots.some((other) => other.id !== slot.id && other.memberId === userId && other.attendance !== 'absent');
+        Boolean(me) && slot.memberId !== userId && (!slot.memberId || slot.attendance === 'absent' || openAlert(event.id, slot.id)) && !placedElsewhere(event, slot);
 
     const services: ServiceDay[] = live
         .filter((event) => event.kind === 'worship')
@@ -277,6 +280,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
             ago: ago(request.createdAt),
             done: request.status === 'resolved',
             status: request.status,
+            statusLabel: requestStatuses[request.status],
             replies: request.replies.map((reply) => ({ id: reply.id, author: nameOf(reply.authorId), text: reply.body, ago: ago(reply.createdAt), mine: reply.authorId === userId })),
             mine: request.authorId === userId,
             canReply: canResolve || request.authorId === userId,
@@ -308,6 +312,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                 ago: ago(alert.createdAt),
                 done: Boolean(alert.resolvedAt),
                 status: alert.resolvedAt ? 'resolved' : 'open',
+                statusLabel: requestStatuses[alert.resolvedAt ? 'resolved' : 'open'],
                 replies: [],
                 mine: alert.authorId === userId,
                 canReply: false,

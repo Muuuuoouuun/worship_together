@@ -70,7 +70,7 @@ export default function TeamScreen({ openOrder }: { openOrder: (id: string) => v
                 </>
             )}
 
-            {service && <WeekEvents date={service.date} />}
+            {planning.ready && <WeekEvents date={service?.date ?? today} />}
         </div>
     );
 }
