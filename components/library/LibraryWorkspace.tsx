@@ -163,11 +163,13 @@ export default function LibraryWorkspace({
                 throw new Error('예배 제목, 일시, 곡 순서를 확인해주세요.');
             }
             const now = new Date().toISOString();
+            const requestedId = String(data.get('setlistId') ?? '').trim();
+            const id = requestedId && !current.setlists.some((setlist) => setlist.id === requestedId) ? requestedId : createClientId();
             return {
                 ...current,
                 setlists: [
                     {
-                        id: createClientId(),
+                        id,
                         team_id: teamId,
                         title,
                         theme: String(data.get('theme') ?? '').trim() || null,

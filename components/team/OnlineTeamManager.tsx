@@ -388,7 +388,7 @@ export default function OnlineTeamManager({
                         </label>
                         <Link
                             className={`${button} bg-primary text-primary-foreground hover:bg-primary/90 font-bold`}
-                            href={`/dashboard/songs?team=${team.id}`}
+                            href={`/dashboard/songs/library?team=${team.id}`}
                         >
                             <Sparkles size={16} />
                             <span>이 팀의 콘티 준비</span>
