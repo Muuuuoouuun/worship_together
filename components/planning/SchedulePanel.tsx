@@ -1376,6 +1376,11 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
     const [createFormOpen, setCreateFormOpen] = useState(false);
     // 처음 펼칠 때 폼을 만들고, 접어도 입력 중인 내용을 유지합니다 (Disclosure 와 같은 방식).
     const [createFormMounted, setCreateFormMounted] = useState(false);
+    // 달력에서 날짜를 골라 연 새 일정 폼. 모바일에서는 달력 아래(하단 탭 뒤)에 열리므로 화면 안으로 끌어옵니다.
+    const dateFormRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (createEventDate) dateFormRef.current?.scrollIntoView({ block: 'nearest' });
+    }, [createEventDate]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -2009,7 +2014,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
 
                 {/* 캘린더에서 날짜 '+' 클릭 시 빠른 일정 생성 */}
                 {createEventDate && (
-                    <section aria-label="새 일정 등록" className="space-y-4 rounded-3xl border border-border bg-card p-5 animate-in fade-in sm:p-6">
+                    <section ref={dateFormRef} aria-label="새 일정 등록" className="scroll-mb-36 scroll-mt-[calc(var(--app-header-h,0px)+1rem)] space-y-4 rounded-3xl border border-border bg-card p-5 animate-in fade-in sm:p-6 lg:scroll-mb-6">
                         <header className="flex items-start justify-between gap-3">
                             <div>
                                 <p className={eyebrow}>새 일정</p>
