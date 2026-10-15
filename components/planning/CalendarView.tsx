@@ -59,8 +59,6 @@ export default function CalendarView({
 }) {
     const today = useMemo(() => new Date(), []);
     const [currentDate, setCurrentDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
-    // 마지막으로 누른 날짜. 모바일에서는 이 날의 일정을 달력 아래에 모두 보여 줍니다.
-    const [pickedDate, setPickedDate] = useState<string | null>(null);
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth() + 1;
@@ -135,22 +133,17 @@ export default function CalendarView({
         return map;
     }, [events]);
 
-    /** 날짜를 고릅니다. 일정이 있으면 (이미 그 날 일정을 보고 있지 않은 한) 첫 일정을 열고, 비어 있으면 관리자는 새 일정을 등록합니다. */
+    /** 날짜를 고릅니다. 일정이 있으면 (이미 그 날 일정 하나를 보고 있지 않은 한) 첫 일정을 열고, 비어 있으면 관리자는 새 일정을 등록합니다. */
     function openDay(dateStr: string, dayEvents: TeamSchedule[], isCurrentMonth: boolean) {
-        setPickedDate(dateStr);
         if (dayEvents.length > 0) {
-            if (selectedDate !== dateStr) onSelectEvent(dayEvents[0]);
+            if (!dayEvents.some((ev) => ev.id === selectedEventId)) onSelectEvent(dayEvents[0]);
         } else if (manager && isCurrentMonth) {
             onAddEventOnDate(dateStr);
         }
     }
 
-    function pickEvent(dateStr: string, event: TeamSchedule) {
-        setPickedDate(dateStr);
-        onSelectEvent(event);
-    }
-
-    const focusDate = pickedDate ?? selectedDate;
+    // 모바일 '이 날 일정' 목록은 열린 일정의 날짜를 따릅니다 (검정 원과 같은 날).
+    const focusDate = selectedDate;
     const focusVisible = focusDate ? calendarDays.some((day) => day.dateStr === focusDate) : false;
     const focusEvents = focusDate && focusVisible ? (eventsByDate.get(focusDate) ?? []) : [];
 
@@ -203,7 +196,7 @@ export default function CalendarView({
 
                 {calendarDays.map((day) => {
                     const dayEvents = eventsByDate.get(day.dateStr) ?? [];
-                    const isSelected = focusDate === day.dateStr;
+                    const isSelected = selectedDate === day.dateStr;
                     const overflow = dayEvents.length > MAX_DOTS ? dayEvents.length - MAX_DOTS : 0;
 
                     return (
@@ -239,7 +232,6 @@ export default function CalendarView({
                                         aria-label={`${day.dateStr} 새 일정 등록`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setPickedDate(day.dateStr);
                                             onAddEventOnDate(day.dateStr);
                                         }}
                                         className="hidden size-6 items-center justify-center rounded-full text-muted-foreground opacity-0 transition hover:bg-muted hover:text-brand focus-visible:opacity-100 group-hover:opacity-100 sm:flex"
@@ -257,7 +249,7 @@ export default function CalendarView({
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            pickEvent(day.dateStr, ev);
+                                            onSelectEvent(ev);
                                         }}
                                         className="flex h-3 w-2.5 items-center justify-center"
                                         title={`${ev.title} (${kst(ev.startsAt).time})`}
@@ -296,7 +288,7 @@ export default function CalendarView({
                                             type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                pickEvent(day.dateStr, ev);
+                                                onSelectEvent(ev);
                                             }}
                                             className={cn(
                                                 'w-full rounded-lg px-1.5 py-1 text-left text-[11px] text-foreground transition hover:brightness-95 dark:hover:brightness-125',
@@ -360,7 +352,7 @@ export default function CalendarView({
                                     <button
                                         type="button"
                                         aria-current={isCurrent ? 'true' : undefined}
-                                        onClick={() => pickEvent(focusDate, ev)}
+                                        onClick={() => onSelectEvent(ev)}
                                         className="flex min-h-12 w-full items-center gap-3 py-2 text-left"
                                     >
                                         <span className={cn('size-2 shrink-0 rounded-full', dotClass(ev, userId))} aria-hidden="true" />

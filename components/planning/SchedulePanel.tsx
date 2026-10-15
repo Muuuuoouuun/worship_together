@@ -260,8 +260,9 @@ function EventForm({ event, defaultDate, ...actions }: Actions & { event?: TeamS
             <Field label="제목 (필수)"><input name="title" required defaultValue={event?.title ?? ''} className={control} /></Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="시작 (필수)"><input type="datetime-local" step="60" name="startsAt" required defaultValue={defaultStart} className={control} /></Field>
-            <Field label="종료 (필수)"><input type="datetime-local" step="60" name="endsAt" required defaultValue={defaultEnd} className={control} /></Field>
+            {/* key: 달력에서 다른 날을 고르면 날짜 칸만 새 날짜로 다시 채우고, 제목·장소 등 입력 중인 내용은 그대로 둡니다. */}
+            <Field label="시작 (필수)"><input key={defaultStart} type="datetime-local" step="60" name="startsAt" required defaultValue={defaultStart} className={control} /></Field>
+            <Field label="종료 (필수)"><input key={defaultEnd} type="datetime-local" step="60" name="endsAt" required defaultValue={defaultEnd} className={control} /></Field>
         </div>
         <p className="text-xs text-muted-foreground">모든 시간은 한국 시간(KST, UTC+09:00)입니다.</p>
         {!event ? (
@@ -1849,7 +1850,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
         <div className="space-y-5">
             {/* 일정 만들기 도구 (관리자) */}
             {manager ? (
-                <div className="space-y-4">
+                <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap items-center gap-2">
                         <Button type="button" size="sm" aria-expanded={createFormOpen} aria-controls={createFormMounted ? createFormId : undefined} onClick={() => { setCreateFormMounted(true); setCreateFormOpen(open => !open); }}>
                             <Plus strokeWidth={2.25} />
@@ -2023,7 +2024,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                 <X size={18} />
                             </button>
                         </header>
-                        <EventForm key={createEventDate} {...actions} defaultDate={createEventDate} />
+                        <EventForm {...actions} defaultDate={createEventDate} />
                     </section>
                 )}
 
