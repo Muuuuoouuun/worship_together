@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
+import { previewRotationBatchSkips } from '@/lib/planning';
 import { canManagePlanning, planningDate, type PlanningPanelProps, type RotationGroup, type RotationTeam } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { ArrowLeftRight, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Users } from 'lucide-react';
@@ -168,7 +169,12 @@ export default function RotationPanel({ state, members, userId, busy, onCommand 
                             upcomingEvents={upcomingEvents}
                             onStep={(direction) => run({ type: 'rotation.step', rotationId: rot.id, direction }, '로테이션 순번을 변경했습니다.')}
                             onApply={(eventId) => run({ type: 'rotation.apply', rotationId: rot.id, eventId }, '로테이션 배정을 일정에 적용했습니다.')}
-                            onBatchApply={(eventIds) => run({ type: 'rotation.batchApply', rotationId: rot.id, eventIds }, `${eventIds.length}개 일정에 로테이션을 순차 일괄 배정했습니다.`)}
+                            onBatchApply={(eventIds) => {
+                                const command = { type: 'rotation.batchApply' as const, rotationId: rot.id, eventIds };
+                                // 겹치는 일정 등으로 빠지는 팀원을 완료 메시지에 함께 알립니다. (같은 내용이 완료 알림에도 남습니다)
+                                const skipped = previewRotationBatchSkips(state, members, userId, command);
+                                return run(command, `${eventIds.length}개 일정에 로테이션을 순차 일괄 배정했습니다.${skipped ? ` ${skipped}` : ''}`);
+                            }}
                             onRemove={() => run({ type: 'rotation.remove', rotationId: rot.id }, '로테이션 그룹을 삭제했습니다.')}
                         />
                     ))}

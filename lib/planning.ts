@@ -126,6 +126,20 @@ export function planningForViewer(state: PlanningState, members: TeamMember[], u
     return { ...state, requests: state.requests.filter(item => item.authorId === userId || item.leaderId === userId || owner), notifications: state.notifications.filter(item => item.recipientIds.includes(userId)) };
 }
 
+const BATCH_SKIP_MARK = ' · 빠진 팀원 ';
+
+/** 로테이션 일괄 배정을 같은 규칙으로 미리 적용해 완료 메시지에 붙일 '빠진 팀원 N명: …' 안내를 돌려줍니다. 빠질 사람이 없거나 적용할 수 없으면 ''. */
+export function previewRotationBatchSkips(state: PlanningState, members: TeamMember[], userId: string, command: Extract<PlanningCommand, { type: 'rotation.batchApply' }>): string {
+    try {
+        const next = applyPlanningCommand(state, members, userId, command);
+        const body = next.notifications.find(item => !state.notifications.some(old => old.id === item.id))?.body ?? '';
+        const index = body.indexOf(BATCH_SKIP_MARK);
+        return index >= 0 ? body.slice(index + 3) : '';
+    } catch {
+        return '';
+    }
+}
+
 /** Shared local-demo/server domain rules; the server supplies authenticated identity and roster. */
 export function applyPlanningCommand(previous: PlanningState, members: TeamMember[], userId: string, input: PlanningCommand | unknown): PlanningState {
     const actor = members.find(member => member.userId === userId);
@@ -138,8 +152,9 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
     const now = new Date().toISOString();
     const managers = members.filter(member => member.permission === 'owner' || member.role === 'leader').map(member => member.userId);
     const manage = () => { if (!canManagePlanning(members, userId)) throw new Error('인도자 또는 팀 관리자만 변경할 수 있습니다.'); };
-    const notify = (recipientIds: string[], title: string, text: string, target: 'requests' | 'schedule' | 'rotation', entityId: string, urgent = false) => {
-        const recipients = [...new Set(recipientIds)].filter(recipient => recipient !== userId && members.some(member => member.userId === recipient));
+    /** includeSelf: 처리한 본인도 확인해야 할 결과(예: 일괄 배정에서 빠진 팀원)일 때 */
+    const notify = (recipientIds: string[], title: string, text: string, target: 'requests' | 'schedule' | 'rotation', entityId: string, urgent = false, includeSelf = false) => {
+        const recipients = [...new Set(recipientIds)].filter(recipient => (includeSelf || recipient !== userId) && members.some(member => member.userId === recipient));
         if (recipients.length) state.notifications.unshift({ id: createClientId(), title, body: text, target, entityId, urgent, recipientIds: recipients, readBy: [], createdAt: now });
     };
     const everyone = members.map(member => member.userId);
@@ -563,9 +578,12 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (event.slots.length > 0 && event.slots.some(s => s.memberId !== null)) throw new Error('이미 배정된 인원이 있습니다. 배분 초기화 후 다시 시도해주세요.');
             const eventDate = planningDay(event.startsAt);
             const blocked = new Set((state.blockedDates ?? []).filter(b => b.date === eventDate).map(b => b.memberId));
+            // 이 일정보다 앞선 일정 중 가장 가까운 것을 먼저 쓰고, 앞선 일정이 없을 때만 이후 일정을 씁니다.
+            const start = Date.parse(event.startsAt);
+            const isBefore = (e: TeamSchedule) => Date.parse(e.startsAt) < start;
             const candidates = state.events
                 .filter(e => e.id !== event.id && !e.cancelled && e.kind === event.kind && e.slots.some(s => s.memberId))
-                .sort((a, b) => Math.abs(Date.parse(event.startsAt) - Date.parse(a.startsAt)) - Math.abs(Date.parse(event.startsAt) - Date.parse(b.startsAt)));
+                .sort((a, b) => Number(isBefore(b)) - Number(isBefore(a)) || Math.abs(start - Date.parse(a.startsAt)) - Math.abs(start - Date.parse(b.startsAt)));
             if (candidates.length === 0) throw new Error('복사할 수 있는 이전 일정이 없습니다.');
             const source = candidates[0];
             if (event.slots.length === 0) {
@@ -699,8 +717,9 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                     id: createClientId(),
                     title,
                     kind: 'worship',
-                    startsAt,
-                    endsAt,
+                    // 다른 일정과 같은 UTC 형식으로 저장합니다.
+                    startsAt: new Date(startMs).toISOString(),
+                    endsAt: new Date(endMs).toISOString(),
                     location: location ?? '',
                     notes: '',
                     cancelled: false,
@@ -801,16 +820,20 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             const totalSteps = rot.cycleType === 'team' ? teams.length : individuals.length;
             if (totalSteps === 0) throw new Error('로테이션에 등록된 조 또는 팀원이 없습니다.');
             let appliedEventsCount = 0;
+            // 들어갈 수 있는 사람만 배정하고, 빠진 팀원과 이유는 완료 알림에 남깁니다.
+            const skipped: string[] = [];
             for (const eventId of command.eventIds) {
                 const event = eventById(eventId);
                 const step = rot.currentStep % totalSteps;
                 const activeTeam = rot.cycleType === 'team' ? teams[step] : undefined;
                 const assignees = rot.cycleType === 'team' ? activeTeam?.memberIds ?? [] : individuals.length ? [individuals[step]] : [];
                 if (!assignees.length) continue;
+                const day = planningDay(event.startsAt);
+                const skip = (name: string, reason: string) => skipped.push(`${name}(${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))} ${reason})`);
                 for (const memberId of assignees) {
                     const member = members.find(m => m.userId === memberId);
-                    if (!member) continue;
-                    try { available(event, memberId); } catch { continue; }
+                    if (!member) { skip('이전 팀원', '팀을 나감'); continue; }
+                    try { available(event, memberId); } catch { skip(member.name, '겹치는 일정'); continue; }
                     const roleToAssign = rot.targetRole !== 'all' ? rot.targetRole : member.role;
                     const vacantSlot = event.slots.find(s => s.memberId === null && (s.role === roleToAssign || s.role === 'member'));
                     if (vacantSlot) {
@@ -821,12 +844,14 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                         closeSlotAlerts(event.id, vacantSlot.id);
                     } else if (event.slots.length < 50) {
                         event.slots.push({ id: createClientId(), role: roleToAssign, memberId, attendance: 'pending', volunteers: [] });
+                    } else {
+                        skip(member.name, '인원 한도');
                     }
                 }
                 rot.currentStep = (rot.currentStep + 1) % totalSteps;
                 appliedEventsCount++;
             }
-            notify(everyone, '로테이션 일괄 배정이 완료되었어요', `${rot.name} · ${appliedEventsCount}개 일정`, 'schedule', command.eventIds[0]);
+            notify(everyone, '로테이션 일괄 배정이 완료되었어요', `${rot.name} · ${appliedEventsCount}개 일정${skipped.length ? `${BATCH_SKIP_MARK}${skipped.length}명: ${skipped.join(', ')}` : ''}`, 'schedule', command.eventIds[0], false, skipped.length > 0);
             break;
         }
         case 'member.blockDate': {
