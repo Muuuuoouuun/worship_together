@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AlarmClock, Bell, BellRing, Check, CircleCheck, Clock, EyeOff, Hand, Inbox, ListMusic, Moon, ShieldAlert, Smartphone, Undo2, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { MEMBERS, SETLISTS, member } from './mockData';
+
+/** 목업 팀원 id → 아바타에 넘길 이름·색 */
+const person = (id: string | null | undefined) => {
+    const found = member(id);
+    return { name: found?.name ?? null, tone: found?.tone };
+};
 import { addDays, dayOf, diffDays, md, monthOf, weekLabel, weekday, type Tone } from './model';
-import { Avatar, AvatarStack, Eyebrow, RoundIconButton, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_ICON, body, chip, ink, line, selected, sub, todayText } from './ui';
+import { Avatar, AvatarStack, Eyebrow, RoundIconButton, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_ICON, body, chip, ink, line, selected, sub, todayText, tabOn, tabOff, ringCard, attentionText, divide } from './ui';
 
 /**
  * 콘티 마감 알림 · 인도자 콘티 요청 목업 (docs/setlist-deadline-notifications.md).
@@ -54,12 +61,10 @@ const TABS: { id: DeadlineView; label: string }[] = [
     { id: 'settings', label: '마감 설정' },
     { id: 'alerts', label: '알림' },
 ];
-const TOP_GLOW: CSSProperties = {
-    backgroundImage: 'radial-gradient(90% 100% at 85% 0%, color-mix(in oklab, var(--primary) 8%, transparent), transparent 70%)',
-};
+
 const pill = cn('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs transition active:scale-95 disabled:opacity-40', line, ink);
 const pillOn = cn('inline-flex h-8 items-center gap-1.5 rounded-full border border-transparent px-3 text-xs font-semibold transition active:scale-95', selected);
-const mainButton = cn('flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99] disabled:opacity-40', selected);
+const mainButton = cn(buttonVariants({ size: 'lg' }), 'w-full text-sm');
 const bubble = cn('rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[13px] leading-relaxed', chip, body);
 
 function tuesdayBefore(date: string): string {
@@ -77,29 +82,28 @@ export default function DeadlineMockup({ initialView = 'member', initialPhase = 
     const shared = { phase, nudges, myNudge, eta, openAlerts: () => setView('alerts') };
 
     return (
-        <div className="relative isolate -mx-3 break-keep bg-white ring-black/5 dark:bg-neutral-900 dark:ring-white/10 sm:mx-0 sm:rounded-[2rem] sm:shadow-sm sm:ring-1">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 sm:rounded-t-[2rem]" style={TOP_GLOW} />
-            <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 border-b border-neutral-100 bg-white/90 backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-900/90 sm:rounded-t-[2rem] lg:top-0">
-                <div role="tablist" aria-label="목업 화면" className="no-scrollbar flex gap-5 overflow-x-auto px-5 sm:px-8">
+        <div className="relative isolate max-w-3xl break-keep">
+            <div className="sticky top-[var(--app-header-h,0px)] z-20 -mx-4 border-b border-border/70 bg-background/95 px-4 sm:mx-0 sm:px-0 lg:top-0">
+                <div role="tablist" aria-label="목업 화면" className="no-scrollbar flex gap-5 overflow-x-auto">
                     {TABS.map((tab) => {
                         const active = view === tab.id;
                         return (
-                            <button key={tab.id} type="button" role="tab" aria-selected={active} onClick={() => setView(tab.id)} className={cn('relative -mb-px flex h-12 shrink-0 items-center gap-1.5 border-b-2 text-sm transition', active ? cn('border-neutral-900 font-semibold dark:border-white', ink) : 'border-transparent text-neutral-500 dark:text-neutral-400')}>
+                            <button key={tab.id} type="button" role="tab" aria-selected={active} onClick={() => setView(tab.id)} className={cn('relative -mb-px flex h-12 shrink-0 items-center gap-1.5 border-b-2 text-sm transition', active ? tabOn : tabOff)}>
                                 {tab.label}
-                                {tab.id === 'leader' && nudges.length > 0 && phase !== 'done' && <span className="flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-semibold tabular-nums text-white">{nudges.length}</span>}
+                                {tab.id === 'leader' && nudges.length > 0 && phase !== 'done' && <span className="flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold tabular-nums text-secondary-foreground">{nudges.length}</span>}
                             </button>
                         );
                     })}
                 </div>
             </div>
 
-            <div className="space-y-7 px-5 pb-10 pt-6 sm:px-8 sm:pt-8">
+            <div className="space-y-7 pb-10 pt-6">
                 {(view === 'member' || view === 'leader') && (
                     <div className="space-y-2">
                         <Eyebrow>시간을 바꿔 보기 · 지금 {md(PHASES[phase].date)} ({weekday(PHASES[phase].date)}) {PHASES[phase].time}</Eyebrow>
                         <div role="group" aria-label="시간 상태" className={cn('flex gap-1 rounded-full p-1', chip)}>
                             {(Object.keys(PHASES) as DeadlinePhase[]).map((key) => (
-                                <button key={key} type="button" aria-pressed={phase === key} onClick={() => setPhase(key)} className={cn('h-8 flex-1 rounded-full text-xs transition', phase === key ? cn(selected, 'font-semibold') : sub)}>
+                                <button key={key} type="button" aria-pressed={phase === key} onClick={() => setPhase(key)} className={cn('h-8 flex-1 rounded-full text-xs transition', phase === key ? 'bg-card font-semibold text-foreground shadow-xs' : sub)}>
                                     {PHASES[key].label}
                                 </button>
                             ))}
@@ -128,7 +132,7 @@ function Header({ eyebrow, phase, openAlerts }: { eyebrow: string; phase: Deadli
                     <RoundIconButton label="알림" onClick={openAlerts}>
                         <Bell size={18} />
                     </RoundIconButton>
-                    {phase !== 'before' && <span className="absolute right-2 top-2 size-2 rounded-full bg-orange-500 ring-2 ring-white dark:ring-neutral-900" aria-hidden="true" />}
+                    {phase !== 'before' && <span className={cn('absolute right-2 top-2 size-2 rounded-full bg-secondary', ringCard)} aria-hidden="true" />}
                 </span>
             }
         />
@@ -149,10 +153,10 @@ function WeekStrip({ phase }: { phase: DeadlinePhase }) {
                 return (
                     <li key={date} className="flex flex-col items-center gap-2 py-1">
                         <span className={cn('text-xs', isNow ? cn('font-semibold', ink) : sub)}>{weekday(date)}</span>
-                        <span className={cn('flex size-9 items-center justify-center rounded-xl text-[15px] tabular-nums', isNow ? cn(selected, 'font-semibold') : isDeadline ? cn('ring-1 ring-inset ring-orange-300 dark:ring-orange-400/50', PHASES[phase].text) : isService ? todayText : past ? 'text-neutral-300 dark:text-neutral-600' : body)}>
+                        <span className={cn('flex size-9 items-center justify-center rounded-xl text-[15px] tabular-nums', isNow ? cn(selected, 'font-semibold') : isDeadline ? cn('ring-1 ring-inset ring-secondary/40', PHASES[phase].text) : isService ? todayText : past ? 'text-muted-foreground/40' : body)}>
                             {dayOf(date)}
                         </span>
-                        <span className={cn('h-3 text-[10px] font-medium', isDeadline ? 'text-orange-600 dark:text-orange-400' : isService ? 'text-primary' : 'text-transparent')}>{isDeadline ? '마감' : isService ? '예배' : '·'}</span>
+                        <span className={cn('h-3 text-[10px] font-medium', isDeadline ? attentionText : isService ? 'text-brand' : 'text-transparent')}>{isDeadline ? '마감' : isService ? '예배' : '·'}</span>
                     </li>
                 );
             })}
@@ -161,7 +165,7 @@ function WeekStrip({ phase }: { phase: DeadlinePhase }) {
 }
 
 function AnonymousAvatar({ size = 'sm' }: { size?: 'xs' | 'sm' | 'md' }) {
-    return <span title="이름 숨김" className={cn('inline-flex shrink-0 items-center justify-center rounded-full font-semibold ring-2 ring-white dark:ring-neutral-900', chip, sub, size === 'xs' ? 'size-5 text-[9px]' : size === 'sm' ? 'size-7 text-[10px]' : 'size-9 text-[11px]')}>?</span>;
+    return <span title="이름 숨김" className={cn('inline-flex shrink-0 items-center justify-center rounded-full font-semibold', ringCard, chip, sub, size === 'xs' ? 'size-5 text-[9px]' : size === 'sm' ? 'size-7 text-[10px]' : 'size-9 text-[11px]')}>?</span>;
 }
 
 function WaitingAvatars({ nudges }: { nudges: Nudge[] }) {
@@ -169,7 +173,7 @@ function WaitingAvatars({ nudges }: { nudges: Nudge[] }) {
     const hidden = nudges.length - named.length;
     return (
         <span className="flex items-center -space-x-1">
-            <AvatarStack ids={named} max={3} size="xs" />
+            <AvatarStack people={named.map(person)} max={3} size="xs" />
             {hidden > 0 && <AnonymousAvatar size="xs" />}
         </span>
     );
@@ -208,13 +212,13 @@ function SetlistCard({ phase, nudges, title, children }: { phase: DeadlinePhase;
             )}
             {children}
 
-            <div className="mt-4 flex items-center justify-between gap-3 border-t border-neutral-900/10 pt-3.5 dark:border-white/10">
+            <div className="mt-4 flex items-center justify-between gap-3 border-t border-foreground/10 pt-3.5">
                 <span className={cn('inline-flex items-center gap-2 text-xs', body)}>
                     {phase === 'done' ? `${SONGS.length}곡 · ${DEADLINE_TEXT} 마감` : nudges.length ? <><WaitingAvatars nudges={nudges} />{nudges.length}명이 기다리는 중</> : '아직 요청 없음'}
                 </span>
                 <span className="inline-flex items-center gap-2">
                     <span className={cn('text-xs', sub)}>담당</span>
-                    <Avatar id={LEADER} size="sm" />
+                    <Avatar {...person(LEADER)} size="sm" />
                     <span className={cn('text-xs font-medium', ink)}>{leader?.name}</span>
                 </span>
             </div>
@@ -234,7 +238,7 @@ function MemberView({ phase, nudges, myNudge, eta, openAlerts, onNudge }: Shared
 
             {etaOption && (
                 <div className={cn('flex gap-3.5 border-b pb-5', line)}>
-                    <Avatar id={LEADER} size="md" />
+                    <Avatar {...person(LEADER)} size="md" />
                     <div className="min-w-0 flex-1">
                         <p className="text-sm leading-snug"><span className={cn('font-semibold', ink)}>{leader?.name}</span><span className={body}>님이 예정 시간을 알려줬어요</span></p>
                         <p className={cn('mt-2', bubble)}>{etaOption.label}</p>
@@ -278,7 +282,7 @@ function NudgeComposer({ onSend }: { onSend: (nudge: { message: string; anonymou
             </div>
             <label className={cn('flex h-11 items-center gap-2 rounded-full border pl-4 pr-1.5', line)}>
                 <span className="sr-only">덧붙일 말</span>
-                <input value={extra} onChange={(event) => setExtra(event.target.value)} maxLength={200} placeholder="덧붙일 말 (선택)" className={cn('min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-neutral-400', ink)} />
+                <input value={extra} onChange={(event) => setExtra(event.target.value)} maxLength={200} placeholder="덧붙일 말 (선택)" className={cn('min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70', ink)} />
             </label>
             <SwitchRow checked={anonymous} onChange={setAnonymous} icon={EyeOff} label="이름 숨기고 보내기" detail="인도자에게 ‘팀원 1명’으로 보여요" />
             <button type="button" className={mainButton} onClick={() => onSend({ message: extra.trim() ? `${preset} ${extra.trim()}` : preset, anonymous })}>
@@ -291,7 +295,7 @@ function NudgeComposer({ onSend }: { onSend: (nudge: { message: string; anonymou
 function SentNudge({ nudge, onCancel }: { nudge: { message: string; anonymous: boolean }; onCancel: () => void }) {
     return (
         <div className="flex gap-3.5 animate-in fade-in duration-150">
-            {nudge.anonymous ? <AnonymousAvatar size="md" /> : <Avatar id={ME} size="md" />}
+            {nudge.anonymous ? <AnonymousAvatar size="md" /> : <Avatar {...person(ME)} size="md" />}
             <div className="min-w-0 flex-1">
                 <p className="text-sm leading-snug"><span className={cn('font-semibold', ink)}>요청을 보냈어요</span>{nudge.anonymous && <span className={sub}> · 이름 숨김</span>}</p>
                 <p className={cn('mt-2', bubble)}>{nudge.message}</p>
@@ -316,8 +320,8 @@ function LeaderView({ phase, nudges, eta, openAlerts, onEta, onConfirm }: Shared
                     <p className={cn('mt-3 text-xs', body)}>팀원 6명에게 알림을 보냈고, 받은 요청 {nudges.length}건은 자동으로 완료됐어요.</p>
                 ) : (
                     <div className="mt-4 flex gap-2">
-                        <button type="button" onClick={onConfirm} className={cn('h-10 flex-1 rounded-xl text-sm font-semibold transition active:scale-[0.99]', selected)}>콘티 작성하기</button>
-                        <button type="button" onClick={onConfirm} className="h-10 flex-1 rounded-xl bg-white/70 text-sm font-medium text-neutral-900 ring-1 ring-neutral-900/10 transition active:scale-[0.99] dark:bg-white/10 dark:text-neutral-50 dark:ring-white/10">곡 제목만 먼저</button>
+                        <button type="button" onClick={onConfirm} className={cn(buttonVariants(), 'flex-1')}>콘티 작성하기</button>
+                        <button type="button" onClick={onConfirm} className={cn(buttonVariants({ variant: 'outline' }), 'flex-1')}>곡 제목만 먼저</button>
                     </div>
                 )}
             </SetlistCard>
@@ -329,7 +333,7 @@ function LeaderView({ phase, nudges, eta, openAlerts, onEta, onConfirm }: Shared
                     <ul>
                         {nudges.map((nudge) => (
                             <li key={nudge.id} className={cn('flex gap-3.5 border-b py-4 last:border-b-0', line)}>
-                                {nudge.from ? <Avatar id={nudge.from} size="md" /> : <AnonymousAvatar size="md" />}
+                                {nudge.from ? <Avatar {...person(nudge.from)} size="md" /> : <AnonymousAvatar size="md" />}
                                 <div className="min-w-0 flex-1">
                                     <p className="text-sm leading-snug"><span className={cn('font-semibold', ink)}>{nudge.from ? member(nudge.from)?.name : '팀원 1명'}</span><span className={sub}> · {nudge.part}</span></p>
                                     <p className={cn('mt-2', bubble)}>{nudge.message}</p>
@@ -357,14 +361,14 @@ function LeaderView({ phase, nudges, eta, openAlerts, onEta, onConfirm }: Shared
 
             <section aria-label="다가오는 콘티 마감" className="space-y-1">
                 <SectionTitle title="다가오는 콘티 마감" />
-                <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                <ul className={divide}>
                     {[
                         { date: SETLIST.date, owner: LEADER, status: PHASES[phase].status, text: PHASES[phase].text },
                         { date: addDays(SETLIST.date, 7), owner: 'm1', status: '미작성', text: sub },
                         { date: addDays(SETLIST.date, 14), owner: 'm2', status: '미작성', text: sub },
                     ].map((item) => (
                         <li key={item.date} className="flex items-center gap-3.5 py-4">
-                            <Avatar id={item.owner} size="md" />
+                            <Avatar {...person(item.owner)} size="md" />
                             <div className="min-w-0 flex-1">
                                 <p className={cn('text-[15px] font-medium', ink)}>{md(item.date)} {SETLIST.service}</p>
                                 <p className={cn('mt-0.5 text-xs tabular-nums', sub)}>마감 {md(tuesdayBefore(item.date))} (화) 23:59</p>
@@ -387,8 +391,8 @@ function SwitchRow({ checked, onChange, icon: Icon, label, detail, children }: {
                 {detail && <p className={cn('mt-0.5 text-xs leading-5', sub)}>{detail}</p>}
                 {children}
             </div>
-            <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} className={cn('relative mt-0.5 h-6 w-10 shrink-0 rounded-full transition', checked ? 'bg-neutral-900 dark:bg-white' : 'bg-neutral-200 dark:bg-neutral-700')}>
-                <span className={cn('absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-all dark:bg-neutral-900', checked ? 'left-[1.125rem]' : 'left-0.5')} />
+            <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} className={cn('relative mt-0.5 h-6 w-10 shrink-0 rounded-full transition', checked ? 'bg-primary' : 'bg-input')}>
+                <span className={cn('absolute top-0.5 size-5 rounded-full bg-card shadow-sm transition-all', checked ? 'left-[1.125rem]' : 'left-0.5')} />
             </button>
         </div>
     );
@@ -551,14 +555,14 @@ function AlertsView() {
             <div role="tablist" aria-label="받는 사람" className={cn('flex gap-6 border-b', line)}>
                 {AUDIENCES.map((item) => {
                     const active = item.id === audience;
-                    return <button key={item.id} type="button" role="tab" aria-selected={active} onClick={() => setAudience(item.id)} className={cn('-mb-px h-11 border-b-2 text-sm transition', active ? cn('border-neutral-900 font-semibold dark:border-white', ink) : cn('border-transparent', sub))}>{item.label}</button>;
+                    return <button key={item.id} type="button" role="tab" aria-selected={active} onClick={() => setAudience(item.id)} className={cn('-mb-px h-11 border-b-2 text-sm transition', active ? tabOn : tabOff)}>{item.label}</button>;
                 })}
             </div>
 
             <section aria-label="잠금 화면 알림" className="rounded-3xl bg-gradient-to-br from-sky-100 via-violet-50 to-orange-50 p-4 dark:from-sky-400/15 dark:via-violet-400/10 dark:to-orange-400/10">
                 <Eyebrow className="px-1">앱을 닫았을 때 · 잠금 화면</Eyebrow>
-                <div className="mt-2 flex gap-3 rounded-2xl bg-white/85 p-3.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur dark:bg-neutral-800/85">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary font-serif text-sm font-bold text-primary-foreground">W</span>
+                <div className="mt-2 flex gap-3 rounded-2xl bg-card/85 p-3.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">W</span>
                     <div className="min-w-0 flex-1">
                         <p className={cn('flex justify-between gap-2 text-[11px]', sub)}><span>Worship Together</span><span>{push.time}</span></p>
                         <p className={cn('mt-0.5 truncate text-[13px] font-semibold', ink)}>{push.who ? `${push.who}${push.message}` : push.message}</p>
@@ -579,9 +583,9 @@ function AlertsView() {
                                 return (
                                     <li key={item.id} className={cn('flex gap-3.5 border-b py-4 last:border-b-0', line)}>
                                         <span className="relative inline-flex shrink-0 self-start">
-                                            {item.actor ? <Avatar id={item.actor} size="md" /> : <span className={cn('flex size-9 items-center justify-center rounded-full', TONE_BLOCK[item.tone])}><item.icon size={16} className={TONE_ICON[item.tone]} aria-hidden="true" /></span>}
+                                            {item.actor ? <Avatar {...person(item.actor)} size="md" /> : <span className={cn('flex size-9 items-center justify-center rounded-full', TONE_BLOCK[item.tone])}><item.icon size={16} className={TONE_ICON[item.tone]} aria-hidden="true" /></span>}
                                             {item.actor && (
-                                                <span className="absolute -bottom-1 -right-1 flex size-[1.125rem] items-center justify-center rounded-full bg-white ring-2 ring-white dark:bg-neutral-900 dark:ring-neutral-900">
+                                                <span className="absolute -bottom-1 -right-1 flex size-[1.125rem] items-center justify-center rounded-full bg-card ring-2 ring-card">
                                                     <span className={cn('flex size-full items-center justify-center rounded-full', TONE_BLOCK[item.tone])}><item.icon size={10} strokeWidth={2.5} className={TONE_ICON[item.tone]} aria-hidden="true" /></span>
                                                 </span>
                                             )}
@@ -589,7 +593,7 @@ function AlertsView() {
                                         <div className="min-w-0 flex-1">
                                             <button type="button" onClick={() => setRead((list) => [...list, item.id])} className="block w-full text-left">
                                                 <p className="text-sm leading-snug">
-                                                    {item.urgent && <span className="font-semibold text-orange-600 dark:text-orange-400">긴급 · </span>}
+                                                    {item.urgent && <span className={cn('font-semibold', attentionText)}>긴급 · </span>}
                                                     {item.who ? <><span className={cn('font-semibold', ink)}>{item.who}</span><span className={body}>{item.message}</span></> : <span className={cn('font-semibold', ink)}>{item.message}</span>}
                                                 </p>
                                                 {item.quote && <p className={cn('mt-2', bubble)}>{item.quote}</p>}
@@ -597,7 +601,7 @@ function AlertsView() {
                                             </button>
                                             {item.action && <button type="button" className={cn(pill, 'mt-2.5 font-semibold')}>{item.action}</button>}
                                         </div>
-                                        <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', unread ? 'bg-orange-500' : 'bg-transparent')} aria-label={unread ? '읽지 않음' : undefined} />
+                                        <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', unread ? 'bg-secondary' : 'bg-transparent')} aria-label={unread ? '읽지 않음' : undefined} />
                                     </li>
                                 );
                             })}

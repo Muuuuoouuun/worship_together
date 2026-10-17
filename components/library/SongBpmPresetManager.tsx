@@ -2,11 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { updateSongBpmPreset } from '@/actions/libraryActions';
-import GlassCard from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Database } from '@/types/schema';
-import { AudioLines, Play, Square, Timer } from 'lucide-react';
+import { Play, Square, Timer } from 'lucide-react';
 
 type Song = Database['public']['Tables']['songs']['Row'];
 
@@ -117,20 +116,17 @@ function SongBpmItem({
                           void saveAction(new FormData(event.currentTarget));
                       }
             }
-            className="rounded-2xl border border-primary/10 bg-card p-4 transition-all hover:border-primary/20"
         >
-            <fieldset disabled={disabled} className="flex flex-col gap-4 disabled:opacity-60">
+            <fieldset disabled={disabled} className="flex flex-col gap-3 disabled:opacity-60 md:flex-row md:items-center md:gap-5">
                 <input type="hidden" name="songId" value={song.id} />
-                <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-bold text-foreground">{song.title}</p>
-                    <p className="text-xs text-muted-foreground">{song.artist ?? '아티스트 미정'}</p>
-                </div>
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <p className="truncate text-[15px] font-medium text-foreground">{song.title}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{song.artist ?? '아티스트 미정'}</p>
+                    </div>
 
-                <div className="flex flex-wrap items-end gap-2.5">
-                    <label className="min-w-[100px] flex-1 space-y-1.5">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                            BPM
-                        </span>
+                    <label className="flex shrink-0 items-center gap-2">
+                        <span className="text-[11px] font-medium text-muted-foreground">BPM</span>
                         <Input
                             name="bpm"
                             type="number"
@@ -143,19 +139,20 @@ function SongBpmItem({
                                 const val = e.target.value === '' ? '' : Number(e.target.value);
                                 setBpm(val);
                             }}
-                            className="h-10 text-center font-bold"
+                            className="w-24 px-2 text-center font-semibold tabular-nums"
                         />
                     </label>
+                </div>
 
+                <div className="flex flex-wrap items-center gap-1.5">
                     <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={handleTap}
-                        className="h-10 px-3 text-xs font-bold text-primary hover:bg-primary/10 active:scale-95"
                         title="박자에 맞춰 연속으로 탭하세요"
                     >
-                        <Timer size={14} />
+                        <Timer size={14} aria-hidden="true" />
                         <span>탭 템포 {tapTimes.length > 1 ? `(${tapTimes.length})` : ''}</span>
                     </Button>
 
@@ -164,14 +161,14 @@ function SongBpmItem({
                         variant={isPlaying ? 'destructive' : 'secondary'}
                         size="sm"
                         onClick={toggleMetronome}
-                        className="h-10 px-3 text-xs font-semibold"
                         title="메트로놈 비프음 미리듣기"
                     >
-                        {isPlaying ? <Square size={14} /> : <Play size={14} />}
+                        {isPlaying ? <Square size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
                         <span>{isPlaying ? '정지' : '듣기'}</span>
                     </Button>
 
-                    <Button type="submit" size="sm" className="h-10 px-4 text-xs font-bold">
+                    {/* 바꾼 값이 있을 때만 검정 알약으로 강조 (목록마다 검정 버튼이 반복되지 않도록) */}
+                    <Button type="submit" size="sm" variant={bpm !== (song.bpm ?? '') ? 'default' : 'outline'} className="ml-auto md:ml-0">
                         BPM 저장
                     </Button>
                 </div>
@@ -186,35 +183,31 @@ export default function SongBpmPresetManager({
     saveAction = updateSongBpmPreset,
 }: SongBpmPresetManagerProps) {
     return (
-        <GlassCard className="border-primary/10">
-            <div className="mb-5 flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-secondary/15 text-secondary shadow-xs">
-                    <AudioLines size={20} />
-                </div>
-                <div>
-                    <h2 className="text-xl font-serif font-bold text-foreground">곡별 BPM 설정</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                        곡의 기본 템포를 설정하고 탭 템포와 메트로놈 비프음으로 직접 확인합니다.
-                    </p>
-                </div>
+        <section className="space-y-4">
+            <div>
+                <h2 className="text-[17px] font-semibold tracking-tight text-foreground">곡별 BPM 설정</h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    곡의 기본 템포를 설정하고 탭 템포와 메트로놈 비프음으로 직접 확인합니다.
+                </p>
             </div>
 
-            <div className="space-y-3">
-                {songs.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-primary/10 px-4 py-8 text-center text-sm text-muted-foreground">
-                        곡을 추가한 뒤 BPM을 저장하세요.
-                    </div>
-                ) : (
-                    songs.map((song) => (
-                        <SongBpmItem
-                            key={song.id}
-                            song={song}
-                            disabled={disabled}
-                            saveAction={saveAction}
-                        />
-                    ))
-                )}
-            </div>
-        </GlassCard>
+            {songs.length === 0 ? (
+                <p className="rounded-3xl border border-dashed border-input px-5 py-10 text-center text-sm text-muted-foreground">
+                    곡을 추가한 뒤 BPM을 저장하세요.
+                </p>
+            ) : (
+                <ul className="divide-y divide-border/70">
+                    {songs.map((song) => (
+                        <li key={song.id} className="py-4 first:pt-1">
+                            <SongBpmItem
+                                song={song}
+                                disabled={disabled}
+                                saveAction={saveAction}
+                            />
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </section>
     );
 }

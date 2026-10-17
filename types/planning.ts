@@ -103,4 +103,15 @@ export type PlanningPanelProps = {
     onCommand: (command: PlanningCommand) => Promise<boolean>;
 };
 export const canManagePlanning = (members: TeamMember[], userId: string) => members.some(member => member.userId === userId && (member.permission === 'owner' || member.role === 'leader'));
-export const planningDate = (iso: string) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+const PLANNING_DATE = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+/** 형식기는 한 번만 만듭니다 (호출마다 만들면 약 40배 느림). 잘못된 날짜는 예전처럼 'Invalid Date'. */
+export const planningDate = (iso: string) => {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? 'Invalid Date' : PLANNING_DATE.format(date);
+};
+/** 저장된 시각은 UTC('Z')와 '+09:00' 형식이 섞여 있어 문자열을 자르지 않고 한국 시간으로 바꿔 씁니다. */
+const kst = (iso: string) => new Date(Date.parse(iso) + 9 * 60 * 60 * 1000).toISOString();
+/** 한국 시간 기준 날짜 YYYY-MM-DD */
+export const planningDay = (iso: string) => kst(iso).slice(0, 10);
+/** 한국 시간 기준 시각 HH:mm */
+export const planningTime = (iso: string) => kst(iso).slice(11, 16);

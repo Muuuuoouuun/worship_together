@@ -11,6 +11,7 @@ import {
     RotateCcw,
     Timer,
 } from 'lucide-react';
+import BeatIndicator from '@/components/session/BeatIndicator';
 import { getStageBeatDurationStyle, useStageBeatPhase } from '@/hooks/useStageBeatPhase';
 import { buildTempoChart, formatStageElapsed, isUsableBpm } from '@/lib/stageTempo';
 import type { SongRow } from '@/types/session';
@@ -25,8 +26,6 @@ interface WorshipPulseViewProps {
     bpm: number | null;
     bpmEnabled: boolean;
     metronomeActive: boolean;
-    activeBeat: number;
-    blinkActive: boolean;
     canToggleTempo: boolean;
     onToggleTempo: () => void;
     sections: string[];
@@ -43,6 +42,10 @@ interface WorshipPulseViewProps {
     deviceCaption: string;
     accentPicker: ReactNode;
     onReturnToStart: () => void;
+    /** 이번 주 Key 표기 (예: 'Key D (원키 C)'). 비어 있으면 곡의 key 만 보여줍니다. */
+    keyLabel?: string;
+    /** 이 곡에서 다음 곡으로 넘어갈 때의 메모 */
+    transitionNote?: string | null;
 }
 
 function useSecondTick(enabled: boolean) {
@@ -62,8 +65,6 @@ export default function WorshipPulseView({
     bpm,
     bpmEnabled,
     metronomeActive,
-    activeBeat,
-    blinkActive,
     canToggleTempo,
     onToggleTempo,
     sections,
@@ -80,6 +81,8 @@ export default function WorshipPulseView({
     deviceCaption,
     accentPicker,
     onReturnToStart,
+    keyLabel,
+    transitionNote,
 }: WorshipPulseViewProps) {
     const tempoBpm = isUsableBpm(bpm) ? bpm : null;
     const phaseRef = useStageBeatPhase<HTMLElement>(metronomeActive ? tempoBpm : null);
@@ -112,7 +115,7 @@ export default function WorshipPulseView({
             <div className="relative flex items-center justify-between gap-3">
                 <p className="min-w-0 truncate text-xs font-semibold tracking-[0.08em] text-(--stage-accent)">
                     진행 중 · {songIndex + 1} / {Math.max(1, songs.length)}곡
-                    {currentSong?.original_key ? ` · ${currentSong.original_key}` : ''}
+                    {keyLabel ? ` · ${keyLabel}` : currentSong?.original_key ? ` · ${currentSong.original_key}` : ''}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
                     <button
@@ -254,12 +257,14 @@ export default function WorshipPulseView({
                                 <span className="text-xs text-white/65">{tempoBpm ? 'BPM · 4/4' : 'BPM 미설정'}</span>
                             </dd>
                             <dd aria-hidden="true" className="flex h-7 items-end gap-1.5">
-                                {[1, 2, 3, 4].map((beat) => (
-                                    <span
-                                        key={beat}
-                                        className={`stage-pulse-bar w-3 rounded-[3px] bg-(--stage-accent) ${beat === 1 ? 'h-7' : 'h-[1.125rem]'} ${metronomeActive && activeBeat === beat && blinkActive ? 'stage-pulse-bar--on' : ''}`}
-                                    />
-                                ))}
+                                <BeatIndicator bpm={bpm} enabled={metronomeActive}>
+                                    {(activeBeat, blinkActive) => [1, 2, 3, 4].map((beat) => (
+                                        <span
+                                            key={beat}
+                                            className={`stage-pulse-bar w-3 rounded-[3px] bg-(--stage-accent) ${beat === 1 ? 'h-7' : 'h-[1.125rem]'} ${metronomeActive && activeBeat === beat && blinkActive ? 'stage-pulse-bar--on' : ''}`}
+                                        />
+                                    ))}
+                                </BeatIndicator>
                             </dd>
                             <dd>
                                 <button
@@ -319,6 +324,13 @@ export default function WorshipPulseView({
                             <dd className="line-clamp-2 text-xs text-white/65">{deviceCaption}</dd>
                         </div>
                     </dl>
+
+                    {nextSong && transitionNote ? (
+                        <p className="rounded-2xl border border-(--stage-accent)/40 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold leading-snug text-[#FFF7E8]" data-testid="stage-transition-note">
+                            <span className="mr-1.5 text-xs font-semibold tracking-[0.04em] text-(--stage-accent)">곡 전환</span>
+                            {transitionNote}
+                        </p>
+                    ) : null}
 
                     <button
                         type="button"

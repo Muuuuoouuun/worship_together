@@ -3,6 +3,7 @@
 import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSheetDismiss } from "@/hooks/useSheetDismiss";
 
 interface ModalProps {
   open: boolean;
@@ -23,29 +24,8 @@ function Modal({
   className,
   isBottomSheetOnMobile = true,
 }: ModalProps) {
-  // ESC 키로 닫기
-  React.useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onOpenChange(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onOpenChange]);
-
-  // 스크롤 방지
-  React.useEffect(() => {
-    if (open) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [open]);
+  // Esc 로 닫고(겹친 창이면 맨 위만), 열려 있는 동안 뒤 화면 스크롤을 막습니다.
+  useSheetDismiss(() => onOpenChange(false), open);
 
   if (!open) return null;
 
@@ -65,7 +45,7 @@ function Modal({
       {/* 모달 창 */}
       <div
         className={cn(
-          "relative z-50 w-full max-h-[90dvh] overflow-y-auto border border-border bg-card p-6 shadow-xl transition-all sm:max-w-lg sm:rounded-2xl",
+          "relative z-50 w-full max-h-[90dvh] overflow-y-auto border border-border/70 bg-card p-6 shadow-xl transition-all sm:max-w-lg sm:rounded-3xl",
           isBottomSheetOnMobile
             ? "rounded-t-3xl pb-[calc(env(safe-area-inset-bottom)+1.5rem)] animate-in slide-in-from-bottom duration-200 sm:slide-in-from-bottom-0 sm:fade-in"
             : "rounded-2xl animate-in zoom-in-95 duration-150",

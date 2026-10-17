@@ -1,22 +1,27 @@
-.button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 10px 16px; border: 1px solid #747775; border-radius: 12px; background: #fff; color: #1f1f1f; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; }
-.button:focus-visible, .account a:focus-visible, .account summary:focus-visible { outline: 3px solid #2563eb; outline-offset: 4px; }
+/* 로그인 공급자 버튼(.button + .google/.naver)은 각 회사의 버튼 규격을 따르고, 나머지는 앱 토큰을 씁니다. */
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 10px 16px; border: 1px solid #747775; border-radius: 9999px; background: #fff; color: #1f1f1f; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+:global(.dark) .google { border-color: #8e918f; background: #131314; color: #e3e3e3; }
+.button:focus-visible, .account summary:focus-visible, .loginLink:focus-visible, .panel a:focus-visible { outline: 2.5px solid var(--ring); outline-offset: 3px; }
 .button:disabled { cursor: not-allowed; }
-.button { white-space: nowrap; flex-shrink: 0; }
-.providers { display: grid; gap: 20px; }
-.provider { width: 100%; min-height: 56px; }
+.providers { display: grid; gap: 16px; }
+.provider { width: 100%; min-height: 52px; }
 .provider:disabled { border-style: dashed; }
 .google { font-family: Arial, sans-serif; font-weight: 500; }
 .naver { padding: 0; overflow: hidden; background: #03a94d; border: 0; }
 .naver img { width: 100%; max-width: 368px; height: auto; }
-.hint { margin: 7px 0 0; color: #495650; font-size: 13px; line-height: 1.5; }
-.status { color: #263e35; font-size: 14px; line-height: 1.6; margin: 12px 0 0; }
-.error { color: #9f241c; font-size: 14px; line-height: 1.6; margin: 12px 0 0; }
-.account { position: relative; color: var(--foreground, #1f2a2a); font-size: 14px; }
-.account summary { display: flex; align-items: center; gap: 8px; min-height: 48px; cursor: pointer; border: 1px solid var(--border, #89978e); border-radius: 12px; background: var(--surface, #fff); padding: 8px 12px; list-style: none; }
+.hint { margin: 7px 0 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.5; }
+.status { color: var(--foreground); font-size: 14px; line-height: 1.6; margin: 12px 0 0; }
+.error { color: var(--destructive); font-size: 14px; line-height: 1.6; margin: 12px 0 0; }
+/* 헤더·사이드바의 '로그인' — 테마 전환 버튼과 같은 흰 알약 */
+.loginLink { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 16px; border: 1px solid var(--border); border-radius: 9999px; background: var(--card); color: var(--foreground); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; flex-shrink: 0; transition: background-color 150ms ease; }
+.loginLink:hover { background: var(--muted); }
+.account { position: relative; color: var(--foreground); font-size: 14px; }
+.account summary { display: flex; align-items: center; gap: 8px; min-height: 40px; cursor: pointer; border: 1px solid var(--border); border-radius: 9999px; background: var(--card); padding: 4px 12px 4px 4px; list-style: none; }
 .account summary::-webkit-details-marker { display: none; }
-.avatar { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; color: #fff; background: #153e3b; font-weight: 700; }
-.name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 639px) { .name { display: none; } }
-.panel { position: absolute; z-index: 60; right: 0; top: calc(100% + 8px); width: min(260px, calc(100vw - 32px)); display: grid; gap: 12px; padding: 18px; border: 1px solid #a8b5ad; border-radius: 16px; color: #1f2a2a; background: #fff; box-shadow: 0 10px 35px #0002; overflow-wrap: anywhere; }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; color: var(--foreground); background: var(--muted); font-size: 12px; font-weight: 700; }
+.name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+@media (max-width: 639px) { .name { display: none; } .account summary { padding-right: 8px; } }
+.panel { position: absolute; z-index: 60; right: 0; top: calc(100% + 8px); width: min(260px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 20px; color: var(--foreground); background: var(--card); box-shadow: 0 12px 32px rgb(0 0 0 / 0.12); overflow-wrap: anywhere; }
 .panel p { margin: 0; }
-.panel a { display: flex; align-items: center; min-height: 48px; color: #153e3b; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.panel p + p { color: var(--muted-foreground); font-size: 13px; }
+.panel a { display: flex; align-items: center; min-height: 44px; color: var(--foreground); font-weight: 600; text-decoration: none; border-top: 1px solid var(--border); }

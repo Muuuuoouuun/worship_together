@@ -105,7 +105,7 @@ test('참석 확정·불참·대체 요청이 배치 상태와 요청 목록에 
 
     state = send(state, 'u-guitar2', { type: 'slot.volunteer', eventId, slotId: slots.guitar });
     const after = view(state, 'u-lead');
-    assert.deepEqual(after.services[0].assignments.find((item) => item.role === 'guitar')!.volunteers, [{ id: 'u-guitar2', name: '최요셉', member: true }]);
+    assert.deepEqual(after.services[0].assignments.find((item) => item.role === 'guitar')!.volunteers, [{ id: 'u-guitar2', name: '최요셉', member: true, placed: false }]);
     assert.equal(view(state, 'u-guitar2').requests.find((item) => item.source === 'alert')!.volunteered, true);
     assert.equal(after.services[0].assignments.find((item) => item.role === 'guitar')!.volunteers.length, 1);
     assert.equal(view(state, 'u-guitar2').services[0].assignments.find((item) => item.role === 'guitar')!.volunteered, true);

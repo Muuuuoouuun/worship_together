@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useEffectEvent, useState, type CSSProperties } from 'react';
-import { Radio, SkipForward, X } from 'lucide-react';
+import { Radio, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
+import { useCountInSoundSetting, useMetronome } from '@/hooks/useMetronome';
 import { getStageBeatDurationStyle } from '@/hooks/useStageBeatPhase';
+import { getStageAudioContext } from '@/lib/stageAudioCue';
 import {
     COUNT_IN_BEATS,
     FALLBACK_COUNT_IN_BPM,
@@ -46,11 +48,18 @@ export default function WorshipCountIn({
     const countBpm = hasBpm ? bpm : FALLBACK_COUNT_IN_BPM;
     const [beat, setBeat] = useState(1);
     const finish = useEffectEvent(onComplete);
+    const { playBeat } = useMetronome(countBpm);
+    const [countInSound, setCountInSound] = useCountInSoundSetting();
+    // Reads the latest setting, so switching sound on mid-count joins at the next beat without restarting.
+    const sound = useEffectEvent((count: number) => {
+        if (countInSound) playBeat(count === 1);
+    });
 
     // The count starts when this screen opens (the tap), not on the shared wall-clock grid.
     useEffect(() => {
         let current = 1;
         vibrateBeat(current);
+        sound(current);
         const timer = window.setInterval(() => {
             current += 1;
             if (current > COUNT_IN_BEATS) {
@@ -60,11 +69,18 @@ export default function WorshipCountIn({
             }
             setBeat(current);
             vibrateBeat(current);
+            sound(current);
         }, getBeatIntervalMs(countBpm));
         return () => window.clearInterval(timer);
     }, [countBpm]);
 
     const word = getCountInWord(beat);
+
+    const toggleCountInSound = () => {
+        // Unlocks audio inside the tap, which iOS and Safari require.
+        if (!countInSound) getStageAudioContext();
+        setCountInSound(!countInSound);
+    };
 
     return (
         <div
@@ -90,7 +106,16 @@ export default function WorshipCountIn({
                     <h1 className="text-[17px] font-semibold tracking-[-0.02em]">카운트인</h1>
                     <p className="max-w-[14rem] truncate text-xs text-white/70">{setlistTitle}</p>
                 </div>
-                <div aria-hidden="true" className="size-11" />
+                <button
+                    type="button"
+                    onClick={toggleCountInSound}
+                    aria-pressed={countInSound}
+                    aria-label="카운트인 소리 켜기/끄기"
+                    title={countInSound ? '카운트 소리 켜짐' : '카운트 소리 꺼짐'}
+                    className={`tap-target inline-flex size-11 items-center justify-center rounded-full border transition ${countInSound ? 'border-(--stage-accent)/40 bg-(--stage-accent)/15 text-(--stage-accent)' : 'border-white/12 bg-white/[0.04] text-white/60 hover:bg-white/10'}`}
+                >
+                    {countInSound ? <Volume2 size={20} aria-hidden="true" /> : <VolumeX size={20} aria-hidden="true" />}
+                </button>
             </header>
 
             <p className="relative mt-3.5 truncate text-center text-xs font-semibold tracking-[0.08em] text-(--stage-accent)">

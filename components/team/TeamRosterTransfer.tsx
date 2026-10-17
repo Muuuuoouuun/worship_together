@@ -1,13 +1,21 @@
 'use client';
 
 import { useRef, useState, type ChangeEvent } from 'react';
-import { Download, Upload } from 'lucide-react';
+import { Download, FileJson, Upload } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { fieldClass } from '@/components/ui/input';
+import Notice from '@/components/ui/Notice';
+import { cn } from '@/lib/utils';
 import {
     exportTeamRoster, importTeamRoster, parseTeamRosterBundle, TEAM_BUNDLE_MAX_BYTES, teamRoles,
     type TeamRosterBundle,
 } from '@/lib/teamPrototype';
 
-const actionClass = 'inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm font-bold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
+/** 파일 선택 칸: 공통 입력 칸 + 회색 알약 '파일 선택' 버튼 */
+const fileClass = cn(
+    fieldClass,
+    'h-auto min-h-11 py-1.5 pl-1.5 text-sm text-muted-foreground file:mr-3 file:h-8 file:rounded-full file:border-0 file:bg-muted file:px-3.5 file:text-xs file:font-semibold file:text-foreground hover:file:bg-muted/70 disabled:border-dashed',
+);
 
 export default function TeamRosterTransfer({ teamId, teamName, disabled = false }: {
     teamId?: string;
@@ -80,36 +88,51 @@ export default function TeamRosterTransfer({ teamId, teamName, disabled = false 
     }
 
     return (
-        <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6" aria-labelledby="roster-transfer-heading">
-            <h2 id="roster-transfer-heading" className="text-xl font-bold text-primary">다른 기기로 팀 명단 옮기기</h2>
-            <p id="roster-transfer-help" className="mt-2 text-sm leading-relaxed text-muted-foreground">팀 이름·팀원 이름·역할을 JSON 파일로 저장해 모바일이나 태블릿에서 가져올 수 있습니다. 가져올 때마다 독립된 새 사본을 만들며 기존 팀을 덮어쓰지 않습니다. 로그인·가입 초대·자동 동기화 기능은 아닙니다.</p>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="min-w-0">
-                    <p className="mb-2 break-words text-sm font-semibold">{teamName ? `선택한 팀: ${teamName}` : '내보내려면 팀을 만들거나 선택하세요.'}</p>
-                    <button type="button" className={`${actionClass} w-full`} disabled={!teamId || disabled} onClick={downloadRoster}>
-                        <Download size={18} aria-hidden="true" /> 명단 파일 내보내기
-                    </button>
+        <section className="min-w-0 border-t border-border/70 pt-6" aria-labelledby="roster-transfer-heading">
+            <h2 id="roster-transfer-heading" className="text-[17px] font-semibold tracking-tight text-foreground">다른 기기로 팀 명단 옮기기</h2>
+            <p id="roster-transfer-help" className="mt-1 text-xs leading-relaxed text-muted-foreground">팀 이름·팀원 이름·역할을 JSON 파일로 저장해 모바일이나 태블릿에서 가져올 수 있습니다. 가져올 때마다 독립된 새 사본을 만들며 기존 팀을 덮어쓰지 않습니다. 로그인·가입 초대·자동 동기화 기능은 아닙니다.</p>
+            <div className="mt-2 divide-y divide-border/70">
+                <div className="flex min-w-0 flex-col gap-3 py-3.5 sm:flex-row sm:items-center">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-foreground" aria-hidden="true">
+                            <Download size={18} />
+                        </span>
+                        <p className="min-w-0 break-words text-[15px] font-medium text-foreground">{teamName ? `선택한 팀: ${teamName}` : '내보내려면 팀을 만들거나 선택하세요.'}</p>
+                    </div>
+                    <Button type="button" variant="outline" className="w-full shrink-0 sm:w-auto" disabled={!teamId || disabled} onClick={downloadRoster}>
+                        <Download aria-hidden="true" /> 명단 파일 내보내기
+                    </Button>
                 </div>
-                <div className="min-w-0">
-                    <label htmlFor="team-roster-file" className="mb-2 block text-sm font-semibold">받은 명단 파일 선택 · JSON, 최대 128KB</label>
-                    <input id="team-roster-file" type="file" accept=".json,application/json" disabled={disabled || reading} onChange={(event) => void readRoster(event)} aria-describedby="roster-transfer-help" className="min-h-12 w-full min-w-0 rounded-lg border border-border bg-background text-sm file:mr-3 file:min-h-12 file:border-0 file:bg-muted file:px-3 file:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!" />
+                <div className="flex min-w-0 flex-col gap-3 py-3.5 sm:flex-row sm:items-center">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-foreground" aria-hidden="true">
+                            <FileJson size={18} />
+                        </span>
+                        <label htmlFor="team-roster-file" className="min-w-0 text-[15px] font-medium text-foreground">받은 명단 파일 선택 · JSON, 최대 128KB</label>
+                    </div>
+                    <input id="team-roster-file" type="file" accept=".json,application/json" disabled={disabled || reading} onChange={(event) => void readRoster(event)} aria-describedby="roster-transfer-help" className={cn(fileClass, 'sm:w-72')} />
                 </div>
             </div>
-            {reading && <p role="status" className="mt-3 text-sm">명단 파일을 확인하고 있습니다.</p>}
+            {reading && <p role="status" className="mt-2 text-sm text-muted-foreground">명단 파일을 확인하고 있습니다.</p>}
             {preview && (
-                <div className="mt-4 rounded-lg border border-border bg-background p-4">
-                    <h3 className="break-words font-bold text-primary">{preview.team.name} · 팀원 {preview.team.members.length}명</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">파일 저장 시각: {new Date(preview.exportedAt).toLocaleString('ko-KR')}</p>
-                    <ul className="my-3 max-h-48 space-y-1 overflow-y-auto text-sm" aria-label="가져올 팀원 미리보기">
-                        {preview.team.members.map((member) => <li key={member.name} className="break-words">{member.name} · {teamRoles[member.role]}</li>)}
+                <div className="mt-3 rounded-3xl bg-muted/60 p-4 sm:p-5">
+                    <h3 className="break-words text-[15px] font-semibold text-foreground">{preview.team.name} · 팀원 {preview.team.members.length}명</h3>
+                    <p className="mt-0.5 text-xs text-muted-foreground">파일 저장 시각: {new Date(preview.exportedAt).toLocaleString('ko-KR')}</p>
+                    <ul className="my-3 max-h-48 divide-y divide-border/70 overflow-y-auto text-sm" aria-label="가져올 팀원 미리보기">
+                        {preview.team.members.map((member) => (
+                            <li key={member.name} className="flex items-center justify-between gap-3 py-2">
+                                <span className="min-w-0 break-words text-foreground">{member.name}</span>
+                                <span className="shrink-0 text-xs text-muted-foreground"><span className="sr-only"> · </span>{teamRoles[member.role]}</span>
+                            </li>
+                        ))}
                     </ul>
                     <div className="flex flex-wrap gap-2">
-                        <button type="button" className={`${actionClass} bg-primary text-primary-foreground`} disabled={disabled || reading} onClick={saveRoster}><Upload size={18} aria-hidden="true" /> 새 사본으로 가져오기</button>
-                        <button type="button" className={actionClass} onClick={() => setPreview(null)}>취소</button>
+                        <Button type="button" disabled={disabled || reading} onClick={saveRoster}><Upload aria-hidden="true" /> 새 사본으로 가져오기</Button>
+                        <Button type="button" variant="outline" onClick={() => setPreview(null)}>취소</Button>
                     </div>
                 </div>
             )}
-            {notice && <p role={notice.error ? 'alert' : 'status'} className={`mt-4 break-words text-sm ${notice.error ? 'text-destructive' : 'text-foreground'}`}>{notice.message}</p>}
+            {notice && <Notice tone={notice.error ? 'error' : 'success'} className="mt-3 break-words">{notice.message}</Notice>}
         </section>
     );
 }

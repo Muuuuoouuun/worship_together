@@ -8,7 +8,7 @@ import type { ScreenId } from './model';
 import { useConti } from './context';
 import type { Notice, NoticeCategory, NoticeGroup, NoticeKind } from './planningBridge';
 import { PlanningError, useDispatch } from './planningUi';
-import { Avatar, Eyebrow, RoundIconButton, SampleChip, TONE_BLOCK, TONE_ICON, body, chip, ink, line, sub } from './ui';
+import { Avatar, Eyebrow, RoundIconButton, SampleChip, TONE_BLOCK, TONE_ICON, body, chip, ink, line, sub, attention, tabOn, tabOff } from './ui';
 import type { Tone } from './model';
 
 const NOTICE_META: Record<NoticeKind, { icon: LucideIcon; tone: Tone }> = {
@@ -35,7 +35,8 @@ const FILTERS: { id: 'all' | NoticeCategory; label: string }[] = [
 
 const GROUPS: NoticeGroup[] = ['오늘', '어제', '이번 주', '이전'];
 
-export default function AlertsScreen({ onBack, openOrder, go }: { onBack: () => void; openOrder: (id: string) => void; go: (screen: ScreenId) => void }) {
+/** onBack 이 있으면(시안 앱 화면) 이번 주로 돌아가는 버튼을 보여줍니다. 페이지 탭으로 열 때는 없습니다. */
+export default function AlertsScreen({ onBack, openOrder, go }: { onBack?: () => void; openOrder: (id: string) => void; go: (screen: ScreenId) => void }) {
     const { planning, setlists } = useConti();
     const { send, busy } = useDispatch();
     const [filter, setFilter] = useState<'all' | NoticeCategory>('all');
@@ -70,15 +71,17 @@ export default function AlertsScreen({ onBack, openOrder, go }: { onBack: () => 
     return (
         <div className="space-y-5">
             <header className="flex items-center gap-3">
-                <RoundIconButton label="이번 주로" onClick={onBack}>
-                    <ArrowLeft size={18} />
-                </RoundIconButton>
+                {onBack && (
+                    <RoundIconButton label="이번 주로" onClick={onBack}>
+                        <ArrowLeft size={18} />
+                    </RoundIconButton>
+                )}
                 <div className="min-w-0 flex-1">
                     <Eyebrow>알림 {planning.sample && <SampleChip className="ml-1" />}</Eyebrow>
-                    <h1 className={cn('mt-0.5 text-[17px] font-semibold tracking-tight', ink)}>
+                    <h2 className={cn('mt-0.5 text-[17px] font-semibold tracking-tight', ink)}>
                         팀 소식
                         {unread > 0 && <span className={cn('ml-1.5 font-normal', sub)}>새 소식 {unread}</span>}
-                    </h1>
+                    </h2>
                 </div>
                 <button
                     type="button"
@@ -102,7 +105,7 @@ export default function AlertsScreen({ onBack, openOrder, go }: { onBack: () => 
                             role="tab"
                             aria-selected={active}
                             onClick={() => setFilter(item.id)}
-                            className={cn('-mb-px h-11 border-b-2 text-sm transition', active ? cn('border-neutral-900 font-semibold dark:border-white', ink) : cn('border-transparent', sub))}
+                            className={cn('-mb-px h-11 border-b-2 text-sm transition', active ? tabOn : tabOff)}
                         >
                             {item.label}
                         </button>
@@ -150,7 +153,7 @@ export function NoticeAvatar({ notice, size = 'md' }: { notice: Notice; size?: '
             <Avatar name={notice.actor} size={size} />
             <span
                 className={cn(
-                    'absolute flex items-center justify-center rounded-full bg-white ring-2 ring-white dark:bg-neutral-900 dark:ring-neutral-900',
+                    'absolute flex items-center justify-center rounded-full bg-card ring-2 ring-card',
                     size === 'sm' ? '-bottom-1.5 -right-1.5 size-4' : '-bottom-1 -right-1 size-[1.125rem]',
                 )}
             >
@@ -173,7 +176,7 @@ function NoticeRow({ notice, onOpen, onRead, rotationHref }: { notice: Notice; o
                     <p className="text-sm leading-snug">
                         {notice.actor && <span className={cn('font-semibold', ink)}>{notice.actor}님 · </span>}
                         <span className={cn(notice.actor ? body : cn('font-medium', ink))}>{notice.title}</span>
-                        {notice.urgent && notice.unread && <span className="ml-1.5 rounded-full bg-orange-500 px-1.5 text-[10px] font-bold leading-4 text-white">긴급</span>}
+                        {notice.urgent && notice.unread && <span className={cn('ml-1.5 rounded-full px-1.5 text-[10px] font-bold leading-4', attention)}>긴급</span>}
                     </p>
                     {notice.quote ? (
                         <p className={cn('mt-2 rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[13px] leading-relaxed', chip, body)}>{notice.quote}</p>
@@ -202,7 +205,7 @@ function NoticeRow({ notice, onOpen, onRead, rotationHref }: { notice: Notice; o
                     )}
                 </div>
             </div>
-            <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', notice.unread ? 'bg-orange-500' : 'bg-transparent')} aria-label={notice.unread ? '읽지 않음' : undefined} />
+            <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', notice.unread ? 'bg-secondary' : 'bg-transparent')} aria-label={notice.unread ? '읽지 않음' : undefined} />
         </li>
     );
 }

@@ -1,40 +1,62 @@
 'use client';
 
-import { cloneElement, isValidElement, memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, memo, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { canManagePlanning, planningDate, scheduleTemplates, type PlanningCommand, type PlanningPanelProps, type ScheduleSlot, type ScheduleTemplateKey, type TeamSchedule, type UrgentAlert } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
-import { Bell, CalendarDays, CalendarPlus, CalendarX2, Check, ClipboardCopy, Copy, Download, ExternalLink, List, MessageSquare, Music, RotateCcw, Search, Send, Share2, Sparkles, Table, Users, X } from 'lucide-react';
+import { Bell, CalendarDays, CalendarPlus, CalendarX2, Check, ChevronDown, ClipboardCopy, Copy, Download, ExternalLink, List, MessageSquare, Music, Plus, RotateCcw, Search, Send, Share2, Sparkles, Table, Users, X } from 'lucide-react';
 import { downloadIcsFile, getMyGoogleCalendarUrl, generateMyScheduleShareText } from '@/lib/calendarExport';
-import CalendarView from './CalendarView';
-import MatrixView from './MatrixView';
+import { cn } from '@/lib/utils';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { STATUS, type StatusTone } from '@/components/ui/status';
+import { Avatar, TONE_BLOCK } from '@/components/conti/ui';
+import { ROLE_ICON } from '@/components/conti/planningUi';
 
+const viewLoading = () => <p className="py-12 text-center text-sm text-muted-foreground">불러오는 중…</p>;
+const CalendarView = dynamic(() => import('./CalendarView'), { loading: viewLoading });
+const MatrixView = dynamic(() => import('./MatrixView'), { loading: viewLoading });
 const EventShareModal = dynamic(() => import('./EventShareModal'), { ssr: false });
 const MonthlySundaysModal = dynamic(() => import('./MonthlySundaysModal'), { ssr: false });
 const BlockedDatesModal = dynamic(() => import('./BlockedDatesModal'), { ssr: false });
 const ScheduleRsvpModal = dynamic(() => import('./ScheduleRsvpModal'), { ssr: false });
 
-const control = 'min-h-11 w-full min-w-0 rounded-xl border border-input/80 bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const button = 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98] shadow-2xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
-const primary = `${button} bg-primary text-primary-foreground hover:bg-primary/90 border-transparent shadow-xs font-bold`;
-const disclosure = 'min-h-10 cursor-pointer rounded-xl px-2.5 py-2 font-semibold text-sm transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring';
-const card = 'min-w-0 rounded-2xl border border-border/70 bg-card p-4 text-card-foreground shadow-2xs sm:p-5 transition-shadow hover:shadow-xs';
+/** 입력칸: 모바일 16px (iOS 확대 방지), 데스크톱 14px. 포커스는 진한 테두리 + 옅은 링. */
+const control = 'h-11 w-full min-w-0 rounded-2xl border border-border bg-card px-3.5 text-base text-foreground transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:border-foreground/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/10 disabled:opacity-50 sm:text-sm';
+const area = cn(control, 'h-auto min-h-24 py-2.5 leading-6');
+const eyebrow = 'text-[11px] font-medium text-muted-foreground';
+const subTitle = 'text-[13px] font-semibold text-foreground';
+const summaryBase = 'flex cursor-pointer list-none items-center gap-2 select-none rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/15 [&::-webkit-details-marker]:hidden';
+// cn 으로 한 번 더 합쳐야 xs 아이콘 크기(size-3)가 기본 크기(size-4)를 덮어씁니다.
+const outlineXs = cn(buttonVariants({ variant: 'outline', size: 'xs' }));
+const checkbox = 'size-4 shrink-0 rounded accent-foreground';
+const iconTile = 'flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-foreground';
 const attendanceLabels = { pending: '응답 대기', confirmed: '참석 확정', absent: '불참' };
 const alertLabels = { absence: '불참 알림', substitute: '대체 인원 요청', notice: '긴급 공지' };
+const ABSENCE_REASONS = ['개인 사정', '시험/학업', '출장/야근', '가족 행사', '건강/컨디션'];
+const NO_ALERTS: UrgentAlert[] = [];
 type Send = PlanningPanelProps['onCommand'];
 type Actions = { send: Send; disabled: boolean };
 
+/** 날짜까지 남은 시간. 배경 없는 글자색만 돌려줍니다 (오늘 = 강조색, 진행 중 = 주황). */
 function getRelativeDateLabel(iso: string, nowMs: number) {
     const targetMs = Date.parse(iso);
     const diffHours = (targetMs - nowMs) / (1000 * 60 * 60);
     const diffDays = Math.round((targetMs - nowMs) / (1000 * 60 * 60 * 24));
-    if (diffHours < -24) return { text: '종료', cls: 'bg-muted/70 text-muted-foreground font-medium' };
-    if (diffHours >= -24 && diffHours < 0) return { text: '진행 중', cls: 'bg-secondary/15 text-secondary font-bold' };
-    if (diffHours >= 0 && diffHours <= 18) return { text: '오늘', cls: 'bg-primary text-primary-foreground font-bold shadow-xs' };
-    if (diffDays === 1) return { text: '내일', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold' };
-    if (diffDays > 1 && diffDays <= 7) return { text: `D-${diffDays}`, cls: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 font-bold' };
-    return { text: `D-${diffDays}`, cls: 'bg-muted/70 text-muted-foreground' };
+    if (diffHours < -24) return { text: '종료', cls: 'text-muted-foreground/70' };
+    if (diffHours >= -24 && diffHours < 0) return { text: '진행 중', cls: 'font-semibold text-secondary' };
+    if (diffHours >= 0 && diffHours <= 18) return { text: '오늘', cls: 'font-semibold text-brand' };
+    if (diffDays === 1) return { text: '내일', cls: 'font-semibold text-foreground' };
+    return { text: `D-${diffDays}`, cls: 'tabular-nums text-muted-foreground' };
+}
+
+function shortDateTime(iso: string) {
+    return new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function slotTone(slot: ScheduleSlot): StatusTone {
+    if (!slot.memberId) return 'idle';
+    return slot.attendance === 'confirmed' ? 'ok' : slot.attendance === 'absent' ? 'danger' : 'warn';
 }
 
 function generateKakaoShareText(event: TeamSchedule, names: Map<string, string>): string {
@@ -151,14 +173,42 @@ function text(data: FormData, name: string) {
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
     const fieldId = useId();
-    return <div className="grid min-w-0 gap-2 text-sm font-medium"><label htmlFor={fieldId}>{label}</label>{isValidElement(children) ? cloneElement(children as ReactElement<{ id?: string }>, { id: fieldId }) : children}</div>;
+    return <div className="grid min-w-0 gap-1.5"><label htmlFor={fieldId} className="text-xs font-medium text-muted-foreground">{label}</label>{isValidElement(children) ? cloneElement(children as ReactElement<{ id?: string }>, { id: fieldId }) : children}</div>;
+}
+
+/**
+ * 펼치기/접기. 처음 펼칠 때 내용을 만들고, 그 뒤로는 닫아도 입력 중인 내용을 유지합니다.
+ * defaultOpen 이 바뀌면 (필터 변경 등) 그 값으로 다시 맞춥니다.
+ */
+function Disclosure({ summary, children, defaultOpen = false, className, summaryClassName, chevron = 'end' }: {
+    summary: ReactNode; children: ReactNode; defaultOpen?: boolean; className?: string; summaryClassName?: string; chevron?: 'end' | 'inline' | 'none';
+}) {
+    const [open, setOpen] = useState(defaultOpen);
+    const [mounted, setMounted] = useState(defaultOpen);
+    const [lastDefault, setLastDefault] = useState(defaultOpen);
+    if (lastDefault !== defaultOpen) {
+        setLastDefault(defaultOpen);
+        setOpen(defaultOpen);
+        if (defaultOpen) setMounted(true);
+    }
+    return <details open={open} onToggle={event => {
+        const next = event.currentTarget.open;
+        setOpen(next);
+        if (next) setMounted(true);
+    }} className={className}>
+        <summary className={cn(summaryBase, summaryClassName)}>
+            {summary}
+            {chevron !== 'none' ? <ChevronDown size={15} aria-hidden="true" className={cn('shrink-0 text-muted-foreground transition-transform', chevron === 'end' && 'ml-auto', open && 'rotate-180')} /> : null}
+        </summary>
+        {mounted ? children : null}
+    </details>;
 }
 
 function CommandForm({ children, build, send, disabled, submitLabel, reset = true }: Actions & {
     children: ReactNode; build: (data: FormData) => PlanningCommand; submitLabel: string; reset?: boolean;
 }) {
     const [error, setError] = useState('');
-    return <form className="space-y-3" onSubmit={async event => {
+    return <form className="space-y-4" onSubmit={async event => {
         event.preventDefault();
         if (disabled) return;
         const form = event.currentTarget;
@@ -174,9 +224,9 @@ function CommandForm({ children, build, send, disabled, submitLabel, reset = tru
             setError(failure instanceof Error ? failure.message : '처리하지 못했습니다. 다시 시도해 주세요.');
         }
     }}>
-        <fieldset disabled={disabled} className="min-w-0 space-y-3">
+        <fieldset disabled={disabled} className="min-w-0 space-y-4">
             {children}
-            <button className={primary} type="submit">{submitLabel}</button>
+            <Button size="sm" type="submit">{submitLabel}</Button>
         </fieldset>
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
     </form>;
@@ -203,15 +253,18 @@ function EventForm({ event, defaultDate, ...actions }: Actions & { event?: TeamS
         }
         return { type: 'event.save', eventId: event?.id, input };
     }}>
-        <Field label="일정 종류"><select name="kind" defaultValue={event?.kind ?? 'rehearsal'} className={control}>
-            <option value="rehearsal">연습</option><option value="worship">예배</option>
-        </select></Field>
-        <Field label="제목 (필수)"><input name="title" required defaultValue={event?.title ?? ''} className={control} /></Field>
-        <p className="text-sm text-muted-foreground">모든 시간은 한국 시간(KST, UTC+09:00)입니다.</p>
-        <div className="grid gap-3 md:grid-cols-2">
-            <Field label="시작 (필수)"><input type="datetime-local" step="60" name="startsAt" required defaultValue={defaultStart} className={control} /></Field>
-            <Field label="종료 (필수)"><input type="datetime-local" step="60" name="endsAt" required defaultValue={defaultEnd} className={control} /></Field>
+        <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+            <Field label="일정 종류"><select name="kind" defaultValue={event?.kind ?? 'rehearsal'} className={control}>
+                <option value="rehearsal">연습</option><option value="worship">예배</option>
+            </select></Field>
+            <Field label="제목 (필수)"><input name="title" required defaultValue={event?.title ?? ''} className={control} /></Field>
         </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+            {/* key: 달력에서 다른 날을 고르면 날짜 칸만 새 날짜로 다시 채우고, 제목·장소 등 입력 중인 내용은 그대로 둡니다. */}
+            <Field label="시작 (필수)"><input key={defaultStart} type="datetime-local" step="60" name="startsAt" required defaultValue={defaultStart} className={control} /></Field>
+            <Field label="종료 (필수)"><input key={defaultEnd} type="datetime-local" step="60" name="endsAt" required defaultValue={defaultEnd} className={control} /></Field>
+        </div>
+        <p className="text-xs text-muted-foreground">모든 시간은 한국 시간(KST, UTC+09:00)입니다.</p>
         {!event ? (
             <Field label="정기 반복 생성 (선택)">
                 <select className={control} value={weeks} onChange={e => setWeeks(Number(e.target.value))}>
@@ -224,7 +277,7 @@ function EventForm({ event, defaultDate, ...actions }: Actions & { event?: TeamS
             </Field>
         ) : null}
         <Field label="장소"><input name="location" defaultValue={event?.location ?? ''} className={control} /></Field>
-        <Field label="안내 사항"><textarea name="notes" rows={3} defaultValue={event?.notes ?? ''} className={control} /></Field>
+        <Field label="안내 사항"><textarea name="notes" rows={3} defaultValue={event?.notes ?? ''} className={area} /></Field>
     </CommandForm>;
 }
 
@@ -264,7 +317,7 @@ function SlotForm({ eventId, slot, members, ...actions }: Actions & { eventId: s
     return <CommandForm {...actions} reset={!slot} submitLabel={slot ? '배정 변경 저장' : '역할 추가'} build={data => ({
         type: 'slot.save', eventId, slotId: slot?.id, role: text(data, 'role') as WorshipRole, memberId: text(data, 'memberId') || null,
     })}>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
             <Field label="역할"><select name="role" defaultValue={slot?.role ?? 'vocal'} className={control}>
                 {Object.entries(worshipRoles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select></Field>
@@ -284,7 +337,7 @@ function AlertForm({ eventId, slotId, ...actions }: Actions & { eventId: string;
         return { type: 'alert.create', eventId, slotId, kind: slotId ? 'substitute' : 'notice', body };
     }}>
         <Field label={slotId ? '빈자리 또는 대체 요청 내용 (필수)' : '일정 전체 공지 내용 (필수)'}>
-            <textarea name="body" required rows={3} className={control} />
+            <textarea name="body" required rows={3} className={area} />
         </Field>
     </CommandForm>;
 }
@@ -297,11 +350,26 @@ function DutyNoticeForm({ event, members, ...actions }: Actions & { event: TeamS
     const [urgent, setUrgent] = useState(false);
 
     const presets = [
-        { label: '🎵 콘티 확인 요청', text: '이번 주 콘티가 등록되었습니다! 곡 순서와 송폼을 미리 확인해 주세요 🙏' },
-        { label: '🔄 콘티 변경 안내', text: '이번 주 콘티 및 진행 순서에 변경 사항이 있습니다. 확인 부탁드립니다!' },
-        { label: '⏰ 리허설 시간 안내', text: '예배 시작 30분 전까지 본당으로 모여 리허설을 진행합니다. 시간 엄수 부탁드려요!' },
-        { label: '🙏 함께 기도로 준비', text: '이번 주 예배를 위해 각자의 자리에서 기도로 함께 준비해요.' },
+        { label: '콘티 확인 요청', text: '이번 주 콘티가 등록되었습니다! 곡 순서와 송폼을 미리 확인해 주세요 🙏' },
+        { label: '콘티 변경 안내', text: '이번 주 콘티 및 진행 순서에 변경 사항이 있습니다. 확인 부탁드립니다!' },
+        { label: '리허설 시간 안내', text: '예배 시작 30분 전까지 본당으로 모여 리허설을 진행합니다. 시간 엄수 부탁드려요!' },
+        { label: '함께 기도로 준비', text: '이번 주 예배를 위해 각자의 자리에서 기도로 함께 준비해요.' },
     ];
+    const audience = (value: 'duty' | 'all', label: string) => (
+        <label className={cn(
+            'flex h-10 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-xs font-medium transition-colors has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/15',
+            targetAudience === value ? 'border-foreground bg-muted text-foreground' : 'border-border text-muted-foreground hover:bg-muted',
+        )}>
+            <input
+                type="radio"
+                name={`targetAudience-${event.id}`}
+                checked={targetAudience === value}
+                onChange={() => setTargetAudience(value)}
+                className="accent-foreground"
+            />
+            <span>{label}</span>
+        </label>
+    );
 
     return (
         <form onSubmit={async (e) => {
@@ -317,95 +385,62 @@ function DutyNoticeForm({ event, members, ...actions }: Actions & { event: TeamS
                 targetAudience,
             });
             if (success) setBody('');
-        }} className="space-y-4 rounded-xl border border-secondary/30 bg-background p-4">
+        }} className="space-y-5">
             <div className="space-y-2">
-                <span className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">수신 대상 선택</span>
+                <span className={cn(eyebrow, 'block')}>수신 대상 선택</span>
                 <div className="flex flex-wrap gap-2">
-                    <label className={`flex items-center gap-2 rounded-xl border p-2.5 text-xs font-semibold cursor-pointer transition ${targetAudience === 'duty' ? 'border-secondary bg-secondary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-muted'}`}>
-                        <input
-                            type="radio"
-                            name={`targetAudience-${event.id}`}
-                            checked={targetAudience === 'duty'}
-                            onChange={() => setTargetAudience('duty')}
-                            className="accent-secondary"
-                        />
-                        <span>해당 주 섬김이/당번 ({dutyMembers.length}명)</span>
-                    </label>
-                    <label className={`flex items-center gap-2 rounded-xl border p-2.5 text-xs font-semibold cursor-pointer transition ${targetAudience === 'all' ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-muted'}`}>
-                        <input
-                            type="radio"
-                            name={`targetAudience-${event.id}`}
-                            checked={targetAudience === 'all'}
-                            onChange={() => setTargetAudience('all')}
-                            className="accent-primary"
-                        />
-                        <span>찬양팀 전체 ({members.length}명)</span>
-                    </label>
+                    {audience('duty', `해당 주 섬김이/당번 (${dutyMembers.length}명)`)}
+                    {audience('all', `찬양팀 전체 (${members.length}명)`)}
                 </div>
                 {targetAudience === 'duty' && (
-                    <div className="text-xs text-muted-foreground pt-1">
+                    <div className="pt-1 text-xs text-muted-foreground">
                         {dutyMembers.length > 0 ? (
                             <div className="flex flex-wrap items-center gap-1.5">
                                 <span>수신 대상자:</span>
                                 {dutyMembers.map(m => (
-                                    <span key={m.userId} className="rounded-md bg-muted px-1.5 py-0.5 text-foreground font-medium">
+                                    <span key={m.userId} className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground">
                                         {m.name} ({worshipRoles[m.role]})
                                     </span>
                                 ))}
                             </div>
                         ) : (
-                            <span className="text-amber-600 dark:text-amber-400 font-medium">※ 아직 배정된 섬김이가 없습니다. 발송 시 전체 팀원에게 안내됩니다.</span>
+                            <span className={cn('font-medium', STATUS.warn.text)}>※ 아직 배정된 섬김이가 없습니다. 발송 시 전체 팀원에게 안내됩니다.</span>
                         )}
                     </div>
                 )}
             </div>
 
-            <div className="space-y-1.5">
-                <span className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">1초 퀵 멘트 선택</span>
+            <div className="space-y-2">
+                <span className={cn(eyebrow, 'block')}>1초 퀵 멘트 선택</span>
                 <div className="flex flex-wrap gap-1.5">
-                    {presets.map((preset, idx) => (
-                        <button
-                            key={idx}
-                            type="button"
-                            className="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary/15 hover:border-secondary/40 transition"
-                            onClick={() => setBody(preset.text)}
-                        >
+                    {presets.map((preset) => (
+                        <button key={preset.label} type="button" className={outlineXs} onClick={() => setBody(preset.text)}>
                             {preset.label}
                         </button>
                     ))}
                 </div>
             </div>
 
-            <div className="space-y-1">
-                <label className="block text-xs font-semibold text-foreground">공지/알림 내용</label>
+            <Field label="공지/알림 내용">
                 <textarea
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     required
                     rows={3}
                     placeholder="팀원들에게 전할 안내 사항을 입력해 주세요."
-                    className={control}
+                    className={area}
                 />
-            </div>
+            </Field>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={urgent}
-                        onChange={(e) => setUrgent(e.target.checked)}
-                        className="rounded"
-                    />
-                    <span className="text-secondary font-bold">긴급 확인 요청</span>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-medium">
+                    <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} className={checkbox} />
+                    <span className="font-semibold text-secondary">긴급 확인 요청</span>
                 </label>
-                <button
-                    type="submit"
-                    disabled={actions.disabled || !body.trim()}
-                    className={`${primary} text-xs py-2 px-4 min-h-9 flex items-center gap-1.5`}
-                >
-                    <Send size={13} />
+                <Button type="submit" size="sm" disabled={actions.disabled || !body.trim()}>
+                    <Send />
                     <span>{targetAudience === 'duty' ? `당번 ${dutyMembers.length}명에게 알림 발송` : '팀 전체 알림 발송'}</span>
-                </button>
+                </Button>
             </div>
         </form>
     );
@@ -432,25 +467,19 @@ function SetlistForm({ event, ...actions }: Actions & { event: TeamSchedule }) {
                 setlistSongs: songs,
                 notifyDuty,
             });
-        }} className="space-y-4 rounded-xl border border-primary/20 bg-background p-4">
-            <div className="space-y-1.5">
-                <span className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">콘티 제목 퀵 선택</span>
+        }} className="space-y-5">
+            <div className="space-y-2">
+                <span className={cn(eyebrow, 'block')}>콘티 제목 퀵 선택</span>
                 <div className="flex flex-wrap gap-1.5">
                     {titlePresets.map(preset => (
-                        <button
-                            key={preset}
-                            type="button"
-                            className="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium hover:bg-primary/15 hover:border-primary/40 transition"
-                            onClick={() => setTitle(`${preset} 콘티`)}
-                        >
+                        <button key={preset} type="button" className={outlineXs} onClick={() => setTitle(`${preset} 콘티`)}>
                             {preset}
                         </button>
                     ))}
                 </div>
             </div>
 
-            <div className="space-y-1">
-                <label className="block text-xs font-semibold text-foreground">콘티 제목 (필수)</label>
+            <Field label="콘티 제목 (필수)">
                 <input
                     type="text"
                     required
@@ -460,39 +489,27 @@ function SetlistForm({ event, ...actions }: Actions & { event: TeamSchedule }) {
                     placeholder="예: 주일 2부 예배 콘티"
                     className={control}
                 />
-            </div>
+            </Field>
 
-            <div className="space-y-1">
-                <label className="block text-xs font-semibold text-foreground">
-                    수록곡 목록 <span className="text-muted-foreground font-normal">(줄바꿈 또는 쉼표로 구분)</span>
-                </label>
+            <Field label="수록곡 목록 (줄바꿈 또는 쉼표로 구분)">
                 <textarea
                     rows={3}
                     value={songsText}
                     onChange={(e) => setSongsText(e.target.value)}
                     placeholder="예:&#10;꽃들도&#10;은혜&#10;주는 완전합니다"
-                    className={control}
+                    className={area}
                 />
-            </div>
+            </Field>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={notifyDuty}
-                        onChange={(e) => setNotifyDuty(e.target.checked)}
-                        className="rounded"
-                    />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-medium">
+                    <input type="checkbox" checked={notifyDuty} onChange={(e) => setNotifyDuty(e.target.checked)} className={checkbox} />
                     <span>이번 주 배정된 섬김이/당번({dutyCount}명)에게 콘티 알림 발송</span>
                 </label>
-                <button
-                    type="submit"
-                    disabled={actions.disabled || !title.trim()}
-                    className={`${primary} text-xs py-2 px-4 min-h-9 flex items-center gap-1.5`}
-                >
-                    <Check size={13} />
+                <Button type="submit" size="sm" disabled={actions.disabled || !title.trim()}>
+                    <Check />
                     <span>콘티 저장 및 알림</span>
-                </button>
+                </Button>
             </div>
         </form>
     );
@@ -500,35 +517,88 @@ function SetlistForm({ event, ...actions }: Actions & { event: TeamSchedule }) {
 
 function ConfirmAction({ label, explanation, command, send, disabled }: Actions & { label: string; explanation: string; command: PlanningCommand }) {
     const [confirming, setConfirming] = useState(false);
-    return confirming ? <div className="space-y-3 rounded-xl border border-destructive p-3">
-        <p className="text-sm">{explanation}</p>
+    return confirming ? <div className="w-full space-y-3 rounded-2xl bg-destructive/10 p-4">
+        <p className="text-sm text-foreground">{explanation}</p>
         <div className="flex flex-wrap gap-2">
-            <button type="button" className={`${button} text-destructive`} disabled={disabled} onClick={async () => {
+            <Button type="button" variant="destructive" size="xs" disabled={disabled} onClick={async () => {
                 if (await send(command)) setConfirming(false);
-            }}>{label} 확정</button>
-            <button type="button" className={button} disabled={disabled} onClick={() => setConfirming(false)}>돌아가기</button>
+            }}>{label} 확정</Button>
+            <Button type="button" variant="outline" size="xs" disabled={disabled} onClick={() => setConfirming(false)}>돌아가기</Button>
         </div>
-    </div> : <button type="button" className={`${button} text-destructive`} disabled={disabled} onClick={() => setConfirming(true)}>{label}</button>;
+    </div> : <Button type="button" variant="ghost" size="xs" className="text-destructive hover:bg-destructive/10" disabled={disabled} onClick={() => setConfirming(true)}>{label}</Button>;
 }
 
-function AlertCard({ alert, event, names, manager, ...actions }: Actions & {
-    alert: UrgentAlert; event?: TeamSchedule; names: Map<string, string>; manager: boolean;
+function AlertCard({ alert, event, names, manager, className, ...actions }: Actions & {
+    alert: UrgentAlert; event?: TeamSchedule; names: Map<string, string>; manager: boolean; className?: string;
 }) {
     const slot = event?.slots.find(item => item.id === alert.slotId);
-    return <li className="space-y-2 rounded-xl border border-border bg-background p-3">
-        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-            <span className={alert.kind === 'notice' ? 'text-secondary font-bold' : ''}>
-                {alert.kind === 'notice' ? '📢 인도자 공지' : alertLabels[alert.kind]}
-            </span>
-            <span className={alert.resolvedAt ? 'text-muted-foreground' : 'text-destructive'}>{alert.resolvedAt ? '해결됨' : '미해결'}</span>
-            {event?.cancelled ? <span className="text-destructive">취소된 일정</span> : null}
-        </div>
-        <p className="text-sm font-medium">{event?.title ?? '삭제되었거나 확인할 수 없는 일정'}{slot ? ` · ${worshipRoles[slot.role]}` : alert.slotId ? ' · 이전 배정' : ' · 당번/팀원 알림'}</p>
-        <p className="whitespace-pre-wrap break-words">{alert.body}</p>
-        <p className="text-sm text-muted-foreground">작성: {names.get(alert.authorId) ?? '이전 팀원'} · <time dateTime={alert.createdAt}>{planningDate(alert.createdAt)}</time></p>
-        {alert.resolvedAt ? <p className="text-sm text-muted-foreground">해결: <time dateTime={alert.resolvedAt}>{planningDate(alert.resolvedAt)}</time></p> : null}
-        {manager && event && !event.cancelled && !alert.resolvedAt ? <button type="button" className={button} disabled={actions.disabled} onClick={() => void actions.send({ type: 'alert.resolve', alertId: alert.id })}>해결 완료 처리</button> : null}
+    return <li className={cn('space-y-1.5 border-b border-border/70 py-4 first:pt-2 last:border-b-0 last:pb-0', className)}>
+        <p className="text-xs">
+            <span className="font-semibold text-foreground">{alert.kind === 'notice' ? '인도자 공지' : alertLabels[alert.kind]}</span>
+            <span className={alert.resolvedAt ? 'text-muted-foreground' : 'font-medium text-destructive'}> · {alert.resolvedAt ? '해결됨' : '미해결'}</span>
+            {event?.cancelled ? <span className="text-destructive"> · 취소된 일정</span> : null}
+        </p>
+        <p className="text-[15px] font-medium leading-snug text-foreground">{event?.title ?? '삭제되었거나 확인할 수 없는 일정'}{slot ? ` · ${worshipRoles[slot.role]}` : alert.slotId ? ' · 이전 배정' : ' · 당번/팀원 알림'}</p>
+        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground/75">{alert.body}</p>
+        <p className="text-xs text-muted-foreground">작성: {names.get(alert.authorId) ?? '이전 팀원'} · <time dateTime={alert.createdAt}>{planningDate(alert.createdAt)}</time></p>
+        {alert.resolvedAt ? <p className="text-xs text-muted-foreground">해결: <time dateTime={alert.resolvedAt}>{planningDate(alert.resolvedAt)}</time></p> : null}
+        {manager && event && !event.cancelled && !alert.resolvedAt ? <div className="pt-1.5"><Button type="button" variant="outline" size="xs" disabled={actions.disabled} onClick={() => void actions.send({ type: 'alert.resolve', alertId: alert.id })}><Check className="text-muted-foreground" />해결 완료 처리</Button></div> : null}
     </li>;
+}
+
+/** 1클릭 불참 사유 칩 */
+function ReasonChips({ disabled, onPick, titleSuffix = '사유로 1클릭 불참 응답' }: { disabled: boolean; onPick: (reason: string) => void; titleSuffix?: string }) {
+    return <div className="flex flex-wrap gap-1.5">
+        {ABSENCE_REASONS.map(reason => (
+            <button key={reason} type="button" disabled={disabled} className={outlineXs} title={`‘${reason}’ ${titleSuffix}`} onClick={() => onPick(reason)}>
+                {reason}
+            </button>
+        ))}
+    </div>;
+}
+
+/** 구글 캘린더 · .ics 버튼 한 쌍 */
+function CalendarLinks({ event, role, names, long = false }: { event: TeamSchedule; role: WorshipRole; names: Map<string, string>; long?: boolean }) {
+    return <>
+        <a href={getMyGoogleCalendarUrl(event, role)} target="_blank" rel="noopener noreferrer" className={outlineXs} title="내 구글 캘린더에 1클릭 추가">
+            <CalendarPlus className="text-muted-foreground" />
+            <span>{long ? '구글 캘린더 등록' : '구글 등록'}</span>
+        </a>
+        <button type="button" className={outlineXs} title="애플/스마트폰 캘린더(.ics) 1클릭 다운로드" onClick={() => downloadIcsFile(event, '예배팀', names)}>
+            <Download className="text-muted-foreground" />
+            <span>{long ? '애플/모바일 .ics' : '.ics'}</span>
+        </button>
+    </>;
+}
+
+function LegendDot({ className, label }: { className: string; label: string }) {
+    return <span className="inline-flex items-center gap-1.5">
+        <span className={cn('size-1.5 rounded-full', className)} aria-hidden="true" />
+        {label}
+    </span>;
+}
+
+/** 콘티·순서 리디자인의 배치 현황: "N자리 중 M명 확정" + 자리별 막대 + 범례 */
+function SlotSummary({ slots, className }: { slots: ScheduleSlot[]; className?: string }) {
+    const confirmed = slots.filter(slot => slot.memberId && slot.attendance === 'confirmed').length;
+    const pending = slots.filter(slot => slot.memberId && slot.attendance === 'pending').length;
+    const declined = slots.filter(slot => slot.memberId && slot.attendance === 'absent').length;
+    const vacant = slots.filter(slot => !slot.memberId).length;
+    if (!slots.length) return <p className={cn('text-xs text-muted-foreground', className)}>아직 등록된 역할이 없습니다.</p>;
+    return <div className={cn('space-y-2.5', className)}>
+        <p className="text-[15px] text-foreground">
+            <span className="font-semibold tabular-nums">{slots.length}자리</span> 중 <span className="font-semibold tabular-nums">{confirmed}명</span> 확정
+        </p>
+        <div className="flex h-1.5 gap-0.5 overflow-hidden rounded-full" role="img" aria-label={`확정 ${confirmed}, 대기 ${pending}, 불참 ${declined}, 빈자리 ${vacant}`}>
+            {slots.map(slot => <span key={slot.id} className={cn('flex-1', STATUS[slotTone(slot)].bar)} />)}
+        </div>
+        <p className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
+            <LegendDot className={STATUS.ok.dot} label={`확정 ${confirmed}`} />
+            <LegendDot className={STATUS.warn.dot} label={`대기 ${pending}`} />
+            <LegendDot className={STATUS.danger.dot} label={`불참 ${declined}`} />
+            <LegendDot className={STATUS.idle.dot} label={`빈자리 ${vacant}`} />
+        </p>
+    </div>;
 }
 
 const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, userId, manager, allEvents, workloadMap, ...actions }: Actions & {
@@ -543,30 +613,28 @@ const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, u
     const [showingAbsentForm, setShowingAbsentForm] = useState(false);
     const [copiedPersonal, setCopiedPersonal] = useState(false);
     const [sendingInvite, setSendingInvite] = useState(false);
+    /** 겹치는 시간에 이 자리 말고 다른 자리(같은 일정의 다른 역할 포함)에 이미 배치된 사람 — lib/planning 의 available 과 같은 규칙이라 배정·지원·확정이 실패합니다. */
+    const placedElsewhere = useCallback((memberId: string) => allEvents.some(other =>
+        !other.cancelled &&
+        Date.parse(other.startsAt) < Date.parse(event.endsAt) &&
+        Date.parse(event.startsAt) < Date.parse(other.endsAt) &&
+        other.slots.some(s => s.id !== slot.id && s.memberId === memberId && s.attendance !== 'absent')
+    ), [allEvents, event, slot.id]);
 
     const recommendedCandidates = useMemo(() => {
         if (!isVacantOrAbsent || !manager || event.cancelled) return [];
-        const evStart = Date.parse(event.startsAt);
-        const evEnd = Date.parse(event.endsAt);
         const candidates = members.filter(m => {
             if (m.userId === slot.memberId) return false;
             const roleMatches = m.role === slot.role || (slot.role === 'vocal' && m.role === 'leader') || m.role === 'member';
             if (!roleMatches) return false;
-            const hasClash = allEvents.some(other =>
-                other.id !== event.id &&
-                !other.cancelled &&
-                Date.parse(other.startsAt) < evEnd &&
-                evStart < Date.parse(other.endsAt) &&
-                other.slots.some(s => s.memberId === m.userId && s.attendance !== 'absent')
-            );
-            return !hasClash;
+            return !placedElsewhere(m.userId);
         });
         return candidates.map(m => ({
             userId: m.userId,
             name: m.name,
             count: workloadMap.get(m.userId) ?? 0,
         })).sort((a, b) => a.count - b.count);
-    }, [isVacantOrAbsent, manager, event, members, slot, allEvents, workloadMap]);
+    }, [isVacantOrAbsent, manager, event, members, slot, placedElsewhere, workloadMap]);
 
     const handleCopyPersonal = async () => {
         if (!slot.memberId) return;
@@ -585,16 +653,39 @@ const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, u
         }
     };
 
-    return <li className="space-y-3 rounded-xl border border-border p-3 sm:p-4 bg-background">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-md bg-secondary/15 px-2 py-0.5 text-xs font-bold text-secondary">
+    const Icon = ROLE_ICON[slot.role];
+    const tone = slotTone(slot);
+    const memberName = slot.memberId ? names.get(slot.memberId) ?? '이전 팀원' : null;
+    const live = !event.cancelled;
+    const pendingMember = Boolean(slot.memberId) && slot.attendance === 'pending';
+    const showInvite = manager && pendingMember && live;
+    const showPersonal = manager && pendingMember;
+    const showRequest = live && (manager || assigned);
+    const showVolunteer = live && !assigned && needsHelp && members.some(m => m.userId === userId) && (volunteered || !placedElsewhere(userId));
+    const showTools = showInvite || showPersonal || showRequest;
+    const showMine = live && assigned;
+    const hasBody = showTools || recommendedCandidates.length > 0 || showMine || showVolunteer || slot.volunteers.length > 0;
+
+    const editable = manager && live;
+    return <li className="border-b border-border/70 py-4 last:border-b-0">
+        <div className={cn('grid items-center gap-x-3.5 gap-y-2', editable ? 'grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto]' : 'grid-cols-[2.5rem_minmax(0,1fr)_auto]')}>
+            <span className={cn(iconTile, 'col-start-1 row-start-1')}><Icon size={18} aria-hidden="true" /></span>
+            <div className="col-start-2 row-start-1 min-w-0">
+                <p className="text-[15px] font-medium text-foreground">
                     {worshipRoles[slot.role]}
-                </span>
-                {manager && !event.cancelled ? (
+                    {assigned ? <span className="ml-1.5 text-[11px] font-semibold text-brand">나</span> : null}
+                </p>
+                <p className="mt-0.5 text-xs leading-5">
+                    <span className={STATUS[tone].text}>{slot.memberId ? attendanceLabels[slot.attendance] : '빈자리'}</span>
+                    {slot.invitedAt ? <span className="text-muted-foreground"> · 초대 발송: {shortDateTime(slot.invitedAt)}</span> : null}
+                    {slot.respondedAt ? <span className="text-muted-foreground"> · {slot.attendance === 'confirmed' ? '동의 완료' : '응답'}: {shortDateTime(slot.respondedAt)}</span> : null}
+                </p>
+            </div>
+            {editable ? (
+                <>
                     <select
                         aria-label={`${worshipRoles[slot.role]} 담당자 선택`}
-                        className="text-sm font-semibold rounded-lg border border-input bg-card px-2 py-1 focus:ring-2 focus:ring-primary"
+                        className="col-span-2 col-start-2 row-start-2 h-9 w-full max-w-64 min-w-0 truncate justify-self-start rounded-full border border-border bg-card pl-3 pr-2 text-base text-foreground focus-visible:border-foreground/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/10 sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:w-44 sm:text-xs"
                         value={slot.memberId ?? ''}
                         disabled={actions.disabled}
                         onChange={e => {
@@ -608,18 +699,43 @@ const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, u
                             <option key={m.userId} value={m.userId}>{m.name} ({worshipRoles[m.role]})</option>
                         ))}
                     </select>
-                ) : (
-                    <span className="font-semibold text-sm">
-                        {slot.memberId ? names.get(slot.memberId) ?? '이전 팀원' : '미배정 (빈자리)'}
-                    </span>
-                )}
-            </div>
-
-            <div className="flex items-center gap-1.5">
-                {manager && slot.memberId && slot.attendance === 'pending' && !event.cancelled ? (
                     <button
                         type="button"
-                        className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary/10 inline-flex items-center gap-1 border border-primary/30"
+                        className="col-start-3 row-start-1 flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 sm:col-start-4"
+                        title="이 역할 슬롯 삭제"
+                        aria-label="이 역할 슬롯 삭제"
+                        disabled={actions.disabled}
+                        onClick={() => {
+                            if (window.confirm('이 역할 배정 슬롯을 삭제하시겠습니까?')) {
+                                void actions.send({ type: 'slot.remove', eventId: event.id, slotId: slot.id });
+                            }
+                        }}
+                    >
+                        <X size={15} />
+                    </button>
+                </>
+            ) : memberName ? (
+                <span className={cn('col-start-3 row-start-1 inline-flex items-center gap-1.5', slot.attendance === 'absent' && 'opacity-50')}>
+                    <Avatar name={memberName} size="sm" />
+                    <span className={cn('text-[13px] text-foreground', slot.attendance === 'absent' && 'line-through')}>{memberName}</span>
+                </span>
+            ) : (
+                <span className="col-start-3 row-start-1 text-xs text-muted-foreground">미배정 (빈자리)</span>
+            )}
+        </div>
+
+        {slot.attendance === 'absent' && slot.declineReason ? (
+            <p className="mt-2 pl-[3.375rem] text-xs text-destructive">불참 사유: {slot.declineReason}</p>
+        ) : null}
+
+        {hasBody ? <div className="mt-3 space-y-3 pl-[3.375rem]">
+            {/* 초대 알림 · 갠톡 멘트 · 대체 요청 */}
+            {showTools ? <div className="flex flex-wrap items-center gap-1.5">
+                {showInvite ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
                         title="팀원에게 앱 사역 초대 알림을 전송합니다"
                         disabled={actions.disabled || sendingInvite}
                         onClick={async () => {
@@ -631,270 +747,546 @@ const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, u
                             }
                         }}
                     >
-                        <Send size={11} />
+                        <Send className="text-muted-foreground" />
                         <span>{sendingInvite ? '발송 중…' : slot.invitedAt ? '초대 재발송' : '초대 알림'}</span>
-                    </button>
+                    </Button>
                 ) : null}
-                {manager && slot.memberId && slot.attendance === 'pending' ? (
-                    <button
-                        type="button"
-                        className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground hover:text-primary hover:bg-primary/10 inline-flex items-center gap-1 border border-border"
-                        title="해당 팀원에게 카카오톡 갠톡으로 보낼 확인 멘트를 복사합니다"
-                        onClick={() => void handleCopyPersonal()}
-                    >
-                        {copiedPersonal ? (
-                            <span className="text-emerald-600 font-bold text-[11px]">멘트 복사됨!</span>
-                        ) : (
-                            <>
-                                <MessageSquare size={12} />
-                                <span>갠톡 멘트</span>
-                            </>
-                        )}
-                    </button>
+                {showPersonal ? (
+                    <Button type="button" variant="outline" size="xs" title="해당 팀원에게 카카오톡 갠톡으로 보낼 확인 멘트를 복사합니다" onClick={() => void handleCopyPersonal()}>
+                        {copiedPersonal ? <><Check className="text-brand" /><span className="text-brand">멘트 복사됨!</span></> : <><MessageSquare className="text-muted-foreground" /><span>갠톡 멘트</span></>}
+                    </Button>
                 ) : null}
-                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                    slot.attendance === 'confirmed' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' :
-                    slot.attendance === 'absent' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
-                }`}>
-                    {attendanceLabels[slot.attendance]}
-                </span>
-                {manager && !event.cancelled ? (
-                    <button
-                        type="button"
-                        className="p-1 text-muted-foreground hover:text-destructive rounded"
-                        title="이 역할 슬롯 삭제"
-                        disabled={actions.disabled}
-                        onClick={() => {
-                            if (window.confirm('이 역할 배정 슬롯을 삭제하시겠습니까?')) {
-                                void actions.send({ type: 'slot.remove', eventId: event.id, slotId: slot.id });
-                            }
-                        }}
-                    >
-                        <X size={14} />
-                    </button>
+                {showRequest ? (
+                    <Disclosure className="open:basis-full" chevron="inline" summaryClassName={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'px-2 font-medium text-muted-foreground hover:text-foreground')} summary={slot.memberId ? '대체 인원 요청 보내기' : '빈자리 충원 요청 보내기'}>
+                        <div className="mt-3 rounded-2xl bg-muted/60 p-4"><AlertForm {...actions} eventId={event.id} slotId={slot.id} /></div>
+                    </Disclosure>
                 ) : null}
-            </div>
-        </div>
+            </div> : null}
 
-        {/* 초대/동의 타임스탬프 & 불참 사유 */}
-        {(slot.invitedAt || slot.respondedAt || (slot.attendance === 'absent' && slot.declineReason)) ? (
-            <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-muted-foreground pt-0.5">
-                {slot.invitedAt ? (
-                    <span className="inline-flex items-center gap-1 text-primary font-medium">
-                        <Send size={10} className="shrink-0" />
-                        <span>초대 발송: {new Date(slot.invitedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</span>
-                    </span>
-                ) : null}
-                {slot.respondedAt ? (
-                    <span className="inline-flex items-center gap-1 font-semibold text-foreground">
-                        <Check size={11} className={slot.attendance === 'confirmed' ? 'text-emerald-600' : 'text-rose-500'} />
-                        <span>{slot.attendance === 'confirmed' ? '동의 완료' : '응답'}: {new Date(slot.respondedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</span>
-                    </span>
-                ) : null}
-                {slot.attendance === 'absent' && slot.declineReason ? (
-                    <div className="w-full rounded-lg bg-destructive/10 px-2.5 py-1 text-destructive font-medium">
-                        불참 사유: {slot.declineReason}
-                    </div>
-                ) : null}
-            </div>
-        ) : null}
+            {/* 스마트 빈자리 추천 */}
+            {recommendedCandidates.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={cn(eyebrow, 'mr-0.5 inline-flex items-center gap-1')}><Sparkles size={12} aria-hidden="true" />빈자리 추천</span>
+                    {recommendedCandidates.slice(0, 2).map(c => (
+                        <Button
+                            key={c.userId}
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            title={`${c.name}님을 이 역할에 바로 배정합니다 (누적 사역 ${c.count}회)`}
+                            disabled={actions.disabled}
+                            onClick={() => void actions.send({ type: 'slot.save', eventId: event.id, slotId: slot.id, role: slot.role, memberId: c.userId })}
+                        >
+                            <Plus className="text-brand" />
+                            {c.name} <span className="font-normal tabular-nums text-muted-foreground">({c.count}회)</span>
+                        </Button>
+                    ))}
+                </div>
+            ) : null}
 
-        {/* 💡 스마트 빈자리 추천 칩 */}
-        {recommendedCandidates.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-xs">
-                <span className="text-muted-foreground flex items-center gap-1 font-semibold text-[11px]">
-                    <Sparkles size={12} className="text-amber-500" /> 빈자리 추천:
-                </span>
-                {recommendedCandidates.slice(0, 2).map(c => (
-                    <button
-                        key={c.userId}
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-bold text-primary hover:bg-primary/20 text-[11px]"
-                        title={`${c.name}님을 이 역할에 바로 배정합니다 (누적 사역 ${c.count}회)`}
-                        disabled={actions.disabled}
-                        onClick={() => void actions.send({ type: 'slot.save', eventId: event.id, slotId: slot.id, role: slot.role, memberId: c.userId })}
-                    >
-                        + {c.name} ({c.count}회)
-                    </button>
-                ))}
-            </div>
-        ) : null}
-
-        {/* 내 참석 응답: 1초 빠른 액션 버튼 */}
-        {!event.cancelled && assigned ? (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-primary flex items-center gap-1">
-                            <Sparkles size={13} /> 내 섬김 참석 여부
-                        </span>
-                        <div className="flex items-center gap-1">
-                            <a
-                                href={getMyGoogleCalendarUrl(event, slot.role)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
-                                title="내 구글 캘린더에 1클릭 추가"
-                            >
-                                <CalendarPlus size={11} />
-                                <span>구글 등록</span>
-                            </a>
-                            <button
-                                type="button"
-                                className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
-                                title="애플/스마트폰 캘린더(.ics) 1클릭 다운로드"
-                                onClick={() => downloadIcsFile(event, '예배팀', names)}
-                            >
-                                <Download size={11} />
-                                <span>.ics</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
+            {/* 내 참석 응답 */}
+            {showMine ? (
+                <div className="space-y-2">
+                    <p className={eyebrow}>내 섬김 참석 여부</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
                         {slot.attendance !== 'confirmed' ? (
-                            <button
+                            <Button
                                 type="button"
-                                className={`${primary} text-xs py-1.5 px-3 min-h-9`}
+                                size="xs"
                                 disabled={actions.disabled}
                                 onClick={() => void actions.send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' })}
                             >
-                                <Check size={14} /> 참석 확정
-                            </button>
+                                <Check /> 참석 확정
+                            </Button>
                         ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                                <Check size={14} /> 참석 확정됨
+                            <span className={cn('inline-flex h-8 items-center gap-1 pr-1 text-xs font-semibold', STATUS.ok.text)}>
+                                <Check size={13} aria-hidden="true" /> 참석 확정됨
                             </span>
                         )}
-                        <button
-                            type="button"
-                            className={`${button} text-xs py-1 px-2.5 min-h-9 text-destructive`}
-                            disabled={actions.disabled}
-                            onClick={() => setShowingAbsentForm(!showingAbsentForm)}
-                        >
+                        <Button type="button" variant="outline" size="xs" disabled={actions.disabled} onClick={() => setShowingAbsentForm(!showingAbsentForm)}>
                             불참 사유 {showingAbsentForm ? '닫기' : '입력'}
-                        </button>
+                        </Button>
+                        <CalendarLinks event={event} role={slot.role} names={names} />
                     </div>
-                </div>
-
-                {showingAbsentForm ? (
-                    <div className="space-y-2 pt-1 border-t border-border/40">
-                        <div className="space-y-1">
-                            <span className="text-[11px] font-semibold text-muted-foreground">1클릭 불참 사유 선택:</span>
-                            <div className="flex flex-wrap gap-1">
-                                {['개인 사정', '시험/학업', '출장/야근', '가족 행사', '건강/컨디션'].map(r => (
-                                    <button
-                                        key={r}
-                                        type="button"
-                                        disabled={actions.disabled}
-                                        className="rounded-md border border-destructive/20 bg-destructive/5 px-2 py-0.5 text-[11px] font-semibold text-destructive hover:bg-destructive/15 transition-all active:scale-95"
-                                        title={`‘${r}’ 사유로 1클릭 불참 응답`}
-                                        onClick={() => void actions.send({
-                                            type: 'attendance.set',
-                                            eventId: event.id,
-                                            slotId: slot.id,
-                                            attendance: 'absent',
-                                            reason: r,
-                                            autoRequestSubstitute: true,
-                                        })}
-                                    >
-                                        {r}
-                                    </button>
-                                ))}
+                    {showingAbsentForm ? (
+                        <div className="space-y-4 rounded-2xl bg-muted/60 p-4">
+                            <div className="space-y-2">
+                                <p className={eyebrow}>1클릭 불참 사유 선택</p>
+                                <ReasonChips disabled={actions.disabled} onPick={r => void actions.send({
+                                    type: 'attendance.set',
+                                    eventId: event.id,
+                                    slotId: slot.id,
+                                    attendance: 'absent',
+                                    reason: r,
+                                    autoRequestSubstitute: true,
+                                })} />
                             </div>
+                            <CommandForm
+                                {...actions}
+                                submitLabel="직접 입력한 사유로 저장"
+                                build={data => ({
+                                    type: 'attendance.set',
+                                    eventId: event.id,
+                                    slotId: slot.id,
+                                    attendance: 'absent',
+                                    reason: text(data, 'reason'),
+                                    autoRequestSubstitute: data.get('autoRequestSubstitute') === 'on',
+                                })}
+                            >
+                                <Field label="기타 불참 사유 직접 입력">
+                                    <textarea name="reason" rows={2} placeholder="직접 사유를 입력하세요 (선택)" className={cn(area, 'min-h-20')} />
+                                </Field>
+                                <label className="flex cursor-pointer items-center gap-2 text-xs font-medium">
+                                    <input type="checkbox" name="autoRequestSubstitute" defaultChecked className={checkbox} />
+                                    <span>인도자에게 대체 인원 자동 추천 알림 발송</span>
+                                </label>
+                            </CommandForm>
                         </div>
-                        <CommandForm
-                            {...actions}
-                            submitLabel="직접 입력한 사유로 저장"
-                            build={data => ({
-                                type: 'attendance.set',
-                                eventId: event.id,
-                                slotId: slot.id,
-                                attendance: 'absent',
-                                reason: text(data, 'reason'),
-                                autoRequestSubstitute: data.get('autoRequestSubstitute') === 'on',
-                            })}
+                    ) : null}
+                </div>
+            ) : null}
+
+            {/* 지원하기 */}
+            {showVolunteer ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">대체/충원이 필요한 빈자리입니다.</span>
+                    {volunteered ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            className="text-destructive"
+                            disabled={actions.disabled}
+                            title="지원 신청을 취소합니다"
+                            onClick={() => void actions.send({ type: 'slot.unvolunteer', eventId: event.id, slotId: slot.id })}
                         >
-                            <Field label="기타 불참 사유 직접 입력">
-                                <textarea name="reason" rows={2} placeholder="직접 사유를 입력하세요 (선택)" className={control} />
-                            </Field>
-                            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    name="autoRequestSubstitute"
-                                    defaultChecked
-                                    className="rounded"
-                                />
-                                <span>인도자에게 대체 인원 자동 추천 알림 발송</span>
-                            </label>
-                        </CommandForm>
-                    </div>
-                ) : null}
-            </div>
-        ) : null}
+                            지원 취소
+                        </Button>
+                    ) : (
+                        <Button type="button" size="xs" disabled={actions.disabled} onClick={() => void actions.send({ type: 'slot.volunteer', eventId: event.id, slotId: slot.id })}>
+                            이 역할에 지원하기
+                        </Button>
+                    )}
+                </div>
+            ) : null}
 
-        {/* 빈자리 또는 대체 지원 요청 폼 */}
-        {!event.cancelled && (manager || assigned) ? (
-            <details>
-                <summary className={disclosure}>{slot.memberId ? '대체 인원 요청 보내기' : '빈자리 충원 요청 보내기'}</summary>
-                <div className="pt-2"><AlertForm {...actions} eventId={event.id} slotId={slot.id} /></div>
-            </details>
-        ) : null}
-
-        {/* 지원하기 버튼 */}
-        {!event.cancelled && !assigned && needsHelp && members.some(m => m.userId === userId) ? (
-            <div className="flex items-center justify-between gap-2 pt-1 text-xs">
-                <span className="text-muted-foreground">대체/충원이 필요한 빈자리입니다.</span>
-                {volunteered ? (
-                    <button
-                        type="button"
-                        className={`${button} text-xs py-1 px-2.5 min-h-8 text-destructive border-destructive/30 hover:bg-destructive/10 font-bold`}
-                        disabled={actions.disabled}
-                        title="지원 신청을 취소합니다"
-                        onClick={() => void actions.send({ type: 'slot.unvolunteer', eventId: event.id, slotId: slot.id })}
-                    >
-                        지원 취소
-                    </button>
-                ) : (
-                    <button
-                        type="button"
-                        className={`${primary} text-xs py-1 px-3 min-h-8`}
-                        disabled={actions.disabled}
-                        onClick={() => void actions.send({ type: 'slot.volunteer', eventId: event.id, slotId: slot.id })}
-                    >
-                        이 역할에 지원하기
-                    </button>
-                )}
-            </div>
-        ) : null}
-
-        {/* 지원자 명단 */}
-        {slot.volunteers.length > 0 ? (
-            <div className="space-y-1.5 rounded-lg bg-muted/40 p-2.5 text-xs">
-                <p className="font-semibold text-secondary">대체 지원자 {slot.volunteers.length}명</p>
-                <ul className="space-y-1.5">
-                    {slot.volunteers.map(mid => (
-                        <li key={mid} className="flex items-center justify-between gap-2">
-                            <span>{names.get(mid) ?? '이전 팀원'}{mid === userId ? ' (나)' : ''}</span>
-                            {manager && !event.cancelled ? (
-                                <button
-                                    type="button"
-                                    className={`${primary} text-xs py-0.5 px-2 min-h-7`}
-                                    disabled={actions.disabled || !names.has(mid)}
-                                    onClick={() => void actions.send({ type: 'slot.accept', eventId: event.id, slotId: slot.id, memberId: mid })}
-                                >
-                                    담당자로 확정
-                                </button>
-                            ) : null}
-                        </li>
-                    ))}
-                </ul>
-            </div>
-        ) : null}
+            {/* 지원자 명단 */}
+            {slot.volunteers.length > 0 ? (
+                <div className="space-y-2">
+                    <p className={eyebrow}>대체 지원자 {slot.volunteers.length}명</p>
+                    <ul className="space-y-1.5">
+                        {slot.volunteers.map(mid => (
+                            <li key={mid} className="flex items-center gap-2">
+                                <Avatar name={names.get(mid) ?? '이전 팀원'} size="xs" />
+                                <span className="text-[13px] text-foreground">{names.get(mid) ?? '이전 팀원'}{mid === userId ? ' (나)' : ''}</span>
+                                {manager && live ? (
+                                    <Button
+                                        type="button"
+                                        size="xs"
+                                        className="ml-auto"
+                                        disabled={actions.disabled || !names.has(mid) || placedElsewhere(mid)}
+                                        title={!names.has(mid) ? '팀을 나간 사람은 확정할 수 없습니다' : placedElsewhere(mid) ? '같은 시간대 다른 자리에 이미 배치되어 있습니다' : undefined}
+                                        onClick={() => void actions.send({ type: 'slot.accept', eventId: event.id, slotId: slot.id, memberId: mid })}
+                                    >
+                                        담당자로 확정
+                                    </Button>
+                                ) : null}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ) : null}
+        </div> : null}
     </li>;
 });
 
+/** 캘린더·배분표에서 고른 일정의 빠른 상세 & 배정 패널 */
+function SelectedEventPanel({ event, variant, manager, copied, alerts, members, names, userId, allEvents, workloadMap, onClose, onRsvp, onShare, onCopy, ...actions }: Actions & {
+    event: TeamSchedule; variant: 'calendar' | 'matrix'; manager: boolean; copied: boolean; alerts: UrgentAlert[];
+    members: TeamMember[]; names: Map<string, string>; userId: string; allEvents: TeamSchedule[]; workloadMap: Map<string, number>;
+    onClose: () => void; onRsvp: () => void; onShare: () => void; onCopy: () => void;
+}) {
+    const hasVacant = event.slots.some(s => s.memberId === null);
+    const hasPending = event.slots.some(s => s.memberId && s.attendance === 'pending');
+    const showAutoAssign = variant === 'matrix' || hasVacant;
+    const showReminder = variant === 'matrix' || hasPending;
+    return <section aria-label="선택된 일정" className="space-y-5 rounded-3xl border border-border bg-card p-5 animate-in fade-in sm:p-6">
+        <header className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+                <p className={eyebrow}>선택된 일정 · {event.kind === 'rehearsal' ? '연습' : '예배'}{event.cancelled ? <span className="text-destructive"> · 취소됨</span> : null}</p>
+                <h3 className="mt-0.5 text-[17px] font-semibold tracking-tight text-foreground">{event.title}</h3>
+                <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                    <time dateTime={event.startsAt}>{planningDate(event.startsAt)}</time>
+                    <span> ~ </span>
+                    <time dateTime={event.endsAt}>{planningDate(event.endsAt)}</time>
+                    {event.location ? ` · 장소: ${event.location}` : ''}
+                </p>
+            </div>
+            <button type="button" onClick={onClose} title="닫기" aria-label="닫기" className="-mr-2 -mt-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                <X size={18} />
+            </button>
+        </header>
+
+        <SlotSummary slots={event.slots} />
+
+        <div className="flex flex-wrap gap-1.5">
+            {manager && !event.cancelled && showAutoAssign ? (
+                <Button
+                    type="button"
+                    size="xs"
+                    variant={hasVacant ? 'default' : 'outline'}
+                    disabled={actions.disabled}
+                    title={variant === 'matrix' ? '파트가 일치하고 최근 사역 횟수가 적은 팀원을 우선하여 빈자리를 스마트하게 배분합니다' : undefined}
+                    onClick={() => void actions.send({ type: 'slots.autoAssign', eventId: event.id })}
+                >
+                    <Sparkles className={hasVacant ? undefined : 'text-muted-foreground'} />
+                    <span>스마트 자동 배분</span>
+                </Button>
+            ) : null}
+            <Button type="button" variant="outline" size="xs" title="팀원 사역 동의 현황 및 상세 이력 확인" onClick={onRsvp}>
+                <Users className="text-muted-foreground" />
+                <span>동의 현황</span>
+            </Button>
+            <Button type="button" variant="outline" size="xs" onClick={onShare}>
+                <Share2 className="text-muted-foreground" />
+                <span>공유 & 캘린더</span>
+            </Button>
+            {manager && !event.cancelled ? <>
+                {(event.slots.length === 0 || hasVacant) ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        disabled={actions.disabled}
+                        title="가장 최근 같은 종류(예배/연습) 일정의 파트 및 배정 인원을 그대로 복사해옵니다"
+                        onClick={() => void actions.send({ type: 'slots.autoFillFromRecent', eventId: event.id })}
+                    >
+                        <Copy className="text-muted-foreground" />
+                        <span>지난 배정 복사</span>
+                    </Button>
+                ) : null}
+                {showReminder ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        disabled={actions.disabled}
+                        title={variant === 'matrix' ? '배정되었으나 아직 응답하지 않은 팀원들에게 카카오톡 복사용 개별 멘트를 전송하거나 알림을 발송합니다' : undefined}
+                        onClick={() => void actions.send({ type: 'schedule.sendDutyReminder', eventId: event.id })}
+                    >
+                        <Bell className="text-muted-foreground" />
+                        <span>출석 리마인드 알람</span>
+                    </Button>
+                ) : null}
+                <Button type="button" variant="outline" size="xs" onClick={onCopy}>
+                    {copied ? <><Check className="text-brand" /><span className="text-brand">복사됨!</span></> : <><ClipboardCopy className="text-muted-foreground" /><span>카톡 복사</span></>}
+                </Button>
+            </> : null}
+        </div>
+
+        <div>
+            <h4 className={subTitle}>
+                배정 인원 ({event.slots.filter(s => s.memberId).length}/{event.slots.length}명)
+            </h4>
+            {event.slots.length ? (
+                <ul className="mt-1">
+                    {event.slots.map(slot => (
+                        <SlotCard
+                            key={slot.id}
+                            {...actions}
+                            slot={slot}
+                            event={event}
+                            alerts={alerts}
+                            members={members}
+                            names={names}
+                            userId={userId}
+                            manager={manager}
+                            allEvents={allEvents}
+                            workloadMap={workloadMap}
+                        />
+                    ))}
+                </ul>
+            ) : (
+                <p className="mt-3 rounded-2xl border border-dashed border-input px-4 py-6 text-center text-xs text-muted-foreground">
+                    {variant === 'calendar' ? '아직 배정된 역할이 없습니다. 상단 \'지난 배정 복사\'를 누르면 1초 만에 배정됩니다.' : '아직 배정된 역할이 없습니다. 상단 \'지난 배정 복사\'를 누르면 배정됩니다.'}
+                </p>
+            )}
+        </div>
+    </section>;
+}
+
+/** 목록 보기의 일정 한 건 (구분선으로 나뉜 행) */
+function EventItem({ event, defaultOpen, now, alerts, manager, members, names, userId, allEvents, workloadMap, copied, onRsvp, onShare, onCopy, ...actions }: Actions & {
+    event: TeamSchedule; defaultOpen: boolean; now: number; alerts: UrgentAlert[]; manager: boolean;
+    members: TeamMember[]; names: Map<string, string>; userId: string; allEvents: TeamSchedule[]; workloadMap: Map<string, number>;
+    copied: boolean; onRsvp: () => void; onShare: () => void; onCopy: () => void;
+}) {
+    const assignedCount = event.slots.filter(slot => slot.memberId).length;
+    const confirmedCount = event.slots.filter(slot => slot.attendance === 'confirmed').length;
+    const totalSlots = event.slots.length;
+    const isUserAssigned = event.slots.some(slot => slot.memberId === userId);
+    const hasVacant = event.slots.some(s => s.memberId === null);
+    const relDate = getRelativeDateLabel(event.startsAt, now);
+    const phase = Date.parse(event.endsAt) < now ? '종료됨' : Date.parse(event.startsAt) <= now ? '진행 중' : '예정';
+    const live = !event.cancelled;
+
+    return <article aria-label={event.title}>
+        <header>
+            <p className={eyebrow}>
+                <span className={relDate.cls}>{relDate.text}</span>
+                <span> · {event.kind === 'rehearsal' ? '연습' : '예배'}</span>
+                {event.cancelled ? <span className="font-semibold text-destructive"> · 취소됨</span> : phase !== relDate.text && !(relDate.text === '종료' && phase === '종료됨') ? <span> · {phase}</span> : null}
+                {isUserAssigned ? <span className="font-semibold text-brand"> · 내 사역</span> : null}
+            </p>
+            <h3 className="mt-0.5 break-words text-[17px] font-semibold tracking-tight text-foreground">{event.title}</h3>
+            <p className="mt-0.5 text-xs tabular-nums text-muted-foreground"><time dateTime={event.startsAt}>{planningDate(event.startsAt)}</time><span> ~ </span><time dateTime={event.endsAt}>{planningDate(event.endsAt)}</time> (KST)</p>
+            <p className="break-words text-xs text-muted-foreground">장소: {event.location || '미정'}</p>
+        </header>
+
+        <SlotSummary slots={event.slots} className="mt-4" />
+
+        <div className="mt-4 flex flex-wrap gap-1.5">
+            {manager && live && hasVacant ? (
+                <Button
+                    type="button"
+                    size="xs"
+                    disabled={actions.disabled}
+                    title="파트 일치 및 공평 밸런스(사역 적은 인원 우선)로 빈자리를 스마트하게 자동 배정합니다"
+                    onClick={() => void actions.send({ type: 'slots.autoAssign', eventId: event.id })}
+                >
+                    <Sparkles />
+                    <span>스마트 자동 배분</span>
+                </Button>
+            ) : null}
+            {totalSlots > 0 && assignedCount > 0 ? (
+                <Button type="button" variant="outline" size="xs" title="팀원 사역 동의 현황 및 응답 이력 확인 / 일괄 초대 알림" onClick={onRsvp}>
+                    <Users className="text-muted-foreground" />
+                    <span>동의 현황 <span className="tabular-nums">({confirmedCount}/{assignedCount}명)</span></span>
+                </Button>
+            ) : null}
+            <Button type="button" variant="outline" size="xs" title="일정 및 섬김 명단 공유 / 캘린더 등록 (.ics)" onClick={onShare}>
+                <Share2 className="text-muted-foreground" />
+                <span>공유 & 캘린더</span>
+            </Button>
+            <Button type="button" variant="outline" size="xs" title="카카오톡 공유용 명단 빠른 복사" onClick={onCopy}>
+                {copied ? <><Check className="text-brand" /><span className="text-brand">복사됨!</span></> : <><ClipboardCopy className="text-muted-foreground" /><span>빠른 복사</span></>}
+            </Button>
+            {manager && live ? <>
+                {(event.slots.length === 0 || hasVacant) ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        disabled={actions.disabled}
+                        title="가장 최근 같은 종류(예배/연습) 일정의 파트 및 배정 인원을 그대로 복사해옵니다"
+                        onClick={() => void actions.send({ type: 'slots.autoFillFromRecent', eventId: event.id })}
+                    >
+                        <Copy className="text-muted-foreground" />
+                        <span>지난 배정 복사</span>
+                    </Button>
+                ) : null}
+                {event.slots.some(s => s.memberId && s.attendance === 'pending') ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        disabled={actions.disabled}
+                        title="참석 여부를 아직 확인하지 않은 팀원들에게 긴급 리마인드 알림을 보냅니다"
+                        onClick={() => void actions.send({ type: 'schedule.sendDutyReminder', eventId: event.id })}
+                    >
+                        <Bell className="text-muted-foreground" />
+                        <span>출석 리마인드 알람</span>
+                    </Button>
+                ) : null}
+                {event.slots.some(s => s.memberId !== null) ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className="text-destructive hover:bg-destructive/10"
+                        disabled={actions.disabled}
+                        title="모든 슬롯의 배정을 비우고 빈자리로 초기화합니다"
+                        onClick={() => {
+                            if (window.confirm('이 일정의 모든 인원 배정을 초기화(빈자리)하시겠습니까?')) {
+                                void actions.send({ type: 'slots.clear', eventId: event.id });
+                            }
+                        }}
+                    >
+                        배분 초기화
+                    </Button>
+                ) : null}
+            </> : null}
+        </div>
+
+        {/* 콘티 안내 및 당번 알림 */}
+        {event.setlistTitle ? (
+            <div className="mt-4 rounded-2xl bg-muted/60 px-4 py-3.5">
+                <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <Music size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+                        <div className="min-w-0">
+                            <p className={eyebrow}>콘티{event.setlistSongs?.length ? ` · ${event.setlistSongs.length}곡` : ''}</p>
+                            <p className="truncate text-[15px] font-medium text-foreground">{event.setlistTitle}</p>
+                        </div>
+                    </div>
+                    {manager && live ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            disabled={actions.disabled}
+                            title="배정된 섬김이들에게 콘티 확인 리마인더 알림 재전송"
+                            onClick={() => void actions.send({
+                                type: 'event.updateSetlist',
+                                eventId: event.id,
+                                setlistTitle: event.setlistTitle!,
+                                setlistSongs: event.setlistSongs ?? undefined,
+                                setlistId: event.setlistId ?? undefined,
+                                notifyDuty: true,
+                            })}
+                        >
+                            <Bell className="text-muted-foreground" />
+                            <span>당번에게 콘티 알림</span>
+                        </Button>
+                    ) : null}
+                </div>
+                {event.setlistSongs?.length ? (
+                    <ol className="mt-3 space-y-1 pl-[1.625rem] text-[13px] text-foreground/75">
+                        {event.setlistSongs.map((song, sIdx) => (
+                            <li key={sIdx} className="flex gap-2.5">
+                                <span className="w-4 shrink-0 tabular-nums text-muted-foreground">{sIdx + 1}</span>
+                                <span className="min-w-0 break-words">{song}</span>
+                            </li>
+                        ))}
+                    </ol>
+                ) : null}
+            </div>
+        ) : manager && live ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-dashed border-input px-4 py-2.5">
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Music size={14} aria-hidden="true" /> 아직 등록된 콘티가 없습니다.
+                </span>
+                <Disclosure className="open:basis-full" chevron="none" summaryClassName={outlineXs} summary={<><Plus className="text-brand" />콘티 등록/연결</>}>
+                    <div className="pb-2 pt-4"><SetlistForm {...actions} event={event} /></div>
+                </Disclosure>
+            </div>
+        ) : null}
+
+        <Disclosure
+            defaultOpen={defaultOpen}
+            className="mt-4 border-t border-border/70"
+            summaryClassName="min-h-12 text-sm font-medium text-foreground"
+            summary={<span>일정 상세·참석·배정 보기{alerts.some(alert => !alert.resolvedAt) ? <span className="text-secondary"> · 긴급 알림 있음</span> : ''}</span>}
+        >
+            <div className="space-y-7 pt-2">
+                {event.cancelled ? <p className="rounded-2xl bg-muted px-4 py-3 text-sm font-medium">취소된 일정입니다. 배정과 알림은 기록으로만 확인할 수 있습니다.</p> : null}
+
+                {/* 인도자 알림 · 당번 공지 발송 (인도자 전용) */}
+                {manager && live ? (
+                    <Disclosure
+                        className="rounded-2xl bg-muted/60 px-4"
+                        chevron="inline"
+                        summaryClassName="min-h-12 text-sm font-semibold text-foreground"
+                        summary={<><Send size={15} className="text-muted-foreground" aria-hidden="true" /><span>인도자 알림 · 당번 공지 보내기</span><span className="ml-auto text-xs font-normal text-muted-foreground">펼치기</span></>}
+                    >
+                        <div className="pb-4 pt-1"><DutyNoticeForm {...actions} event={event} members={members} /></div>
+                    </Disclosure>
+                ) : null}
+
+                <section aria-label="일정 안내" className="space-y-1.5"><h4 className={subTitle}>안내 사항</h4><p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground/75">{event.notes || '등록된 안내 사항이 없습니다.'}</p></section>
+                <section aria-label="일정별 긴급 알림">
+                    <h4 className={subTitle}>이 일정의 알림 · 해결 기록</h4>
+                    {alerts.length ? <ul>{alerts.map(alert => <AlertCard key={alert.id} {...actions} alert={alert} event={event} names={names} manager={manager} />)}</ul> : <p className="mt-1.5 text-sm text-muted-foreground">등록된 알림이 없습니다.</p>}
+                </section>
+                <section aria-label="역할 배정과 참석">
+                    <h4 className={subTitle}>역할 배정·참석</h4>
+                    {event.slots.length ? <ul className="mt-1">{event.slots.map(slot => <SlotCard key={slot.id} {...actions} slot={slot} event={event} alerts={alerts} members={members} names={names} userId={userId} manager={manager} allEvents={allEvents} workloadMap={workloadMap} />)}</ul> : <p className="mt-1.5 text-sm text-muted-foreground">아직 등록된 역할이 없습니다.</p>}
+                </section>
+                {manager ? <Disclosure
+                    className="border-t border-border/70"
+                    summaryClassName="min-h-12 text-sm font-medium text-foreground"
+                    summary={<span>일정 관리 (역할 템플릿 · 배정 복사 · 삭제)</span>}
+                >
+                    <div className="pb-1">
+                        {!event.cancelled && (
+                            <>
+                                {([
+                                    ['콘티 정보 수정 및 당번 알림', <SetlistForm key="setlist" {...actions} event={event} />],
+                                    ['일정 수정', <EventForm key={JSON.stringify([event.title, event.kind, event.startsAt, event.endsAt, event.location, event.notes])} {...actions} event={event} />],
+                                    ['역할·담당자 1명 추가', <SlotForm key="slot" {...actions} eventId={event.id} members={members} />],
+                                    ['역할 템플릿 일괄 추가 (표준 밴드, 풀 세션 등)', <TemplateForm key="template" {...actions} eventId={event.id} />],
+                                    ['이전 일정에서 배정 복사해오기', <CopyRosterForm key="copy" {...actions} eventId={event.id} otherEvents={allEvents} />],
+                                    ['일정 전체 긴급 공지', <AlertForm key="notice" {...actions} eventId={event.id} slotId={null} />],
+                                ] as const).map(([label, form]) => (
+                                    <Disclosure key={label} className="border-b border-border/70 pl-3" summaryClassName="min-h-11 text-[13px] text-foreground/80" summary={<span>{label}</span>}>
+                                        <div className="pb-5 pt-1">{form}</div>
+                                    </Disclosure>
+                                ))}
+                            </>
+                        )}
+                        <div className="flex flex-wrap gap-2 pl-1 pt-3">
+                            {!event.cancelled && <ConfirmAction {...actions} label="일정 취소" explanation="이 일정을 취소하면 참석 응답, 배정 변경, 지원 및 알림 처리를 할 수 없습니다. 취소하시겠습니까?" command={{ type: 'event.cancel', eventId: event.id }} />}
+                            <ConfirmAction {...actions} label="일정 영구 삭제" explanation="이 일정을 목록에서 완전히 삭제합니다. 이 작업은 되돌릴 수 없습니다. 삭제하시겠습니까?" command={{ type: 'event.delete', eventId: event.id }} />
+                        </div>
+                    </div>
+                </Disclosure> : null}
+            </div>
+        </Disclosure>
+    </article>;
+}
+
+const VIEW_MODES = [
+    ['list', '목록', List],
+    ['calendar', '캘린더', CalendarDays],
+    ['matrix', '사역 배분표', Table],
+] as const;
+
+const PERIOD_FILTERS = [
+    ['upcoming', '예정·진행 중'],
+    ['my', '내 배정 일정'],
+    ['vacant', '빈자리 필요'],
+    ['past', '지난 일정'],
+    ['all', '전체'],
+] as const;
+
+const PART_FILTERS = [
+    ['all', '전체'],
+    ['leader', '인도자'],
+    ['vocal', '싱어'],
+    ['keyboard', '건반'],
+    ['guitar', '기타'],
+    ['bass', '베이스'],
+    ['drums', '드럼'],
+    ['sound', '음향'],
+    ['media', '미디어'],
+] as const;
+
+const TEMPLATE_PRESETS = [
+    { label: '이번 주 주일 예배', time: '11:00', when: getUpcomingSundayKST, command: (times: { startsAt: string; endsAt: string }): PlanningCommand => ({
+        type: 'event.createWithTemplate',
+        input: { title: '주일 2부 예배', kind: 'worship', startsAt: times.startsAt, endsAt: times.endsAt, location: '본당 3층 대예배실', notes: '10:00 음향/악기 리허설 시작' },
+        templateKey: 'standard',
+        weeksCount: 1,
+    }) },
+    { label: '이번 주 토요 연습', time: '17:00', when: getUpcomingSaturdayKST, command: (times: { startsAt: string; endsAt: string }): PlanningCommand => ({
+        type: 'event.save',
+        input: { title: '찬양팀 토요 연습', kind: 'rehearsal', startsAt: times.startsAt, endsAt: times.endsAt, location: '찬양팀 연습실', notes: '콘티 사전 숙지 후 모입니다.' },
+    }) },
+    { label: '이번 주 금요 기도회', time: '20:00', when: getUpcomingFridayKST, command: (times: { startsAt: string; endsAt: string }): PlanningCommand => ({
+        type: 'event.createWithTemplate',
+        input: { title: '금요 기도회', kind: 'worship', startsAt: times.startsAt, endsAt: times.endsAt, location: '본당 3층 대예배실', notes: '뜨겁게 찬양과 기도로 준비합니다.' },
+        templateKey: 'acoustic',
+        weeksCount: 1,
+    }) },
+    { label: '이번 주 수요 예배', time: '19:30', when: getUpcomingWednesdayKST, command: (times: { startsAt: string; endsAt: string }): PlanningCommand => ({
+        type: 'event.save',
+        input: { title: '수요 예배', kind: 'worship', startsAt: times.startsAt, endsAt: times.endsAt, location: '본당 3층 대예배실', notes: '수요 예배 찬양 섬김' },
+    }) },
+];
+
 export default function SchedulePanel({ state, members, userId, busy, onCommand }: PlanningPanelProps) {
     const headingId = useId();
+    const createFormId = useId();
     const [filter, setFilter] = useState<'upcoming' | 'my' | 'vacant' | 'past' | 'all'>('upcoming');
     const [roleFilter, setRoleFilter] = useState<string>('all');
     const [now, setNow] = useState(() => Date.now());
@@ -980,6 +1372,14 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
     const [blockedDatesModalOpen, setBlockedDatesModalOpen] = useState(false);
     const [selectedCalendarEventId, setSelectedCalendarEventId] = useState<string | null>(null);
     const [createEventDate, setCreateEventDate] = useState<string | null>(null);
+    const [createFormOpen, setCreateFormOpen] = useState(false);
+    // 처음 펼칠 때 폼을 만들고, 접어도 입력 중인 내용을 유지합니다 (Disclosure 와 같은 방식).
+    const [createFormMounted, setCreateFormMounted] = useState(false);
+    // 달력에서 날짜를 골라 연 새 일정 폼. 모바일에서는 달력 아래(하단 탭 뒤)에 열리므로 화면 안으로 끌어옵니다.
+    const dateFormRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (createEventDate) dateFormRef.current?.scrollIntoView({ block: 'nearest' });
+    }, [createEventDate]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -1109,7 +1509,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
         }
     };
 
-    const send: Send = async command => {
+    const send = useCallback<Send>(async command => {
         if (busy || lock.current) return false;
         lock.current = true;
         setPending(true);
@@ -1125,427 +1525,298 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             lock.current = false;
             setPending(false);
         }
-    };
-    const actions = { send, disabled: busy || pending };
+    }, [busy, onCommand]);
+    const actions = useMemo(() => ({ send, disabled: busy || pending }), [send, busy, pending]);
 
     const searchParams = useSearchParams();
     const linkSetlistTitle = searchParams.get('linkSetlistTitle');
     const linkSetlistSongs = searchParams.get('linkSetlistSongs');
     const linkSetlistId = searchParams.get('linkSetlistId');
+    const linkTarget = state.events.find(e => !e.cancelled);
+    const nextDuty = myUpcomingSlots[0];
 
-    return <section aria-labelledby={headingId} className="min-w-0 space-y-5">
+    const panelProps = (event: TeamSchedule) => ({
+        ...actions,
+        event,
+        manager,
+        members,
+        names,
+        userId,
+        allEvents: state.events,
+        workloadMap,
+        alerts: alertsByEvent.get(event.id) ?? NO_ALERTS,
+        copied: copiedEventId === event.id,
+        onRsvp: () => setRsvpModalEvent(event),
+        onShare: () => setShareModalEvent(event),
+        onCopy: () => void handleCopyKakao(event),
+    });
+
+    return <section aria-labelledby={headingId} className="min-w-0 space-y-8">
         <header className="space-y-1">
-            <h2 id={headingId} className="text-xl font-bold">연습·예배 일정</h2>
-            <p className="text-sm text-muted-foreground">일정을 펼쳐 배정과 참석 여부를 확인하세요. 시간은 모두 한국 시간입니다.</p>
+            <h2 id={headingId} className="text-[17px] font-semibold tracking-tight text-foreground">연습·예배 일정</h2>
+            <p className="text-xs leading-5 text-muted-foreground">일정을 펼쳐 배정과 참석 여부를 확인하세요. 시간은 모두 한국 시간입니다.</p>
+            <div role="status" aria-live="polite" aria-atomic="true" className={cn('text-xs font-medium', busy || pending ? 'text-muted-foreground' : 'text-brand')}>
+                {busy || pending ? '처리 중…' : feedback && !feedback.error ? feedback.text : ''}
+            </div>
+            {feedback?.error ? <p role="alert" className="mt-3 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{feedback.text}</p> : null}
         </header>
-        <div role="status" aria-live="polite" aria-atomic="true" className="text-sm">
-            {busy || pending ? '처리 중…' : feedback && !feedback.error ? feedback.text : ''}
-        </div>
-        {feedback?.error ? <p role="alert" className="text-sm text-destructive">{feedback.text}</p> : null}
 
-        {/* 라이브러리 연동 콘티 빠른 연결 배너 */}
+        {/* 라이브러리에서 전달된 콘티 빠른 연결 */}
         {linkSetlistTitle && (
-            <div className="rounded-2xl border-2 border-primary bg-primary/10 p-4 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                        <Music size={18} className="text-primary" />
-                        <div>
-                            <p className="font-bold text-sm text-foreground">라이브러리에서 전달된 콘티: {linkSetlistTitle}</p>
-                            <p className="text-xs text-muted-foreground">가장 가까운 주일 일정에 연결하고 배정된 섬김이(당번)들에게 알림을 보낼 수 있습니다.</p>
-                        </div>
+            <div className={cn('flex flex-wrap items-center justify-between gap-4 rounded-3xl p-5', TONE_BLOCK.mint)}>
+                <div className="flex min-w-0 items-start gap-3">
+                    <Music size={18} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <div className="min-w-0">
+                        <p className="text-[15px] font-semibold text-foreground">라이브러리에서 전달된 콘티: {linkSetlistTitle}</p>
+                        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">가장 가까운 주일 일정에 연결하고 배정된 섬김이(당번)들에게 알림을 보낼 수 있습니다.</p>
                     </div>
-                    {state.events.filter(e => !e.cancelled).length > 0 ? (
-                        <button
-                            type="button"
-                            className={`${primary} text-xs py-1.5 px-3 min-h-8`}
-                            disabled={actions.disabled}
-                            onClick={() => {
-                                const target = state.events.find(e => !e.cancelled);
-                                if (target) {
-                                    const songs = linkSetlistSongs ? linkSetlistSongs.split('||').map(s => s.trim()).filter(Boolean) : undefined;
-                                    void actions.send({
-                                        type: 'event.updateSetlist',
-                                        eventId: target.id,
-                                        setlistTitle: linkSetlistTitle,
-                                        setlistSongs: songs,
-                                        setlistId: linkSetlistId ?? undefined,
-                                        notifyDuty: true,
-                                    });
-                                }
-                            }}
-                        >
-                            다가오는 {state.events.find(e => !e.cancelled)?.title}에 연결 & 당번 알림 발송
-                        </button>
-                    ) : null}
                 </div>
+                {linkTarget ? (
+                    <Button
+                        type="button"
+                        size="sm"
+                        className="h-auto min-h-9 whitespace-normal py-2 text-left"
+                        disabled={actions.disabled}
+                        onClick={() => {
+                            const target = state.events.find(e => !e.cancelled);
+                            if (target) {
+                                const songs = linkSetlistSongs ? linkSetlistSongs.split('||').map(s => s.trim()).filter(Boolean) : undefined;
+                                void actions.send({
+                                    type: 'event.updateSetlist',
+                                    eventId: target.id,
+                                    setlistTitle: linkSetlistTitle,
+                                    setlistSongs: songs,
+                                    setlistId: linkSetlistId ?? undefined,
+                                    notifyDuty: true,
+                                });
+                            }
+                        }}
+                    >
+                        다가오는 {linkTarget.title}에 연결 & 당번 알림 발송
+                    </Button>
+                ) : null}
             </div>
         )}
 
-        {/* 나의 다가오는 섬김 & 1초 빠른 응답 배너 */}
-        <section aria-label="나의 다가오는 섬김과 참석 응답" className={`${card} border-primary/30 bg-primary/5 space-y-3.5`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                    <Sparkles size={18} className="text-primary" />
-                    <h3 className="font-bold text-base text-foreground">
-                        나의 다가오는 섬김 ({myUpcomingSlots.length}건)
-                    </h3>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    {myUpcomingSlots.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={() => void handleCopyMySchedule()}
-                            className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold border-border/80 bg-background text-foreground hover:bg-muted flex items-center gap-1.5`}
-                            title="내 이번 달 사역 일정을 카카오톡용으로 원클릭 복사합니다"
-                        >
-                            {copiedMySchedule ? (
-                                <>
-                                    <Check size={13} className="text-emerald-600 dark:text-emerald-400 font-bold" />
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">내 사역 복사됨!</span>
-                                </>
-                            ) : (
-                                <>
-                                    <ClipboardCopy size={13} />
-                                    <span>내 일정 카톡 복사</span>
-                                </>
-                            )}
-                        </button>
-                    )}
-                    <button
+        {/* 나의 다가오는 섬김 & 1초 빠른 응답 */}
+        <section aria-label="나의 다가오는 섬김과 참석 응답" className={cn('space-y-4 rounded-3xl p-5 sm:p-6', TONE_BLOCK.mint)}>
+            <div className="flex items-start justify-between gap-3">
+                <h3 className="text-[17px] font-semibold tracking-tight text-foreground">
+                    나의 다가오는 섬김 <span className="font-normal tabular-nums text-muted-foreground">({myUpcomingSlots.length}건)</span>
+                </h3>
+                {myPendingSlots.length > 0 ? (
+                    <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-secondary">
+                        <span className="size-1.5 rounded-full bg-secondary" aria-hidden="true" />
+                        응답 필요 {myPendingSlots.length}건
+                    </span>
+                ) : myUpcomingSlots.length > 0 ? (
+                    <span className="mt-1 shrink-0 text-xs font-semibold text-brand">모두 확정됨</span>
+                ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+                {myPendingSlots.length > 1 ? (
+                    <Button
                         type="button"
-                        onClick={() => setBlockedDatesModalOpen(true)}
-                        className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold border-border/80 bg-background hover:border-destructive/40 text-muted-foreground hover:text-destructive flex items-center gap-1.5`}
-                        title="섬길 수 없는 날짜를 미리 등록해 두면 자동 배분에서 제외됩니다"
+                        size="xs"
+                        disabled={actions.disabled}
+                        onClick={() => void actions.send({
+                            type: 'attendance.batchConfirm',
+                            items: myPendingSlots.map(p => ({ eventId: p.event.id, slotId: p.slot.id }))
+                        })}
                     >
-                        <CalendarX2 size={13} />
-                        <span>사역 불가일 등록</span>
-                        {myBlockedCount > 0 ? (
-                            <span className="rounded-full bg-destructive/15 text-destructive px-1.5 py-0.2 text-[10px] font-bold">
-                                {myBlockedCount}
-                            </span>
-                        ) : null}
-                    </button>
-                    {myPendingSlots.length > 1 ? (
-                        <button
-                            type="button"
-                            className={`${button} text-xs py-1 px-3 min-h-8 font-bold bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 shadow-xs`}
-                            disabled={actions.disabled}
-                            onClick={() => void actions.send({
-                                type: 'attendance.batchConfirm',
-                                items: myPendingSlots.map(p => ({ eventId: p.event.id, slotId: p.slot.id }))
-                            })}
-                        >
-                            <Check size={13} /> 내 사역 {myPendingSlots.length}건 모두 참석 확정
-                        </button>
-                    ) : null}
-                    {myPendingSlots.length > 0 ? (
-                        <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 px-2.5 py-0.5 text-xs font-bold">
-                            응답 필요 {myPendingSlots.length}건
-                        </span>
-                    ) : myUpcomingSlots.length > 0 ? (
-                        <span className="rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 text-xs font-bold">
-                            모두 확정됨 ✓
-                        </span>
-                    ) : null}
-                </div>
+                        <Check /> 내 사역 {myPendingSlots.length}건 모두 참석 확정
+                    </Button>
+                ) : null}
+                {myUpcomingSlots.length > 0 && (
+                    <Button type="button" variant="outline" size="xs" onClick={() => void handleCopyMySchedule()} title="내 이번 달 사역 일정을 카카오톡용으로 원클릭 복사합니다">
+                        {copiedMySchedule ? (
+                            <><Check className="text-brand" /><span className="text-brand">내 사역 복사됨!</span></>
+                        ) : (
+                            <><ClipboardCopy className="text-muted-foreground" /><span>내 일정 카톡 복사</span></>
+                        )}
+                    </Button>
+                )}
+                <Button type="button" variant="outline" size="xs" onClick={() => setBlockedDatesModalOpen(true)} title="섬길 수 없는 날짜를 미리 등록해 두면 자동 배분에서 제외됩니다">
+                    <CalendarX2 className="text-muted-foreground" />
+                    <span>사역 불가일 등록</span>
+                    {myBlockedCount > 0 ? <span className="font-semibold tabular-nums text-destructive">{myBlockedCount}</span> : null}
+                </Button>
             </div>
 
             {myUpcomingSlots.length === 0 ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pt-1">
-                    <p>현재 배정된 다가오는 사역 일정이 없습니다.</p>
-                    <span className="text-[11px] text-muted-foreground">
-                        휴가나 시험 등 일정이 있으시면 미리 사역 불가일을 등록해 주세요.
-                    </span>
+                <div className="space-y-0.5 text-xs leading-5 text-muted-foreground">
+                    <p className="text-foreground/75">현재 배정된 다가오는 사역 일정이 없습니다.</p>
+                    <p>휴가나 시험 등 일정이 있으시면 미리 사역 불가일을 등록해 주세요.</p>
                 </div>
             ) : myPendingSlots.length > 0 ? (
-                <div className="space-y-2.5">
-                    <p className="text-xs text-muted-foreground font-medium">참석 여부 응답이 필요한 사역입니다. 버튼 1번으로 확정하거나 사유를 선택하세요.</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                    <p className="text-xs leading-5 text-muted-foreground">참석 여부 응답이 필요한 사역입니다. 버튼 1번으로 확정하거나 사유를 선택하세요.</p>
+                    <ul className="mt-1 divide-y divide-black/5 dark:divide-white/10">
                         {myPendingSlots.map(({ event, slot }) => {
                             const rel = getRelativeDateLabel(event.startsAt, now);
                             const isDeclineOpen = activeDeclineSlotId === slot.id;
                             const isSetlistPreviewOpen = previewSetlistEventId === event.id;
 
                             return (
-                                <div key={slot.id} className="flex flex-col justify-between rounded-xl border border-primary/25 bg-background p-3.5 space-y-3 shadow-2xs">
-                                    <div className="space-y-1.5">
-                                        <div className="flex items-center justify-between gap-2 text-xs">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className={`rounded-full px-2 py-0.5 font-bold ${rel.cls}`}>{rel.text}</span>
-                                                <span className="font-semibold text-primary">{worshipRoles[slot.role]}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <a
-                                                    href={getMyGoogleCalendarUrl(event, slot.role)}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
-                                                    title="내 구글 캘린더에 1클릭 추가"
-                                                >
-                                                    <CalendarPlus size={11} />
-                                                    <span>구글 등록</span>
-                                                </a>
-                                                <button
-                                                    type="button"
-                                                    className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
-                                                    title="애플/스마트폰 캘린더(.ics) 1클릭 다운로드"
-                                                    onClick={() => downloadIcsFile(event, '예배팀', names)}
-                                                >
-                                                    <Download size={11} />
-                                                    <span>.ics</span>
-                                                </button>
-                                            </div>
-                                        </div>
+                                <li key={slot.id} className="py-4 last:pb-0">
+                                    <p className={eyebrow}><span className={rel.cls}>{rel.text}</span> · {worshipRoles[slot.role]}</p>
+                                    <p className="mt-0.5 text-[15px] font-medium text-foreground">{event.title}</p>
+                                    <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{planningDate(event.startsAt)}</p>
 
-                                        <p className="font-bold text-sm text-foreground">{event.title}</p>
-                                        <p className="text-xs text-muted-foreground">{planningDate(event.startsAt)}</p>
-
-                                        {event.setlistTitle ? (
-                                            <div className="pt-0.5">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setPreviewSetlistEventId(prev => prev === event.id ? null : event.id)}
-                                                    className="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:underline"
-                                                >
-                                                    <Music size={13} className="shrink-0" />
-                                                    <span>콘티: {event.setlistTitle} {event.setlistSongs?.length ? `(${event.setlistSongs.length}곡)` : ''} {isSetlistPreviewOpen ? '▲' : '▼'}</span>
-                                                </button>
-                                                {isSetlistPreviewOpen && event.setlistSongs?.length ? (
-                                                    <div className="mt-1.5 rounded-lg border border-primary/20 bg-primary/5 p-2 text-xs space-y-1">
-                                                        <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
-                                                            {event.setlistSongs.map((song, idx) => (
-                                                                <li key={idx} className="font-medium text-foreground">{song}</li>
-                                                            ))}
-                                                        </ol>
-                                                    </div>
-                                                ) : null}
-                                            </div>
-                                        ) : null}
-
-                                        {slot.invitedAt ? (
-                                            <p className="text-[11px] text-primary font-medium flex items-center gap-1">
-                                                <Send size={10} className="shrink-0" />
-                                                <span>초대장 수신 ({new Date(slot.invitedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})</span>
-                                            </p>
-                                        ) : null}
-                                    </div>
-
-                                    <div className="space-y-2 pt-1 border-t border-border/40">
-                                        <div className="flex items-center gap-2">
+                                    {event.setlistTitle ? (
+                                        <div className="mt-2">
                                             <button
                                                 type="button"
-                                                className={`${primary} text-xs py-1.5 px-3 flex-1 min-h-9`}
-                                                disabled={actions.disabled}
-                                                onClick={() => void actions.send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' })}
+                                                aria-expanded={isSetlistPreviewOpen}
+                                                onClick={() => setPreviewSetlistEventId(prev => prev === event.id ? null : event.id)}
+                                                className="inline-flex min-h-8 items-center gap-1.5 text-xs font-medium text-foreground"
                                             >
-                                                <Check size={14} /> 참석 확정 (1클릭)
+                                                <Music size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+                                                <span>콘티: {event.setlistTitle} {event.setlistSongs?.length ? `(${event.setlistSongs.length}곡)` : ''}</span>
+                                                <ChevronDown size={13} aria-hidden="true" className={cn('text-muted-foreground transition-transform', isSetlistPreviewOpen && 'rotate-180')} />
                                             </button>
-                                            <button
-                                                type="button"
-                                                className={`${button} text-xs py-1.5 px-2.5 min-h-9 text-destructive border-destructive/30 hover:bg-destructive/10`}
-                                                disabled={actions.disabled}
-                                                onClick={() => setActiveDeclineSlotId(prev => prev === slot.id ? null : slot.id)}
-                                            >
-                                                불참 사유 {isDeclineOpen ? '닫기' : '선택'}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={`${button} text-xs py-1.5 px-2 min-h-9 text-muted-foreground hover:text-foreground`}
-                                                title="이 일정의 전체 사역 동의 현황 확인"
-                                                onClick={() => setRsvpModalEvent(event)}
-                                            >
-                                                <Users size={13} />
-                                            </button>
-                                        </div>
-
-                                        {isDeclineOpen && (
-                                            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2 space-y-1.5">
-                                                <span className="text-[11px] font-semibold text-destructive">1클릭 불참 사유 선택:</span>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {['개인 사정', '시험/학업', '출장/야근', '가족 행사', '건강/컨디션'].map(r => (
-                                                        <button
-                                                            key={r}
-                                                            type="button"
-                                                            disabled={actions.disabled}
-                                                            className="rounded-md border border-destructive/20 bg-background px-2 py-0.5 text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-all active:scale-95 shadow-2xs"
-                                                            title={`‘${r}’ 사유로 1클릭 불참 응답`}
-                                                            onClick={() => void actions.send({
-                                                                type: 'attendance.set',
-                                                                eventId: event.id,
-                                                                slotId: slot.id,
-                                                                attendance: 'absent',
-                                                                reason: r,
-                                                                autoRequestSubstitute: true,
-                                                            })}
-                                                        >
-                                                            {r}
-                                                        </button>
+                                            {isSetlistPreviewOpen && event.setlistSongs?.length ? (
+                                                <ol className="mt-1 space-y-1 rounded-2xl bg-card/80 px-4 py-3 text-[13px] text-foreground/80">
+                                                    {event.setlistSongs.map((song, idx) => (
+                                                        <li key={idx} className="flex gap-2.5"><span className="w-4 shrink-0 tabular-nums text-muted-foreground">{idx + 1}</span>{song}</li>
                                                     ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                                </ol>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
+
+                                    {slot.invitedAt ? (
+                                        <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                                            <Send size={10} className="shrink-0" aria-hidden="true" />
+                                            <span>초대장 수신 ({shortDateTime(slot.invitedAt)})</span>
+                                        </p>
+                                    ) : null}
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                                        <Button
+                                            type="button"
+                                            size="xs"
+                                            disabled={actions.disabled}
+                                            onClick={() => void actions.send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' })}
+                                        >
+                                            <Check /> 참석 확정 (1클릭)
+                                        </Button>
+                                        <Button type="button" variant="outline" size="xs" disabled={actions.disabled} onClick={() => setActiveDeclineSlotId(prev => prev === slot.id ? null : slot.id)}>
+                                            불참 사유 {isDeclineOpen ? '닫기' : '선택'}
+                                        </Button>
+                                        <Button type="button" variant="outline" size="icon-xs" title="이 일정의 전체 사역 동의 현황 확인" aria-label="이 일정의 전체 사역 동의 현황 확인" onClick={() => setRsvpModalEvent(event)}>
+                                            <Users className="text-muted-foreground" />
+                                        </Button>
+                                        <CalendarLinks event={event} role={slot.role} names={names} />
                                     </div>
-                                </div>
+
+                                    {isDeclineOpen && (
+                                        <div className="mt-3 space-y-2 rounded-2xl bg-card/80 p-3.5">
+                                            <p className={eyebrow}>1클릭 불참 사유 선택</p>
+                                            <ReasonChips disabled={actions.disabled} onPick={r => void actions.send({
+                                                type: 'attendance.set',
+                                                eventId: event.id,
+                                                slotId: slot.id,
+                                                attendance: 'absent',
+                                                reason: r,
+                                                autoRequestSubstitute: true,
+                                            })} />
+                                        </div>
+                                    )}
+                                </li>
                             );
                         })}
-                    </div>
+                    </ul>
                 </div>
-            ) : (
-                <div className="space-y-3">
-                    {/* 확정된 가장 가까운 사역 1클릭 액션 카드 */}
-                    <div className="rounded-xl border border-primary/20 bg-background p-3.5 space-y-3 shadow-2xs">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <span className="rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 text-xs font-bold flex items-center gap-1">
-                                    <Check size={12} /> 확정됨
-                                </span>
-                                <span className="rounded-md bg-secondary/15 px-2 py-0.5 text-xs font-bold text-secondary">
-                                    {worshipRoles[myUpcomingSlots[0].slot.role]}
-                                </span>
-                                <span className="font-bold text-sm text-foreground">
-                                    {myUpcomingSlots[0].event.title}
-                                </span>
-                            </div>
-                            <span className="text-xs text-muted-foreground font-medium">
-                                {planningDate(myUpcomingSlots[0].event.startsAt)}
-                            </span>
-                        </div>
+            ) : nextDuty ? (
+                <div>
+                    {/* 확정된 가장 가까운 사역 */}
+                    <div className="border-t border-black/5 pt-4 dark:border-white/10">
+                        <p className={eyebrow}><span className={cn('font-semibold', STATUS.ok.text)}>확정됨</span> · {worshipRoles[nextDuty.slot.role]}</p>
+                        <p className="mt-0.5 text-[15px] font-medium text-foreground">{nextDuty.event.title}</p>
+                        <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{planningDate(nextDuty.event.startsAt)}</p>
 
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <a
-                                    href={getMyGoogleCalendarUrl(myUpcomingSlots[0].event, myUpcomingSlots[0].slot.role)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold flex items-center gap-1.5`}
-                                    title="내 구글 캘린더에 1클릭 추가"
-                                >
-                                    <CalendarPlus size={13} className="text-primary" />
-                                    <span>구글 캘린더 등록</span>
-                                </a>
-                                <button
-                                    type="button"
-                                    onClick={() => downloadIcsFile(myUpcomingSlots[0].event, '예배팀', names)}
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold flex items-center gap-1.5`}
-                                    title="애플 및 스마트폰 캘린더 파일(.ics) 1클릭 다운로드"
-                                >
-                                    <Download size={13} className="text-primary" />
-                                    <span>애플/모바일 .ics</span>
-                                </button>
-                                {myUpcomingSlots[0].event.setlistTitle ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => setPreviewSetlistEventId(prev => prev === myUpcomingSlots[0].event.id ? null : myUpcomingSlots[0].event.id)}
-                                        className={`${button} text-xs py-1 px-2.5 min-h-8 font-semibold flex items-center gap-1.5 border-primary/30 text-primary`}
-                                    >
-                                        <Music size={13} />
-                                        <span>콘티 곡 순서 {previewSetlistEventId === myUpcomingSlots[0].event.id ? '닫기 ▲' : '보기 ▼'}</span>
-                                    </button>
-                                ) : null}
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setActiveDeclineSlotId(prev => prev === myUpcomingSlots[0].slot.id ? null : myUpcomingSlots[0].slot.id)}
-                                className="text-xs text-muted-foreground hover:text-destructive underline-offset-2 hover:underline"
-                            >
+                        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                            <CalendarLinks event={nextDuty.event} role={nextDuty.slot.role} names={names} long />
+                            {nextDuty.event.setlistTitle ? (
+                                <Button type="button" variant="outline" size="xs" aria-expanded={previewSetlistEventId === nextDuty.event.id} onClick={() => setPreviewSetlistEventId(prev => prev === nextDuty.event.id ? null : nextDuty.event.id)}>
+                                    <Music className="text-muted-foreground" />
+                                    <span>콘티 곡 순서 {previewSetlistEventId === nextDuty.event.id ? '닫기' : '보기'}</span>
+                                    <ChevronDown className={cn('text-muted-foreground transition-transform', previewSetlistEventId === nextDuty.event.id && 'rotate-180')} />
+                                </Button>
+                            ) : null}
+                            <Button type="button" variant="ghost" size="xs" className="text-muted-foreground hover:text-destructive" onClick={() => setActiveDeclineSlotId(prev => prev === nextDuty.slot.id ? null : nextDuty.slot.id)}>
                                 참석 상태 변경
-                            </button>
+                            </Button>
                         </div>
 
-                        {/* 콘티 악보/곡 순서 인라인 프리뷰 */}
-                        {previewSetlistEventId === myUpcomingSlots[0].event.id && myUpcomingSlots[0].event.setlistSongs?.length ? (
-                            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <span className="font-bold text-foreground">🎵 콘티: {myUpcomingSlots[0].event.setlistTitle}</span>
-                                    <span className="text-[11px] text-muted-foreground">{myUpcomingSlots[0].event.setlistSongs.length}곡</span>
+                        {/* 콘티 곡 순서 인라인 프리뷰 */}
+                        {previewSetlistEventId === nextDuty.event.id && nextDuty.event.setlistSongs?.length ? (
+                            <div className="mt-3 space-y-2.5 rounded-2xl bg-card/80 p-4">
+                                <div className="flex items-baseline justify-between gap-3">
+                                    <p className="text-[13px] font-semibold text-foreground">콘티: {nextDuty.event.setlistTitle}</p>
+                                    <span className="text-[11px] tabular-nums text-muted-foreground">{nextDuty.event.setlistSongs.length}곡</span>
                                 </div>
-                                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                                    {myUpcomingSlots[0].event.setlistSongs.map((song, idx) => (
-                                        <li key={idx} className="font-medium text-foreground">{song}</li>
+                                <ol className="space-y-1 text-[13px] text-foreground/80">
+                                    {nextDuty.event.setlistSongs.map((song, idx) => (
+                                        <li key={idx} className="flex gap-2.5"><span className="w-4 shrink-0 tabular-nums text-muted-foreground">{idx + 1}</span>{song}</li>
                                     ))}
                                 </ol>
-                                {myUpcomingSlots[0].event.setlistId && (
-                                    <div className="pt-1">
-                                        <a
-                                            href={`/dashboard/songs/library?team=${myUpcomingSlots[0].event.setlistId}`}
-                                            className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
-                                        >
-                                            <span>악보 보관함에서 열기</span>
-                                            <ExternalLink size={12} />
-                                        </a>
-                                    </div>
+                                {nextDuty.event.setlistId && (
+                                    <a
+                                        href={`/dashboard/songs/library?team=${nextDuty.event.setlistId}`}
+                                        className="inline-flex min-h-8 items-center gap-1 text-xs font-semibold text-brand underline-offset-4 hover:underline"
+                                    >
+                                        <span>악보 보관함에서 열기</span>
+                                        <ExternalLink size={12} aria-hidden="true" />
+                                    </a>
                                 )}
                             </div>
                         ) : null}
 
-                        {/* 참석 변경 1클릭 사유 칩 (확정 후 부득이한 불참 발생 시) */}
-                        {activeDeclineSlotId === myUpcomingSlots[0].slot.id && (
-                            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 space-y-1.5">
-                                <span className="text-[11px] font-semibold text-destructive">부득이한 사정으로 불참하게 되셨나요? 1클릭 사유 선택:</span>
-                                <div className="flex flex-wrap gap-1">
-                                    {['개인 사정', '시험/학업', '출장/야근', '가족 행사', '건강/컨디션'].map(r => (
-                                        <button
-                                            key={r}
-                                            type="button"
-                                            disabled={actions.disabled}
-                                            className="rounded-md border border-destructive/20 bg-background px-2 py-0.5 text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-all active:scale-95 shadow-2xs"
-                                            title={`‘${r}’ 사유로 불참 변경`}
-                                            onClick={() => {
-                                                void actions.send({
-                                                    type: 'attendance.set',
-                                                    eventId: myUpcomingSlots[0].event.id,
-                                                    slotId: myUpcomingSlots[0].slot.id,
-                                                    attendance: 'absent',
-                                                    reason: r,
-                                                    autoRequestSubstitute: true,
-                                                });
-                                                setActiveDeclineSlotId(null);
-                                            }}
-                                        >
-                                            {r}
-                                        </button>
-                                    ))}
-                                </div>
+                        {/* 확정 후 부득이한 불참 */}
+                        {activeDeclineSlotId === nextDuty.slot.id && (
+                            <div className="mt-3 space-y-2 rounded-2xl bg-card/80 p-3.5">
+                                <p className={eyebrow}>부득이한 사정으로 불참하게 되셨나요? 1클릭 사유 선택</p>
+                                <ReasonChips disabled={actions.disabled} titleSuffix="사유로 불참 변경" onPick={r => {
+                                    void actions.send({
+                                        type: 'attendance.set',
+                                        eventId: nextDuty.event.id,
+                                        slotId: nextDuty.slot.id,
+                                        attendance: 'absent',
+                                        reason: r,
+                                        autoRequestSubstitute: true,
+                                    });
+                                    setActiveDeclineSlotId(null);
+                                }} />
                             </div>
                         )}
                     </div>
 
-                    {/* 이후 다가오는 사역 더보기 토글 */}
+                    {/* 이후 다가오는 사역 */}
                     {myUpcomingSlots.length > 1 && (
-                        <div className="pt-0.5">
+                        <div className="mt-3">
                             <button
                                 type="button"
+                                aria-expanded={showAllMyDuties}
                                 onClick={() => setShowAllMyDuties(!showAllMyDuties)}
-                                className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                                className="inline-flex min-h-9 items-center gap-1 text-xs font-medium text-foreground"
                             >
-                                <span>{showAllMyDuties ? '이후 다가오는 사역 접기 ▲' : `이후 다가오는 사역 (${myUpcomingSlots.length - 1}건 더보기) ▼`}</span>
+                                <span>{showAllMyDuties ? '이후 다가오는 사역 접기' : `이후 다가오는 사역 (${myUpcomingSlots.length - 1}건 더보기)`}</span>
+                                <ChevronDown size={13} aria-hidden="true" className={cn('text-muted-foreground transition-transform', showAllMyDuties && 'rotate-180')} />
                             </button>
 
                             {showAllMyDuties && (
-                                <ul className="mt-2 space-y-2">
+                                <ul className="divide-y divide-black/5 dark:divide-white/10">
                                     {myUpcomingSlots.slice(1).map(({ event, slot }) => (
-                                        <li key={slot.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-background p-2.5 text-xs">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-semibold text-primary">{worshipRoles[slot.role]}</span>
-                                                <span className="font-bold text-foreground">{event.title}</span>
-                                                <span className="text-muted-foreground">({planningDate(event.startsAt)})</span>
+                                        <li key={slot.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
+                                            <div className="min-w-0">
+                                                <p className={eyebrow}>{worshipRoles[slot.role]}</p>
+                                                <p className="text-sm font-medium text-foreground">{event.title} <span className="font-normal tabular-nums text-muted-foreground">({planningDate(event.startsAt)})</span></p>
                                             </div>
                                             <div className="flex items-center gap-1.5">
-                                                <a
-                                                    href={getMyGoogleCalendarUrl(event, slot.role)}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
-                                                >
-                                                    구글 등록
-                                                </a>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => downloadIcsFile(event, '예배팀', names)}
-                                                    className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
-                                                >
-                                                    .ics
-                                                </button>
+                                                <CalendarLinks event={event} role={slot.role} names={names} />
                                             </div>
                                         </li>
                                     ))}
@@ -1554,277 +1825,147 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                         </div>
                     )}
                 </div>
-            )}
+            ) : null}
 
-            {/* 빈자리 충원 지원 유도 배너 (팀에 빈자리/결석이 있을 때) */}
+            {/* 빈자리 충원 지원 유도 (팀에 빈자리/결석이 있을 때) */}
             {vacantHelpEvents.length > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs">
-                    <span className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                        <Sparkles size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-black/5 pt-4 dark:border-white/10">
+                    <span className="flex items-center gap-2 text-xs font-medium text-foreground">
+                        <span className="size-1.5 shrink-0 rounded-full bg-secondary" aria-hidden="true" />
                         <span>찬양팀에 대체/충원이 필요한 빈자리가 {vacantHelpEvents.length}건 있습니다.</span>
                     </span>
-                    <button
-                        type="button"
-                        className={`${button} text-xs py-1 px-2.5 min-h-7 bg-background font-bold text-amber-700 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/20 shadow-2xs`}
-                        onClick={() => { setFilter('vacant'); setViewMode('list'); }}
-                    >
+                    <Button type="button" variant="outline" size="xs" onClick={() => { setFilter('vacant'); setViewMode('list'); }}>
                         빈자리 보고 1클릭 지원하기
-                    </button>
+                    </Button>
                 </div>
             )}
         </section>
 
-        {/* 미해결 긴급 알림 (있을 때만 노출) */}
+        {/* 미해결 긴급 알림 (있을 때만) */}
         {openAlerts.length > 0 ? (
-            <section aria-label="미해결 긴급 알림" className={`${card} space-y-3 border-destructive/50`}>
-                <h3 className="font-bold">긴급 알림 <span className="text-destructive">{openAlerts.length}</span></h3>
-                <ul className="space-y-3">{openAlerts.map(alert => <AlertCard key={alert.id} {...actions} alert={alert} event={eventMap.get(alert.eventId)} names={names} manager={manager} />)}</ul>
+            <section aria-label="미해결 긴급 알림" className={cn('rounded-3xl p-5 sm:p-6', TONE_BLOCK.peach)}>
+                <h3 className="flex items-center gap-2 text-[17px] font-semibold tracking-tight text-foreground">
+                    긴급 알림 <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1.5 text-[11px] font-semibold tabular-nums text-secondary-foreground">{openAlerts.length}</span>
+                </h3>
+                <ul className="mt-1">{openAlerts.map(alert => <AlertCard key={alert.id} {...actions} className="border-black/5 dark:border-white/10" alert={alert} event={eventMap.get(alert.eventId)} names={names} manager={manager} />)}</ul>
             </section>
         ) : null}
 
-        {/* 일정 관리 상단 툴바 (관리자) */}
-        {manager ? (
-            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-border/80 bg-card p-3 shadow-2xs">
-                <div className="flex flex-wrap items-center gap-2">
-                    <details className="relative">
-                        <summary className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary/15 list-none select-none">
-                            <Sparkles size={14} />
-                            <span>빠른 일정 템플릿 ▼</span>
-                        </summary>
-                        <div className="absolute left-0 top-full mt-1.5 z-30 w-64 rounded-2xl border border-border bg-card p-2 shadow-xl space-y-1">
-                            <button
-                                type="button"
-                                className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors flex items-center justify-between"
-                                disabled={actions.disabled}
-                                onClick={async (e) => {
-                                    (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
-                                    const times = getUpcomingSundayKST();
-                                    await actions.send({
-                                        type: 'event.createWithTemplate',
-                                        input: {
-                                            title: '주일 2부 예배',
-                                            kind: 'worship',
-                                            startsAt: times.startsAt,
-                                            endsAt: times.endsAt,
-                                            location: '본당 3층 대예배실',
-                                            notes: '10:00 음향/악기 리허설 시작',
-                                        },
-                                        templateKey: 'standard',
-                                        weeksCount: 1,
-                                    });
-                                }}
-                            >
-                                <span>⛪ 이번 주 주일 예배</span>
-                                <span className="text-[11px] text-muted-foreground">11:00</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors flex items-center justify-between"
-                                disabled={actions.disabled}
-                                onClick={async (e) => {
-                                    (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
-                                    const times = getUpcomingSaturdayKST();
-                                    await actions.send({
-                                        type: 'event.save',
-                                        input: {
-                                            title: '찬양팀 토요 연습',
-                                            kind: 'rehearsal',
-                                            startsAt: times.startsAt,
-                                            endsAt: times.endsAt,
-                                            location: '찬양팀 연습실',
-                                            notes: '콘티 사전 숙지 후 모입니다.',
-                                        },
-                                    });
-                                }}
-                            >
-                                <span>🎵 이번 주 토요 연습</span>
-                                <span className="text-[11px] text-muted-foreground">17:00</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors flex items-center justify-between"
-                                disabled={actions.disabled}
-                                onClick={async (e) => {
-                                    (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
-                                    const times = getUpcomingFridayKST();
-                                    await actions.send({
-                                        type: 'event.createWithTemplate',
-                                        input: {
-                                            title: '금요 기도회',
-                                            kind: 'worship',
-                                            startsAt: times.startsAt,
-                                            endsAt: times.endsAt,
-                                            location: '본당 3층 대예배실',
-                                            notes: '뜨겁게 찬양과 기도로 준비합니다.',
-                                        },
-                                        templateKey: 'acoustic',
-                                        weeksCount: 1,
-                                    });
-                                }}
-                            >
-                                <span>🙏 이번 주 금요 기도회</span>
-                                <span className="text-[11px] text-muted-foreground">20:00</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors flex items-center justify-between"
-                                disabled={actions.disabled}
-                                onClick={async (e) => {
-                                    (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
-                                    const times = getUpcomingWednesdayKST();
-                                    await actions.send({
-                                        type: 'event.save',
-                                        input: {
-                                            title: '수요 예배',
-                                            kind: 'worship',
-                                            startsAt: times.startsAt,
-                                            endsAt: times.endsAt,
-                                            location: '본당 3층 대예배실',
-                                            notes: '수요 예배 찬양 섬김',
-                                        },
-                                    });
-                                }}
-                            >
-                                <span>📖 이번 주 수요 예배</span>
-                                <span className="text-[11px] text-muted-foreground">19:30</span>
-                            </button>
-                        </div>
-                    </details>
-
-                    <button
-                        type="button"
-                        className={`${button} text-xs py-1.5 px-3 min-h-9 font-semibold border-primary/30 text-primary hover:bg-primary/10 flex items-center gap-1.5`}
-                        onClick={() => setMonthlySundaysModalOpen(true)}
-                    >
-                        <CalendarDays size={13} />
-                        <span>이번 달 주일 일괄 생성</span>
-                    </button>
-                </div>
-
-                <details className="w-full sm:w-auto">
-                    <summary className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-colors list-none select-none">
-                        <span>+ 직접 일정 만들기</span>
-                    </summary>
-                    <div className="mt-3 w-full rounded-2xl border border-border bg-background p-4 shadow-sm sm:max-w-lg">
-                        <EventForm {...actions} />
+        <div className="space-y-5">
+            {/* 일정 만들기 도구 (관리자) */}
+            {manager ? (
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button type="button" size="sm" aria-expanded={createFormOpen} aria-controls={createFormMounted ? createFormId : undefined} onClick={() => { setCreateFormMounted(true); setCreateFormOpen(open => !open); }}>
+                            <Plus strokeWidth={2.25} />
+                            <span>직접 일정 만들기</span>
+                        </Button>
+                        <Disclosure className="relative" chevron="inline" summaryClassName={buttonVariants({ variant: 'outline', size: 'sm' })} summary={<><Sparkles className="text-muted-foreground" /><span>빠른 일정 템플릿</span></>}>
+                            <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border border-border bg-card p-1.5 shadow-lg">
+                                {TEMPLATE_PRESETS.map(preset => (
+                                    <button
+                                        key={preset.label}
+                                        type="button"
+                                        className="flex h-10 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+                                        disabled={actions.disabled}
+                                        onClick={async (e) => {
+                                            (e.currentTarget.closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                                            await actions.send(preset.command(preset.when()));
+                                        }}
+                                    >
+                                        <span>{preset.label}</span>
+                                        <span className="text-xs tabular-nums text-muted-foreground">{preset.time}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </Disclosure>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setMonthlySundaysModalOpen(true)}>
+                            <CalendarDays className="text-muted-foreground" />
+                            <span>이번 달 주일 일괄 생성</span>
+                        </Button>
                     </div>
-                </details>
-            </div>
-        ) : null}
+                    {createFormMounted ? (
+                        <div id={createFormId} hidden={!createFormOpen} className="rounded-3xl border border-border p-5 sm:max-w-xl sm:p-6">
+                            <p className={eyebrow}>새 일정</p>
+                            <h3 className="mb-4 mt-0.5 text-[17px] font-semibold tracking-tight">직접 일정 만들기</h3>
+                            <EventForm {...actions} />
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
 
-        {/* 보기 모드 전환 (목록 보기 ↔ 캘린더 ↔ 사역 배분표) 및 필터 */}
-        <div className="space-y-3">
+            {/* 보기 방식 (목록 ↔ 캘린더 ↔ 사역 배분표) */}
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center rounded-xl border border-border bg-card p-0.5 shadow-2xs">
-                    <button
-                        type="button"
-                        aria-pressed={viewMode === 'list'}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                            viewMode === 'list'
-                                ? 'bg-primary text-primary-foreground shadow-xs'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                        onClick={() => setViewMode('list')}
-                    >
-                        <List size={14} /> 목록
-                    </button>
-                    <button
-                        type="button"
-                        aria-pressed={viewMode === 'calendar'}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                            viewMode === 'calendar'
-                                ? 'bg-primary text-primary-foreground shadow-xs'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                        onClick={() => setViewMode('calendar')}
-                    >
-                        <CalendarDays size={14} /> 캘린더
-                    </button>
-                    <button
-                        type="button"
-                        aria-pressed={viewMode === 'matrix'}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                            viewMode === 'matrix'
-                                ? 'bg-primary text-primary-foreground shadow-xs'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                        onClick={() => setViewMode('matrix')}
-                    >
-                        <Table size={14} /> 사역 배분표
-                    </button>
+                <div role="group" aria-label="보기 방식" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-muted p-1">
+                    {VIEW_MODES.map(([value, label, Icon]) => (
+                        <button
+                            key={value}
+                            type="button"
+                            aria-pressed={viewMode === value}
+                            className={cn(
+                                'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
+                                viewMode === value ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
+                            )}
+                            onClick={() => setViewMode(value)}
+                        >
+                            <Icon size={14} aria-hidden="true" /> {label}
+                        </button>
+                    ))}
                 </div>
-
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        className={`${button} text-xs py-1.5 px-3 min-h-9 flex items-center gap-1.5 font-bold border-primary/30 text-primary hover:bg-primary/10`}
-                        title="이번 달 다가오는 모든 예배/연습 섬김 명단을 카카오톡 단톡방용으로 전체 복사합니다"
-                        onClick={() => void handleCopyMonthly()}
-                    >
-                        {copiedMonthly ? (
-                            <>
-                                <Check size={14} className="text-emerald-600" />
-                                <span className="text-emerald-600 font-bold">사역표 복사됨!</span>
-                            </>
-                        ) : (
-                            <>
-                                <ClipboardCopy size={14} />
-                                <span>📋 카톡 전체 복사</span>
-                            </>
-                        )}
-                    </button>
-                </div>
+                <Button type="button" variant="outline" size="sm" className="max-sm:w-9 max-sm:px-0" title="이번 달 다가오는 모든 예배/연습 섬김 명단을 카카오톡 단톡방용으로 전체 복사합니다" onClick={() => void handleCopyMonthly()}>
+                    {copiedMonthly ? (
+                        <><Check className="text-brand" /><span className="max-sm:sr-only text-brand">사역표 복사됨!</span></>
+                    ) : (
+                        <><ClipboardCopy className="text-muted-foreground" /><span className="max-sm:sr-only">카톡 전체 복사</span></>
+                    )}
+                </Button>
             </div>
 
             {viewMode === 'list' ? (
-                <>
-                    {/* 빠른 검색 바 (일정 제목, 곡명, 팀원 이름, 장소 등) */}
-                    <div className="relative flex items-center">
-                        <Search size={15} className="absolute left-3.5 text-muted-foreground pointer-events-none" />
+                <div className="space-y-3">
+                    {/* 빠른 검색 (일정 제목, 곡명, 팀원 이름, 장소 등) */}
+                    <div className="relative">
+                        <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                         <input
                             ref={searchInputRef}
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             placeholder="일정 제목, 찬양곡, 팀원 이름, 장소 검색..."
-                            className="w-full rounded-xl border border-input/80 bg-background pl-9 pr-28 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                            className={cn(control, 'bg-muted/60 pl-10 focus-visible:bg-card', searchQuery ? 'pr-24' : 'pr-4 sm:pr-20')}
                         />
-                        <div className="absolute right-2.5 flex items-center gap-1.5">
+                        <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
                             {searchQuery ? (
                                 <>
-                                    <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                                        {events.length}건
-                                    </span>
+                                    <span className="text-xs tabular-nums text-muted-foreground">{events.length}건</span>
                                     <button
                                         type="button"
                                         onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }}
-                                        className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                                         title="검색어 지우기 (Esc)"
+                                        aria-label="검색어 지우기"
                                     >
-                                        <X size={13} />
+                                        <X size={14} />
                                     </button>
                                 </>
                             ) : (
-                                <kbd className="hidden sm:inline-flex items-center text-[10px] bg-muted/80 px-1.5 py-0.5 rounded border border-border/60 text-muted-foreground font-mono font-medium select-none">
+                                <kbd className="mr-1.5 hidden select-none items-center rounded-md border border-border px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground sm:inline-flex">
                                     / 검색
                                 </kbd>
                             )}
                         </div>
                     </div>
 
-                    <div role="group" aria-label="일정 기간 필터" className="flex flex-wrap gap-2">
-                        {([
-                            ['upcoming', '예정·진행 중'],
-                            ['my', '내 배정 일정'],
-                            ['vacant', '빈자리 필요'],
-                            ['past', '지난 일정'],
-                            ['all', '전체']
-                        ] as const).map(([value, label]) => (
+                    <div role="group" aria-label="일정 기간 필터" className="no-scrollbar flex gap-5 overflow-x-auto border-b border-border/70">
+                        {PERIOD_FILTERS.map(([value, label]) => (
                             <button
                                 key={value}
                                 type="button"
                                 aria-pressed={filter === value}
-                                className={filter === value ? primary : button}
+                                className={cn(
+                                    '-mb-px flex h-11 shrink-0 items-center border-b-2 text-sm transition-colors',
+                                    filter === value ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+                                )}
                                 onClick={() => { setFilter(value); setNow(Date.now()); }}
                             >
                                 {label}
@@ -1832,45 +1973,37 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                         ))}
                     </div>
 
-                    {/* 파트별 빠른 필터 칩 바 */}
-                    <div role="group" aria-label="파트별 필터" className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 text-xs">
-                        <span className="text-muted-foreground font-semibold shrink-0">파트:</span>
-                        {([
-                            ['all', '전체'],
-                            ['leader', '인도자'],
-                            ['vocal', '싱어'],
-                            ['keyboard', '건반'],
-                            ['guitar', '기타'],
-                            ['bass', '베이스'],
-                            ['drums', '드럼'],
-                            ['sound', '음향'],
-                            ['media', '미디어']
-                        ] as const).map(([val, lbl]) => (
+                    {/* 파트별 빠른 필터 */}
+                    <div role="group" aria-label="파트별 필터" className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 pt-1">
+                        {PART_FILTERS.map(([val, lbl]) => (
                             <button
                                 key={val}
                                 type="button"
-                                className={`rounded-full px-2.5 py-1 font-semibold transition-colors shrink-0 ${
-                                    roleFilter === val
-                                        ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
-                                }`}
+                                aria-pressed={roleFilter === val}
+                                className={cn(
+                                    'inline-flex h-8 shrink-0 items-center rounded-full px-3 text-xs font-medium transition-colors',
+                                    roleFilter === val ? 'bg-primary font-semibold text-primary-foreground' : 'border border-border text-foreground/75 hover:bg-muted',
+                                )}
                                 onClick={() => setRoleFilter(val)}
                             >
                                 {lbl}
                             </button>
                         ))}
                     </div>
-                </>
+                </div>
             ) : null}
         </div>
+
         {viewMode === 'calendar' ? (
-            <div className="space-y-4">
+            <div className="space-y-6">
                 <CalendarView
                     events={state.events}
                     members={members}
                     names={names}
                     userId={userId}
                     manager={manager}
+                    selectedDate={selectedCalendarEvent ? kstInput(selectedCalendarEvent.startsAt).slice(0, 10) : undefined}
+                    selectedEventId={selectedCalendarEvent?.id}
                     onSelectEvent={(event) => setSelectedCalendarEventId(event.id)}
                     onOpenMonthlySundaysModal={() => setMonthlySundaysModalOpen(true)}
                     onAddEventOnDate={(dateStr) => {
@@ -1878,158 +2011,33 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                     }}
                 />
 
-                {/* 캘린더에서 날짜 '+' 클릭 시 빠른 일정 생성 카드 */}
+                {/* 캘린더에서 날짜 '+' 클릭 시 빠른 일정 생성 */}
                 {createEventDate && (
-                    <div className="rounded-2xl border-2 border-primary bg-card p-4 sm:p-5 shadow-lg space-y-3 animate-in fade-in">
-                        <div className="flex items-center justify-between border-b border-border pb-3">
-                            <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-                                <Sparkles size={16} className="text-primary" />
-                                <span>{createEventDate} 새 일정 등록</span>
-                            </h3>
+                    <section ref={dateFormRef} aria-label="새 일정 등록" className="scroll-mb-36 scroll-mt-[calc(var(--app-header-h,0px)+1rem)] space-y-4 rounded-3xl border border-border bg-card p-5 animate-in fade-in sm:p-6 lg:scroll-mb-6">
+                        <header className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className={eyebrow}>새 일정</p>
+                                <h3 className="mt-0.5 text-[17px] font-semibold tracking-tight text-foreground">{createEventDate} 새 일정 등록</h3>
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => setCreateEventDate(null)}
-                                className="rounded-xl p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                aria-label="닫기"
+                                className="-mr-2 -mt-1 flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                             >
-                                <X size={16} />
+                                <X size={18} />
                             </button>
-                        </div>
+                        </header>
                         <EventForm {...actions} defaultDate={createEventDate} />
-                    </div>
+                    </section>
                 )}
 
-                {/* 캘린더에서 일정 클릭 시 하단에 바로 열리는 퀵 상세 & 배정 패널 */}
                 {selectedCalendarEvent && (
-                    <div className="rounded-2xl border-2 border-primary/40 bg-card p-4 sm:p-5 shadow-lg space-y-4 animate-in fade-in">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-                            <div className="space-y-0.5">
-                                <div className="flex items-center gap-2">
-                                    <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold">
-                                        선택된 일정
-                                    </span>
-                                    <h3 className="font-bold text-lg text-foreground">{selectedCalendarEvent.title}</h3>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    <time dateTime={selectedCalendarEvent.startsAt}>{planningDate(selectedCalendarEvent.startsAt)}</time>
-                                    <span> ~ </span>
-                                    <time dateTime={selectedCalendarEvent.endsAt}>{planningDate(selectedCalendarEvent.endsAt)}</time>
-                                    {selectedCalendarEvent.location ? ` · 장소: ${selectedCalendarEvent.location}` : ''}
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setRsvpModalEvent(selectedCalendarEvent)}
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 text-emerald-700 dark:text-emerald-400 font-bold border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 flex items-center gap-1`}
-                                    title="팀원 사역 동의 현황 및 상세 이력 확인"
-                                >
-                                    <Users size={13} />
-                                    <span>동의 현황</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShareModalEvent(selectedCalendarEvent)}
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 text-primary font-bold border-primary/30 flex items-center gap-1`}
-                                >
-                                    <Share2 size={13} />
-                                    <span>공유 & 캘린더</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedCalendarEventId(null)}
-                                    className="rounded-xl p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                    title="닫기"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* 스마트 빠른 액션 바 (관리자) */}
-                        {manager && !selectedCalendarEvent.cancelled && (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-b border-border/60 pb-3">
-                                {(selectedCalendarEvent.slots.length === 0 || selectedCalendarEvent.slots.some(s => s.memberId === null)) && (
-                                    <button
-                                        type="button"
-                                        className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/20`}
-                                        disabled={actions.disabled}
-                                        title="가장 최근 같은 종류(예배/연습) 일정의 파트 및 배정 인원을 그대로 복사해옵니다"
-                                        onClick={() => void actions.send({ type: 'slots.autoFillFromRecent', eventId: selectedCalendarEvent.id })}
-                                    >
-                                        <Copy size={13} />
-                                        <span>지난 배정 복사</span>
-                                    </button>
-                                )}
-
-                                {selectedCalendarEvent.slots.some(s => s.memberId === null) && (
-                                    <button
-                                        type="button"
-                                        className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20`}
-                                        disabled={actions.disabled}
-                                        onClick={() => void actions.send({ type: 'slots.autoAssign', eventId: selectedCalendarEvent.id })}
-                                    >
-                                        <Sparkles size={13} />
-                                        <span>스마트 자동 배분</span>
-                                    </button>
-                                )}
-
-                                {selectedCalendarEvent.slots.some(s => s.memberId && s.attendance === 'pending') && (
-                                    <button
-                                        type="button"
-                                        className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-primary/30 bg-primary/10 text-primary hover:bg-primary/20`}
-                                        disabled={actions.disabled}
-                                        onClick={() => void actions.send({ type: 'schedule.sendDutyReminder', eventId: selectedCalendarEvent.id })}
-                                    >
-                                        <Bell size={13} />
-                                        <span>출석 리마인드 알람</span>
-                                    </button>
-                                )}
-
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2 min-h-8 text-muted-foreground`}
-                                    onClick={() => void handleCopyKakao(selectedCalendarEvent)}
-                                >
-                                    <ClipboardCopy size={12} />
-                                    <span>카톡 복사</span>
-                                </button>
-                            </div>
-                        )}
-
-                        {/* 역할 배정 및 슬롯 목록 */}
-                        <div className="space-y-3">
-                            <h4 className="font-bold text-sm text-foreground">
-                                배정 인원 ({selectedCalendarEvent.slots.filter(s => s.memberId).length}/{selectedCalendarEvent.slots.length}명)
-                            </h4>
-                            {selectedCalendarEvent.slots.length ? (
-                                <ul className="space-y-3">
-                                    {selectedCalendarEvent.slots.map(slot => (
-                                        <SlotCard
-                                            key={slot.id}
-                                            {...actions}
-                                            slot={slot}
-                                            event={selectedCalendarEvent}
-                                            alerts={alertsByEvent.get(selectedCalendarEvent.id) ?? []}
-                                            members={members}
-                                            names={names}
-                                            userId={userId}
-                                            manager={manager}
-                                            allEvents={state.events}
-                                            workloadMap={workloadMap}
-                                        />
-                                    ))}
-                                </ul>
-                            ) : (
-                                <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                                    아직 배정된 역할이 없습니다. 상단 &apos;지난 배정 복사&apos;를 누르면 1초 만에 배정됩니다.
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <SelectedEventPanel {...panelProps(selectedCalendarEvent)} variant="calendar" onClose={() => setSelectedCalendarEventId(null)} />
                 )}
             </div>
         ) : viewMode === 'matrix' ? (
-            <div className="space-y-4">
+            <div className="space-y-6">
                 <MatrixView
                     events={state.events}
                     members={members}
@@ -2042,435 +2050,51 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                     disabled={actions.disabled}
                 />
 
-                {/* 매트릭스에서 일정 클릭 시 하단에 바로 열리는 퀵 상세 & 배정 패널 */}
                 {selectedCalendarEvent && (
-                    <div className="rounded-2xl border-2 border-primary/40 bg-card p-4 sm:p-5 shadow-lg space-y-4 animate-in fade-in">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-                            <div className="space-y-0.5">
-                                <div className="flex items-center gap-2">
-                                    <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold">
-                                        선택된 일정
-                                    </span>
-                                    <h3 className="font-bold text-lg text-foreground">{selectedCalendarEvent.title}</h3>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    <time dateTime={selectedCalendarEvent.startsAt}>{planningDate(selectedCalendarEvent.startsAt)}</time>
-                                    <span> ~ </span>
-                                    <time dateTime={selectedCalendarEvent.endsAt}>{planningDate(selectedCalendarEvent.endsAt)}</time>
-                                    {selectedCalendarEvent.location ? ` · 장소: ${selectedCalendarEvent.location}` : ''}
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setRsvpModalEvent(selectedCalendarEvent)}
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 text-emerald-700 dark:text-emerald-400 font-bold border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 flex items-center gap-1`}
-                                    title="팀원 사역 동의 현황 및 상세 이력 확인"
-                                >
-                                    <Users size={13} />
-                                    <span>동의 현황</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShareModalEvent(selectedCalendarEvent)}
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 text-primary font-bold border-primary/30 flex items-center gap-1`}
-                                >
-                                    <Share2 size={13} />
-                                    <span>공유 & 캘린더</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedCalendarEventId(null)}
-                                    className="rounded-xl p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                    title="닫기"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* 스마트 빠른 액션 바 (관리자) */}
-                        {manager && !selectedCalendarEvent.cancelled && (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-b border-border/60 pb-3">
-                                {(selectedCalendarEvent.slots.length === 0 || selectedCalendarEvent.slots.some(s => s.memberId === null)) && (
-                                    <button
-                                        type="button"
-                                        className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/20`}
-                                        disabled={actions.disabled}
-                                        title="가장 최근 같은 종류(예배/연습) 일정의 파트 및 배정 인원을 그대로 복사해옵니다"
-                                        onClick={() => void actions.send({ type: 'slots.autoFillFromRecent', eventId: selectedCalendarEvent.id })}
-                                    >
-                                        <Copy size={13} />
-                                        <span>지난 배정 복사</span>
-                                    </button>
-                                )}
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
-                                    disabled={actions.disabled}
-                                    title="파트가 일치하고 최근 사역 횟수가 적은 팀원을 우선하여 빈자리를 스마트하게 배분합니다"
-                                    onClick={() => void actions.send({ type: 'slots.autoAssign', eventId: selectedCalendarEvent.id })}
-                                >
-                                    <Sparkles size={13} />
-                                    <span>스마트 자동 배분</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-primary/40 text-primary hover:bg-primary/10`}
-                                    title="배정되었으나 아직 응답하지 않은 팀원들에게 카카오톡 복사용 개별 멘트를 전송하거나 알림을 발송합니다"
-                                    disabled={actions.disabled}
-                                    onClick={() => void actions.send({ type: 'schedule.sendDutyReminder', eventId: selectedCalendarEvent.id })}
-                                >
-                                    <Bell size={13} />
-                                    <span>출석 리마인드 알람</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1`}
-                                    onClick={() => void handleCopyKakao(selectedCalendarEvent)}
-                                >
-                                    <ClipboardCopy size={12} />
-                                    <span>카톡 복사</span>
-                                </button>
-                            </div>
-                        )}
-
-                        {/* 역할 배정 및 슬롯 목록 */}
-                        <div className="space-y-3">
-                            <h4 className="font-bold text-sm text-foreground">
-                                배정 인원 ({selectedCalendarEvent.slots.filter(s => s.memberId).length}/{selectedCalendarEvent.slots.length}명)
-                            </h4>
-                            {selectedCalendarEvent.slots.length ? (
-                                <ul className="space-y-3">
-                                    {selectedCalendarEvent.slots.map(slot => (
-                                        <SlotCard
-                                            key={slot.id}
-                                            {...actions}
-                                            slot={slot}
-                                            event={selectedCalendarEvent}
-                                            alerts={alertsByEvent.get(selectedCalendarEvent.id) ?? []}
-                                            members={members}
-                                            names={names}
-                                            userId={userId}
-                                            manager={manager}
-                                            allEvents={state.events}
-                                            workloadMap={workloadMap}
-                                        />
-                                    ))}
-                                </ul>
-                            ) : (
-                                <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                                    아직 배정된 역할이 없습니다. 상단 &apos;지난 배정 복사&apos;를 누르면 배정됩니다.
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <SelectedEventPanel {...panelProps(selectedCalendarEvent)} variant="matrix" onClose={() => setSelectedCalendarEventId(null)} />
                 )}
             </div>
         ) : (
-            <>
-                <p className="text-sm text-muted-foreground">{events.length}개 일정 · {filter === 'past' ? '최근 일정부터' : '시작 시간순'}</p>
+            <div>
+                <p className="text-xs text-muted-foreground">{events.length}개 일정 · {filter === 'past' ? '최근 일정부터' : '시작 시간순'}</p>
                 {events.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-border/80 bg-card/40 p-8 text-center space-y-3">
-                        <CalendarDays size={32} className="mx-auto text-muted-foreground/50" />
-                        <p className="font-bold text-sm text-foreground">
+                    <div className="mt-4 space-y-3 rounded-3xl border border-dashed border-input px-5 py-10 text-center">
+                        <CalendarDays size={28} className="mx-auto text-muted-foreground/60" aria-hidden="true" />
+                        <p className="text-[15px] font-medium text-foreground">
                             {searchQuery ? `'${searchQuery}'에 일치하는 일정이 없습니다.` : '이 조건에 해당하는 일정이 없습니다.'}
                         </p>
                         <p className="text-xs text-muted-foreground">
                             {searchQuery ? '검색어를 변경하거나 필터를 초기화해 보세요.' : '새 일정을 등록하거나 필터 조건을 변경해 보세요.'}
                         </p>
                         {(searchQuery || filter !== 'upcoming' || roleFilter !== 'all') ? (
-                            <button
+                            <Button
                                 type="button"
+                                variant="outline"
+                                size="sm"
                                 onClick={() => {
                                     setSearchQuery('');
                                     setFilter('upcoming');
                                     setRoleFilter('all');
                                 }}
-                                className={`${button} text-xs py-1.5 px-3 min-h-8 text-primary font-bold border-primary/30 inline-flex items-center gap-1.5`}
                             >
-                                <RotateCcw size={12} />
+                                <RotateCcw className="text-muted-foreground" />
                                 <span>검색 및 필터 초기화</span>
-                            </button>
+                            </Button>
                         ) : null}
                     </div>
-                ) : null}
-                <div className="space-y-4">{events.map((event, idx) => {
-            const alerts = alertsByEvent.get(event.id) ?? [];
-            const assignedCount = event.slots.filter(slot => slot.memberId).length;
-            const vacantCount = event.slots.filter(slot => !slot.memberId || slot.attendance === 'absent').length;
-            const confirmedCount = event.slots.filter(slot => slot.attendance === 'confirmed').length;
-            const totalSlots = event.slots.length;
-            const isUserAssigned = event.slots.some(slot => slot.memberId === userId);
-            const relDate = getRelativeDateLabel(event.startsAt, now);
-
-            return <article key={event.id} className={`${card} card-interactive`} aria-label={event.title}>
-                <header className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${relDate.cls}`}>
-                                {relDate.text}
-                            </span>
-                            <span>{event.kind === 'rehearsal' ? '연습' : '예배'}</span>
-                            {event.cancelled ? <span className="text-destructive font-bold">취소됨</span> : <span className="text-muted-foreground">{Date.parse(event.endsAt) < now ? '종료됨' : Date.parse(event.startsAt) <= now ? '진행 중' : '예정'}</span>}
-                            {isUserAssigned ? <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-bold">내 사역</span> : null}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            {totalSlots > 0 && assignedCount > 0 ? (
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 font-bold`}
-                                    title="팀원 사역 동의 현황 및 응답 이력 확인 / 일괄 초대 알림"
-                                    onClick={() => setRsvpModalEvent(event)}
-                                >
-                                    <Users size={13} />
-                                    <span>동의 현황 ({confirmedCount}/{assignedCount}명)</span>
-                                </button>
-                            ) : null}
-                            <button
-                                type="button"
-                                className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-bold`}
-                                title="일정 및 섬김 명단 공유 / 캘린더 등록 (.ics)"
-                                onClick={() => setShareModalEvent(event)}
-                            >
-                                <Share2 size={13} />
-                                <span>공유 & 캘린더</span>
-                            </button>
-
-                            <button
-                                type="button"
-                                className={`${button} text-xs py-1 px-2 min-h-8 flex items-center gap-1 text-muted-foreground`}
-                                title="카카오톡 공유용 명단 빠른 복사"
-                                onClick={() => void handleCopyKakao(event)}
-                            >
-                                {copiedEventId === event.id ? (
-                                    <>
-                                        <Check size={12} className="text-emerald-600" />
-                                        <span className="text-emerald-600 font-bold">복사됨!</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <ClipboardCopy size={12} />
-                                        <span>빠른 복사</span>
-                                    </>
-                                )}
-                            </button>
-                            {totalSlots > 0 ? (
-                                <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                                    <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 font-bold">
-                                        배정 {assignedCount}/{totalSlots}명
-                                    </span>
-                                    {vacantCount > 0 ? (
-                                        <span className="rounded-full bg-destructive/10 text-destructive px-2 py-0.5 font-bold">
-                                            빈자리 {vacantCount}
-                                        </span>
-                                    ) : (
-                                        <span className="rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 font-bold">
-                                            완료
-                                        </span>
-                                    )}
-                                </div>
-                            ) : null}
-                        </div>
-                    </div>
-                    <h3 className="break-words text-lg font-bold text-foreground">{event.title}</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground"><time dateTime={event.startsAt}>{planningDate(event.startsAt)}</time><span> ~ </span><time dateTime={event.endsAt}>{planningDate(event.endsAt)}</time> (KST)</p>
-                    <p className="break-words text-xs text-muted-foreground">장소: {event.location || '미정'}</p>
-                    <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-2 py-0.5 font-medium text-foreground">
-                            배정 <strong className="text-primary">{assignedCount}</strong>/{totalSlots}명
-                        </span>
-                        <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium ${confirmedCount > 0 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-muted/40 text-muted-foreground'}`}>
-                            확정 {confirmedCount}명
-                        </span>
-                        {event.slots.some(s => s.attendance === 'absent') && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 font-medium text-destructive">
-                                불참 {event.slots.filter(s => s.attendance === 'absent').length}명
-                            </span>
-                        )}
-                        {vacantCount > 0 && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400">
-                                빈자리 {vacantCount}명
-                            </span>
-                        )}
-                    </div>
-
-                    {/* 스마트 배분 / 지난 배정 복사 / 리마인드 알람 / 초기화 빠른 바 */}
-                    {manager && !event.cancelled && (
-                        <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-border/60">
-                            {(event.slots.length === 0 || event.slots.some(s => s.memberId === null)) && (
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/20`}
-                                    disabled={actions.disabled}
-                                    title="가장 최근 같은 종류(예배/연습) 일정의 파트 및 배정 인원을 그대로 복사해옵니다"
-                                    onClick={() => void actions.send({ type: 'slots.autoFillFromRecent', eventId: event.id })}
-                                >
-                                    <Copy size={13} />
-                                    <span>지난 배정 복사</span>
-                                </button>
-                            )}
-
-                            {event.slots.some(s => s.memberId === null) && (
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20`}
-                                    disabled={actions.disabled}
-                                    title="파트 일치 및 공평 밸런스(사역 적은 인원 우선)로 빈자리를 스마트하게 자동 배정합니다"
-                                    onClick={() => void actions.send({ type: 'slots.autoAssign', eventId: event.id })}
-                                >
-                                    <Sparkles size={13} />
-                                    <span>스마트 자동 배분</span>
-                                </button>
-                            )}
-
-                            {event.slots.some(s => s.memberId && s.attendance === 'pending') && (
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2.5 min-h-8 flex items-center gap-1 font-bold border-primary/30 bg-primary/10 text-primary hover:bg-primary/20`}
-                                    disabled={actions.disabled}
-                                    title="참석 여부를 아직 확인하지 않은 팀원들에게 긴급 리마인드 알림을 보냅니다"
-                                    onClick={() => void actions.send({ type: 'schedule.sendDutyReminder', eventId: event.id })}
-                                >
-                                    <Bell size={13} />
-                                    <span>출석 리마인드 알람</span>
-                                </button>
-                            )}
-
-                            {event.slots.some(s => s.memberId !== null) && (
-                                <button
-                                    type="button"
-                                    className={`${button} text-xs py-1 px-2 min-h-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10`}
-                                    disabled={actions.disabled}
-                                    title="모든 슬롯의 배정을 비우고 빈자리로 초기화합니다"
-                                    onClick={() => {
-                                        if (window.confirm('이 일정의 모든 인원 배정을 초기화(빈자리)하시겠습니까?')) {
-                                            void actions.send({ type: 'slots.clear', eventId: event.id });
-                                        }
-                                    }}
-                                >
-                                    배분 초기화
-                                </button>
-                            )}
-                        </div>
-                    )}
-                </header>
-
-                {/* 콘티 안내 및 당번 알림 블록 */}
-                {event.setlistTitle ? (
-                    <div className="rounded-xl border border-primary/25 bg-primary/5 p-3.5 space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <Music size={16} className="text-primary shrink-0" />
-                                <span className="font-bold text-sm text-foreground">{event.setlistTitle}</span>
-                                {event.setlistSongs?.length ? (
-                                    <span className="rounded-full bg-primary/15 text-primary px-2 py-0.5 text-xs font-semibold">
-                                        {event.setlistSongs.length}곡
-                                    </span>
-                                ) : null}
-                            </div>
-                            {manager && !event.cancelled ? (
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    <button
-                                        type="button"
-                                        className={`${button} text-xs py-1 px-2.5 min-h-7 bg-background shadow-2xs hover:bg-secondary/15`}
-                                        disabled={actions.disabled}
-                                        title="배정된 섬김이들에게 콘티 확인 리마인더 알림 재전송"
-                                        onClick={() => void actions.send({
-                                            type: 'event.updateSetlist',
-                                            eventId: event.id,
-                                            setlistTitle: event.setlistTitle!,
-                                            setlistSongs: event.setlistSongs ?? undefined,
-                                            setlistId: event.setlistId ?? undefined,
-                                            notifyDuty: true,
-                                        })}
-                                    >
-                                        <Bell size={12} className="text-secondary" />
-                                        <span>당번에게 콘티 알림</span>
-                                    </button>
-                                </div>
-                            ) : null}
-                        </div>
-                        {event.setlistSongs?.length ? (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                {event.setlistSongs.map((song, sIdx) => (
-                                    <span key={sIdx} className="rounded-md border border-border/80 bg-background px-2 py-0.5 text-xs text-foreground font-medium">
-                                        {sIdx + 1}. {song}
-                                    </span>
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
-                ) : manager && !event.cancelled ? (
-                    <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-2.5 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                            <Music size={14} /> 아직 등록된 콘티가 없습니다.
-                        </span>
-                        <details className="inline-block">
-                            <summary className={`${button} text-xs py-1 px-2.5 min-h-7 cursor-pointer list-none font-semibold text-primary`}>
-                                + 콘티 등록/연결
-                            </summary>
-                            <div className="mt-2 text-left">
-                                <SetlistForm {...actions} event={event} />
-                            </div>
-                        </details>
-                    </div>
-                ) : null}
-
-                <details className="mt-3" open={idx === 0 && (filter === 'upcoming' || filter === 'my')}>
-                    <summary className={disclosure}>일정 상세·참석·배정 보기{alerts.some(alert => !alert.resolvedAt) ? ' · 긴급 알림 있음' : ''}</summary>
-                    <div className="space-y-5 pt-3">
-                        {event.cancelled ? <p className="rounded-xl bg-muted p-3 text-sm font-semibold">취소된 일정입니다. 배정과 알림은 기록으로만 확인할 수 있습니다.</p> : null}
-
-                        {/* 인도자 알림 · 당번 공지 발송 블록 (인도자 전용) */}
-                        {manager && !event.cancelled ? (
-                            <details className="rounded-xl border border-secondary/40 bg-secondary/5 p-3.5">
-                                <summary className={`${disclosure} flex items-center justify-between text-secondary font-bold text-sm`}>
-                                    <span className="flex items-center gap-2">
-                                        <Send size={15} /> 인도자 알림 · 당번 공지 보내기
-                                    </span>
-                                    <span className="text-xs font-normal text-muted-foreground">펼치기</span>
-                                </summary>
-                                <div className="pt-2">
-                                    <DutyNoticeForm {...actions} event={event} members={members} />
-                                </div>
-                            </details>
-                        ) : null}
-
-                        <section aria-label="일정 안내" className="space-y-2"><h4 className="font-semibold">안내 사항</h4><p className="whitespace-pre-wrap break-words text-sm">{event.notes || '등록된 안내 사항이 없습니다.'}</p></section>
-                        <section aria-label="일정별 긴급 알림" className="space-y-3">
-                            <h4 className="font-semibold">이 일정의 알림 · 해결 기록</h4>
-                            {alerts.length ? <ul className="space-y-3">{alerts.map(alert => <AlertCard key={alert.id} {...actions} alert={alert} event={event} names={names} manager={manager} />)}</ul> : <p className="text-sm text-muted-foreground">등록된 알림이 없습니다.</p>}
-                        </section>
-                        <section aria-label="역할 배정과 참석" className="space-y-3">
-                            <h4 className="font-semibold">역할 배정·참석</h4>
-                            {event.slots.length ? <ul className="space-y-3">{event.slots.map(slot => <SlotCard key={slot.id} {...actions} slot={slot} event={event} alerts={alerts} members={members} names={names} userId={userId} manager={manager} allEvents={state.events} workloadMap={workloadMap} />)}</ul> : <p className="text-sm text-muted-foreground">아직 등록된 역할이 없습니다.</p>}
-                        </section>
-                        {manager ? <details className="rounded-xl border border-border p-3">
-                            <summary className={disclosure}>일정 관리 (역할 템플릿 · 배정 복사 · 삭제)</summary>
-                            <div className="space-y-4 pt-3">
-                                {!event.cancelled && (
-                                    <>
-                                        <details><summary className={disclosure}>콘티 정보 수정 및 당번 알림</summary><SetlistForm {...actions} event={event} /></details>
-                                        <details><summary className={disclosure}>일정 수정</summary><EventForm key={JSON.stringify([event.title,event.kind,event.startsAt,event.endsAt,event.location,event.notes])} {...actions} event={event} /></details>
-                                        <details><summary className={disclosure}>역할·담당자 1명 추가</summary><SlotForm {...actions} eventId={event.id} members={members} /></details>
-                                        <details><summary className={disclosure}>역할 템플릿 일괄 추가 (표준 밴드, 풀 세션 등)</summary><TemplateForm {...actions} eventId={event.id} /></details>
-                                        <details><summary className={disclosure}>이전 일정에서 배정 복사해오기</summary><CopyRosterForm {...actions} eventId={event.id} otherEvents={state.events} /></details>
-                                        <details><summary className={disclosure}>일정 전체 긴급 공지</summary><AlertForm {...actions} eventId={event.id} slotId={null} /></details>
-                                        <ConfirmAction {...actions} label="일정 취소" explanation="이 일정을 취소하면 참석 응답, 배정 변경, 지원 및 알림 처리를 할 수 없습니다. 취소하시겠습니까?" command={{ type: 'event.cancel', eventId: event.id }} />
-                                    </>
-                                )}
-                                <ConfirmAction {...actions} label="일정 영구 삭제" explanation="이 일정을 목록에서 완전히 삭제합니다. 이 작업은 되돌릴 수 없습니다. 삭제하시겠습니까?" command={{ type: 'event.delete', eventId: event.id }} />
-                            </div>
-                        </details> : null}
-                    </div>
-                </details>
-            </article>;
-        })}</div>
-            </>
+                ) : (
+                    <ul>
+                        {events.map((event, idx) => (
+                            <li key={event.id} className="border-b border-border/70 py-6 first:pt-5 last:border-b-0">
+                                <EventItem {...panelProps(event)} defaultOpen={idx === 0 && (filter === 'upcoming' || filter === 'my')} now={now} />
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
         )}
 
-        {/* 일정 공유 및 캘린더 등록 모달 */}
+        {/* 일정 공유 및 캘린더 등록 */}
         {shareModalEvent && (
             <EventShareModal
                 event={shareModalEvent}
@@ -2479,7 +2103,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             />
         )}
 
-        {/* 일정 사역 동의 현황 및 초대 관리 모달 */}
+        {/* 일정 사역 동의 현황 및 초대 관리 */}
         {activeRsvpEvent && (
             <ScheduleRsvpModal
                 event={activeRsvpEvent}
@@ -2492,7 +2116,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             />
         )}
 
-        {/* 이번 달 주일예배 일괄 생성 모달 */}
+        {/* 이번 달 주일예배 일괄 생성 */}
         {monthlySundaysModalOpen && (
             <MonthlySundaysModal
                 disabled={actions.disabled}
@@ -2501,7 +2125,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
             />
         )}
 
-        {/* 사역 불가일(휴가·시험 등) 관리 모달 */}
+        {/* 사역 불가일(휴가·시험 등) 관리 */}
         {blockedDatesModalOpen && (
             <BlockedDatesModal
                 disabled={actions.disabled}

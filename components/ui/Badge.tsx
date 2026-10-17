@@ -7,27 +7,29 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
+        /** 검정 알약 */
         default:
-          "bg-primary text-primary-foreground border border-transparent shadow-xs",
+          "bg-primary text-primary-foreground border border-transparent",
+        /** 회색 칩 (역할·분류 표시) */
         secondary:
-          "bg-secondary text-secondary-foreground border border-transparent shadow-xs",
+          "bg-muted text-foreground border border-transparent",
         outline:
-          "border border-border bg-card text-foreground hover:bg-muted/50",
+          "border border-border bg-card text-foreground",
         subtle:
           "bg-muted text-muted-foreground border border-transparent",
         success:
-          "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+          "border border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
         warning:
-          "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+          "border border-transparent bg-amber-500/10 text-amber-700 dark:text-amber-200",
         destructive:
-          "border-destructive/30 bg-destructive/10 text-destructive dark:text-rose-400",
+          "border border-transparent bg-destructive/10 text-destructive",
         accent:
-          "border-accent/25 bg-accent/10 text-accent dark:text-teal-300",
+          "border border-transparent bg-brand/10 text-brand",
       },
       size: {
-        sm: "px-2 py-0.5 text-[11px] rounded-md leading-tight",
-        default: "px-2.5 py-1 text-xs rounded-lg leading-normal",
-        lg: "px-3 py-1.5 text-sm rounded-xl font-semibold",
+        sm: "px-2 py-0.5 text-[11px] rounded-full leading-tight",
+        default: "px-2.5 py-1 text-xs rounded-full leading-normal",
+        lg: "px-3 py-1.5 text-sm rounded-full font-semibold",
       },
       dot: {
         true: "pl-2",
@@ -69,7 +71,7 @@ function Badge({
       case "destructive":
         return "bg-destructive";
       case "secondary":
-        return "bg-secondary";
+        return "bg-muted-foreground/50";
       case "accent":
         return "bg-accent";
       case "default":

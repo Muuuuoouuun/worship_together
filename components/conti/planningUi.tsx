@@ -42,7 +42,7 @@ export function PlanningError() {
     const { planning } = useConti();
     if (!planning.error) return null;
     return (
-        <p role="alert" className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-400/10 dark:text-rose-300">
+        <p role="alert" className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {planning.error}
         </p>
     );

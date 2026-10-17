@@ -1,9 +1,9 @@
 import Link from 'next/link';
-import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import GlassCard from '@/components/ui/GlassCard';
-import MeshBackground from '@/components/ui/MeshBackground';
-import { Badge } from '@/components/ui/Badge';
 import { ArrowRight, ChevronRight, type LucideIcon } from 'lucide-react';
+import PageHeader, { PageBadge } from '@/components/ui/PageHeader';
+import { buttonVariants } from '@/components/ui/button';
+import { TONE_BLOCK, type Tone } from '@/components/ui/tones';
+import { cn } from '@/lib/utils';
 
 interface RouteAction {
     href: string;
@@ -26,118 +26,106 @@ interface RouteSection {
 }
 
 interface CommunityRoutePageProps {
-    currentPath: string;
+    /** 메뉴 이름과 같은 짧은 제목 (예: '섬김') */
+    title: string;
+    /** 제목 아래 한 줄 설명 */
     description: string;
-    eyebrow: string;
+    /** 파스텔 요약 블록의 설명 문장 */
+    summary: string;
+    /** 요약 블록 색 (분류 색, components/ui/tones.ts) */
+    tone?: Tone;
     metrics: RouteMetric[];
     primaryAction: RouteAction;
     secondaryAction?: RouteAction;
     sections: RouteSection[];
-    title: string;
 }
 
+/**
+ * /community · /care · /serve · /groups 가 함께 쓰는 화면.
+ * 페이지 머리말 + 파스텔 요약 블록 하나 + 가는 선으로 나눈 행 목록 (콘티·순서 리디자인의 악기 담당 행과 같은 모양).
+ * 아직 실제 데이터가 연결되지 않아 숫자는 모두 샘플입니다.
+ */
 export default function CommunityRoutePage({
-    currentPath,
+    title,
     description,
-    eyebrow,
+    summary,
+    tone = 'mint',
     metrics,
     primaryAction,
     secondaryAction,
     sections,
-    title,
 }: CommunityRoutePageProps) {
     return (
-        <DashboardLayout currentPath={currentPath}>
-            <MeshBackground />
-            <div className="mx-auto flex max-w-7xl flex-col gap-8 animate-in fade-in duration-300">
-                <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-end">
-                    <div className="space-y-5">
-                        <Badge variant="secondary" size="default">
-                            {eyebrow}
-                        </Badge>
-                        <div className="space-y-3">
-                            <h1 className="max-w-4xl text-3xl font-serif font-black tracking-tight text-foreground sm:text-4xl md:text-5xl">
-                                {title}
-                            </h1>
-                            <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                                {description}
-                            </p>
-                        </div>
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                            <Link
-                                href={primaryAction.href}
-                                className="tap-target inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-[0.98]"
-                            >
-                                {primaryAction.label}
-                                <ArrowRight size={16} />
+        <div className="space-y-7">
+            <PageHeader
+                title={title}
+                badge={<PageBadge>샘플</PageBadge>}
+                description={description}
+                actions={
+                    <>
+                        {secondaryAction ? (
+                            <Link href={secondaryAction.href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                                {secondaryAction.label}
                             </Link>
-                            {secondaryAction ? (
-                                <Link
-                                    href={secondaryAction.href}
-                                    className="tap-target inline-flex items-center justify-center rounded-2xl border border-border bg-card px-5 py-3 text-sm font-semibold text-foreground transition hover:bg-muted active:scale-[0.98]"
-                                >
-                                    {secondaryAction.label}
-                                </Link>
+                        ) : null}
+                        <Link href={primaryAction.href} className={buttonVariants({ size: 'sm' })}>
+                            {primaryAction.label}
+                            <ArrowRight aria-hidden="true" />
+                        </Link>
+                    </>
+                }
+            />
+
+            <section aria-label="한눈에 보기" className={cn('rounded-3xl p-5 sm:p-6', TONE_BLOCK[tone])}>
+                <p className="max-w-2xl text-sm leading-relaxed text-foreground/75">{summary}</p>
+                <dl className="mt-4 grid gap-3 border-t border-foreground/10 pt-4 sm:grid-cols-3 sm:gap-6">
+                    {metrics.map((metric) => (
+                        <div key={metric.label} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 sm:block">
+                            <dt className="pt-0.5 text-xs font-medium text-muted-foreground sm:pt-0">{metric.label}</dt>
+                            <dd className="min-w-0">
+                                <span className="block text-[15px] font-semibold tabular-nums tracking-tight text-foreground sm:mt-0.5 sm:text-lg">{metric.value}</span>
+                                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{metric.detail}</span>
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+            </section>
+
+            <ul className="grid md:grid-cols-2 md:gap-x-10">
+                {sections.map((section) => {
+                    const Icon = section.icon;
+                    const row = (
+                        <div className="flex items-start gap-3.5 py-4">
+                            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-foreground">
+                                <Icon size={18} aria-hidden="true" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <h2 className="text-[15px] font-medium text-foreground">{section.title}</h2>
+                                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{section.description}</p>
+                                <p className="mt-1.5 text-xs leading-relaxed text-foreground/75">{section.items.join(' · ')}</p>
+                            </div>
+                            {section.href && section.actionLabel ? (
+                                <span className="mt-2.5 inline-flex shrink-0 items-center text-xs font-medium text-muted-foreground">
+                                    <span className="sr-only sm:not-sr-only">{section.actionLabel}</span>
+                                    <ChevronRight size={16} aria-hidden="true" />
+                                </span>
                             ) : null}
                         </div>
-                    </div>
+                    );
 
-                    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                        {metrics.map((metric) => (
-                            <GlassCard key={metric.label} className="border-border/80 bg-card/80 p-5 rounded-2xl shadow-xs">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                                    {metric.label}
-                                </p>
-                                <p className="mt-1 text-2xl font-serif font-black text-foreground">{metric.value}</p>
-                                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{metric.detail}</p>
-                            </GlassCard>
-                        ))}
-                    </div>
-                </section>
-
-                <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    {sections.map((section) => {
-                        const Icon = section.icon;
-                        const content = (
-                            <GlassCard className="flex h-full flex-col border-border/80 bg-card/80 p-5 rounded-2xl shadow-xs transition-all hover:border-primary/40 hover:shadow-md">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                                        <Icon size={20} />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-base font-serif font-bold text-foreground">{section.title}</h2>
-                                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{section.description}</p>
-                                    </div>
-                                </div>
-                                <div className="mt-4 space-y-2.5">
-                                    {section.items.map((item) => (
-                                        <div key={item} className="flex items-center gap-2.5 text-xs text-foreground">
-                                            <span className="size-1.5 shrink-0 rounded-full bg-secondary" />
-                                            <span>{item}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                {section.href && section.actionLabel ? (
-                                    <div className="mt-auto pt-5 border-t border-border/40">
-                                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-secondary hover:underline">
-                                            {section.actionLabel}
-                                            <ChevronRight size={14} />
-                                        </div>
-                                    </div>
-                                ) : null}
-                            </GlassCard>
-                        );
-
-                        return section.href ? (
-                            <Link key={section.title} href={section.href} className="block h-full outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl">
-                                {content}
-                            </Link>
-                        ) : (
-                            <div key={section.title}>{content}</div>
-                        );
-                    })}
-                </section>
-            </div>
-        </DashboardLayout>
+                    return (
+                        <li key={section.title} className="border-b border-border/70">
+                            {section.href ? (
+                                <Link href={section.href} className="-mx-2 block rounded-2xl px-2 transition-colors hover:bg-muted/60">
+                                    {row}
+                                </Link>
+                            ) : (
+                                row
+                            )}
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
     );
 }

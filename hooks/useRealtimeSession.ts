@@ -33,6 +33,8 @@ export const useRealtimeSession = ({ sessionId, teamId, clientId: suppliedClient
     const [lastErrorAt, setLastErrorAt] = useState<string | null>(null);
     const sendRef = useRef<((event: string, payload: unknown) => Promise<TransportResult>) | null>(null);
     const pendingEntriesRef = useRef(new Map<string, SessionFeedbackEntry>());
+    /** Who is listed (device + role, in order) — presence packets and the heartbeat only re-render when this changes. */
+    const participantsKeyRef = useRef('');
 
     useEffect(() => {
         if (!sessionId || !teamId) return;
@@ -89,6 +91,14 @@ export const useRealtimeSession = ({ sessionId, teamId, clientId: suppliedClient
             } } satisfies Packet);
         };
         const announce = () => void send('presence', { role: useSessionStore.getState().selectedFeedbackRole });
+        // lastSeenAt only drives the expiry below, so a peer that is merely still here keeps the same list.
+        const publishPeers = () => {
+            const next = [...peers.values()];
+            const key = next.map((peer) => `${peer.clientId}:${peer.role}`).join('|');
+            if (key === participantsKeyRef.current) return;
+            participantsKeyRef.current = key;
+            setParticipants(next);
+        };
         const receive = (value: unknown, transport: 'local' | 'remote') => {
             if (disposed || !isRecord(value) || value.sessionId !== sessionId || value.teamId !== teamId ||
                 typeof value.sender !== 'string' || value.sender === clientId || !isRecord(value.payload)) return;
@@ -104,7 +114,7 @@ export const useRealtimeSession = ({ sessionId, teamId, clientId: suppliedClient
                 }
             } else if (value.event === 'presence' && typeof payload.role === 'string' && isSessionFeedbackRole(payload.role)) {
                 peers.set(value.sender, { clientId: value.sender, role: payload.role, lastSeenAt: Date.now() });
-                setParticipants([...peers.values()]);
+                publishPeers();
             } else if (value.event === 'hello') {
                 announce();
                 if (transport === 'local') publishState();
@@ -128,7 +138,8 @@ export const useRealtimeSession = ({ sessionId, teamId, clientId: suppliedClient
         queueMicrotask(() => {
             if (disposed) return;
             setLocalTransportAvailable(Boolean(local));
-            setParticipants([]);
+            participantsKeyRef.current = '';
+            setParticipants((current) => (current.length === 0 ? current : []));
             setRealtimeStatus(navigator.onLine ? 'idle' : 'offline');
             setLastRealtimeAt(null);
             setLastSubscribedAt(null);
@@ -184,7 +195,7 @@ export const useRealtimeSession = ({ sessionId, teamId, clientId: suppliedClient
         });
         const heartbeat = window.setInterval(() => {
             for (const [id, peer] of peers) if (Date.now() - peer.lastSeenAt > 35000) peers.delete(id);
-            setParticipants([...peers.values()]);
+            publishPeers();
             announce();
         }, 10000);
         const handleOffline = () => setRealtimeStatus('offline');
