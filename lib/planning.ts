@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createClientId } from './clientId';
 import { worshipRoles, type TeamMember } from '../types/team';
-import { canManagePlanning, emptyPlanningState, planningDate, requestKinds, scheduleTemplates, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
+import { canManagePlanning, emptyPlanningState, planningDate, planningDay, requestKinds, scheduleTemplates, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
 
 const id = z.string().min(1).max(200);
 const body = z.string().trim().min(1, '내용을 입력해주세요.').max(1500);
@@ -146,6 +146,8 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
     const eventById = (eventId: string) => { const event = state.events.find(item => item.id === eventId); if (!event || event.cancelled) throw new Error('일정이 없거나 취소되었습니다.'); return event; };
     const slotById = (event: TeamSchedule, slotId: string) => { const slot = event.slots.find(item => item.id === slotId); if (!slot) throw new Error('배치 항목을 찾지 못했습니다.'); return slot; };
     const closeSlotAlerts = (eventId: string, slotId: string) => { state.alerts.filter(item => item.eventId === eventId && item.slotId === slotId && !item.resolvedAt).forEach(item => { item.resolvedAt = now; }); };
+    /** 담당자가 바뀌면 이전 사람의 초대·응답 기록을 새 사람에게 넘기지 않습니다. */
+    const resetResponse = (slot: ScheduleSlot) => { delete slot.invitedAt; delete slot.respondedAt; delete slot.declineReason; };
     const available = (event: TeamSchedule, memberId: string | null, slotId?: string) => {
         if (!memberId) return;
         if (!members.some(member => member.userId === memberId)) throw new Error('이 팀의 팀원만 배치할 수 있습니다.');
@@ -275,7 +277,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (event.slots.length >= 50 && !existing) throw new Error('한 일정에 최대 50명을 배치할 수 있습니다.');
             const slot = { id: existing?.id ?? createClientId(), role: command.role, memberId: command.memberId, attendance: sameMember ? existing!.attendance : 'pending' as const, volunteers: sameMember ? existing!.volunteers : [] };
             const oldMember = existing?.memberId;
-            if (existing) { Object.assign(existing, slot); if (!sameMember) closeSlotAlerts(event.id, slot.id); } else event.slots.push(slot);
+            if (existing) { Object.assign(existing, slot); if (!sameMember) { resetResponse(existing); closeSlotAlerts(event.id, slot.id); } } else event.slots.push(slot);
             notify([...(oldMember ? [oldMember] : []), ...(command.memberId ? [command.memberId] : [])], '인원 배치가 변경되었어요', `${event.title} · ${worshipRoles[command.role]}`, 'schedule', event.id);
             break;
         }
@@ -303,7 +305,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                     const wMap = new Map<string, number>();
                     for (const m of members) wMap.set(m.userId, 0);
                     for (const ev of state.events) { if (ev.cancelled) continue; for (const sl of ev.slots) { if (sl.memberId && wMap.has(sl.memberId)) wMap.set(sl.memberId, wMap.get(sl.memberId)! + 1); } }
-                    const eventDate = event.startsAt.slice(0, 10);
+                    const eventDate = planningDay(event.startsAt);
                     const blocked = new Set((state.blockedDates ?? []).filter(b => b.date === eventDate).map(b => b.memberId));
                     const assignedInEvent = new Set(event.slots.map(s => s.memberId).filter((mid): mid is string => Boolean(mid)));
                     const subs = members
@@ -382,7 +384,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (!slot.volunteers.includes(command.memberId)) throw new Error('지원한 팀원만 확정할 수 있습니다.');
             available(event, command.memberId, slot.id);
             const oldMember = slot.memberId;
-            slot.memberId = command.memberId; slot.attendance = 'confirmed'; slot.volunteers = []; closeSlotAlerts(event.id, slot.id);
+            slot.memberId = command.memberId; slot.attendance = 'confirmed'; slot.volunteers = []; resetResponse(slot); closeSlotAlerts(event.id, slot.id);
             notify(everyone, '대체 인원이 확정되었어요', `${event.title} · ${worshipRoles[slot.role]} · ${members.find(member => member.userId === command.memberId)!.name}${oldMember ? ' (배치 변경)' : ''}`, 'schedule', event.id);
             break;
         }
@@ -508,7 +510,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                 }
             }
             const assignedInEvent = new Set(event.slots.map(s => s.memberId).filter((mid): mid is string => Boolean(mid)));
-            const eventDate = event.startsAt.slice(0, 10);
+            const eventDate = planningDay(event.startsAt);
             const blocked = new Set((state.blockedDates ?? []).filter(b => b.date === eventDate).map(b => b.memberId));
             let assignedCount = 0;
             for (const slot of emptySlots) {
@@ -546,9 +548,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                     slot.memberId = null;
                     slot.attendance = 'pending';
                     slot.volunteers = [];
-                    delete slot.invitedAt;
-                    delete slot.respondedAt;
-                    delete slot.declineReason;
+                    resetResponse(slot);
                     closeSlotAlerts(event.id, slot.id);
                     clearedCount++;
                 }
@@ -561,7 +561,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             manage();
             const event = eventById(command.eventId);
             if (event.slots.length > 0 && event.slots.some(s => s.memberId !== null)) throw new Error('이미 배정된 인원이 있습니다. 배분 초기화 후 다시 시도해주세요.');
-            const eventDate = event.startsAt.slice(0, 10);
+            const eventDate = planningDay(event.startsAt);
             const blocked = new Set((state.blockedDates ?? []).filter(b => b.date === eventDate).map(b => b.memberId));
             const candidates = state.events
                 .filter(e => e.id !== event.id && !e.cancelled && e.kind === event.kind && e.slots.some(s => s.memberId))
@@ -581,9 +581,10 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                 // Slots exist but are empty — try to fill from source
                 for (const slot of event.slots) {
                     if (slot.memberId !== null) continue;
-                    const srcSlot = source.slots.find(s => s.role === slot.role && s.memberId && members.some(m => m.userId === s.memberId) && !blocked.has(s.memberId!));
-                    if (srcSlot && srcSlot.memberId) {
-                        try { available(event, srcSlot.memberId); slot.memberId = srcSlot.memberId; slot.attendance = 'pending'; } catch { /* skip */ }
+                    // 같은 파트가 여러 자리면(보컬 2~3명 등) 이미 채운 사람은 겹침으로 걸러지므로 다음 원본 자리를 시도합니다.
+                    for (const src of source.slots) {
+                        if (src.role !== slot.role || !src.memberId || blocked.has(src.memberId) || !members.some(m => m.userId === src.memberId)) continue;
+                        try { available(event, src.memberId); slot.memberId = src.memberId; slot.attendance = 'pending'; break; } catch { /* 다음 후보 */ }
                     }
                 }
             }

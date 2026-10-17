@@ -199,8 +199,8 @@ function AssignmentRow({ service, item }: { service: ServiceDay; item: PartAssig
                                     {manager && (
                                         <button
                                             type="button"
-                                            disabled={busy || !person.member}
-                                            title={person.member ? undefined : '팀을 나간 사람은 확정할 수 없어요'}
+                                            disabled={busy || !person.member || person.placed}
+                                            title={!person.member ? '팀을 나간 사람은 확정할 수 없어요' : person.placed ? '같은 시간대 다른 자리에 이미 배치되어 있어요' : undefined}
                                             onClick={() => run({ type: 'slot.accept', eventId, slotId: item.slotId, memberId: person.id })}
                                             className={pillOn}
                                         >

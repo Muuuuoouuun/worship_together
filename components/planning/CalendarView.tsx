@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, Sparkles } from 'lucide-react';
-import { type TeamSchedule } from '@/types/planning';
+import { planningDay, planningTime, type TeamSchedule } from '@/types/planning';
 import { type TeamMember } from '@/types/team';
 
 const button = 'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted active:scale-[0.98] disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
@@ -117,8 +117,8 @@ export default function CalendarView({
         const map = new Map<string, TeamSchedule[]>();
         for (const ev of events) {
             if (ev.cancelled) continue;
-            // e.g. startsAt: "2026-09-27T11:00:00+09:00" -> "2026-09-27"
-            const dateKey = ev.startsAt.slice(0, 10);
+            // 한국 시간 기준 날짜 (저장값이 UTC여도 07:30 예배가 전날 칸에 들어가지 않도록)
+            const dateKey = planningDay(ev.startsAt);
             const list = map.get(dateKey) ?? [];
             list.push(ev);
             map.set(dateKey, list);
@@ -264,7 +264,7 @@ export default function CalendarView({
                                                         ? 'border-primary/30 bg-primary/10 text-primary'
                                                         : 'border-border bg-muted/60 text-foreground'
                                                 }`}
-                                                title={`${ev.title} (${ev.startsAt.slice(11, 16)})`}
+                                                title={`${ev.title} (${planningTime(ev.startsAt)})`}
                                             >
                                                 <span className="size-1.5 rounded-full bg-current shrink-0" />
                                                 <span className="truncate max-w-[28px]">{ev.kind === 'worship' ? '예배' : '연습'}</span>
@@ -283,7 +283,7 @@ export default function CalendarView({
                                         const vacantCount = ev.slots.filter(
                                             (s) => !s.memberId || s.attendance === 'absent'
                                         ).length;
-                                        const timeStr = ev.startsAt.slice(11, 16);
+                                        const timeStr = planningTime(ev.startsAt);
 
                                         return (
                                             <button

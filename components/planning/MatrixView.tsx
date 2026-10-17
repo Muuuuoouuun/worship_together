@@ -11,7 +11,7 @@ import {
     Clock,
     XCircle,
 } from 'lucide-react';
-import { planningDate, type PlanningCommand, type ScheduleSlot, type TeamSchedule } from '@/types/planning';
+import { planningDate, planningDay, planningTime, type PlanningCommand, type ScheduleSlot, type TeamSchedule } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 
 const button = 'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98] disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
@@ -74,7 +74,7 @@ export default function MatrixView({
     // Filter events for the current month
     const monthEvents = useMemo(() => {
         return events
-            .filter((e) => !e.cancelled && e.startsAt.startsWith(monthPrefix))
+            .filter((e) => !e.cancelled && planningDay(e.startsAt).startsWith(monthPrefix))
             .filter((e) => filterKind === 'all' || e.kind === filterKind)
             .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
     }, [events, monthPrefix, filterKind]);
@@ -223,13 +223,14 @@ export default function MatrixView({
                                         파트 / 일정
                                     </th>
                                     {monthEvents.map((ev) => {
-                                        const dateObj = new Date(ev.startsAt);
-                                        const monthNum = dateObj.getMonth() + 1;
-                                        const dayNum = dateObj.getDate();
+                                        // 한국 시간 기준 날짜·시각 (기기 시간대와 저장 형식에 영향받지 않도록)
+                                        const dateObj = new Date(`${planningDay(ev.startsAt)}T00:00:00Z`);
+                                        const monthNum = dateObj.getUTCMonth() + 1;
+                                        const dayNum = dateObj.getUTCDate();
                                         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-                                        const dayName = dayNames[dateObj.getDay()];
-                                        const isSunday = dateObj.getDay() === 0;
-                                        const timeStr = ev.startsAt.slice(11, 16);
+                                        const dayName = dayNames[dateObj.getUTCDay()];
+                                        const isSunday = dateObj.getUTCDay() === 0;
+                                        const timeStr = planningTime(ev.startsAt);
                                         const assignedCount = ev.slots.filter((s) => s.memberId).length;
                                         const totalCount = ev.slots.length;
                                         const vacantCount = ev.slots.filter((s) => !s.memberId || s.attendance === 'absent').length;
