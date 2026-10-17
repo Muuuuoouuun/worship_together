@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** Local rehearsal of team management; never use this store as an authorization source. */
 export const TEAM_STORAGE_KEY = 'worship-together:teams:v1';

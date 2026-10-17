@@ -21,6 +21,8 @@ import type { SongForm } from '@/lib/songForm';
 import { getTeamServerSnapshot, getTeamSnapshot, parseTeamSnapshot, selectPrototypeTeam, subscribeToTeams } from '@/lib/teamPrototype';
 import { demoMembers, readLocalActor, writeLocalActor } from '@/lib/planningDemo';
 import type { TeamMember } from '@/types/team';
+import PageHeader from '@/components/ui/PageHeader';
+import { buttonVariants } from '@/components/ui/button';
 import ContiWorkspace from './ContiWorkspace';
 import { buildContiSetlists, planSave } from './liveData';
 import { seoulDateTime, upcomingSetlistId, type ScreenId } from './model';
@@ -65,7 +67,8 @@ interface Source {
     viewers: TeamMember[];
 }
 
-const feedSeenStorageKey = (teamId: string) => `worship:conti-feed-seen:v1:${encodeURIComponent(teamId)}`;
+/** 코멘트 소식을 읽은 시각. 로그인 없이 '보는 사람'을 바꿔도 각자 따로 기억합니다. (보는 사람별 값이 없으면 이전의 팀 단위 값을 씁니다) */
+const feedSeenStorageKey = (teamId: string, userId?: string) => `worship:conti-feed-seen:v1:${encodeURIComponent(teamId)}${userId ? `:${encodeURIComponent(userId)}` : ''}`;
 
 function readStored(key: string): string | null {
     try {
@@ -137,6 +140,8 @@ export default function LiveContiWorkspace(props: Props) {
     const rawTeams = useSyncExternalStore(subscribeToTeams, getTeamSnapshot, getTeamServerSnapshot);
     const [onlineId, setOnlineId] = useState(props.onlineTeamId ?? props.onlineTeams[0]?.id ?? '');
     const [version, setVersion] = useState(0);
+    /** '방금·N분 전' 표시용 1분 시계 (같은 내용의 폴링은 다시 그리지 않으므로 따로 둡니다) */
+    const [minute, setMinute] = useState(() => Date.now());
     const [teamError, setTeamError] = useState('');
     /** 로그인 없이 볼 때 '보는 사람' (팀별로 이 브라우저에 기억) */
     const [viewerChoice, setViewerChoice] = useState<Record<string, string>>({});
@@ -207,6 +212,7 @@ export default function LiveContiWorkspace(props: Props) {
         // 자정이 지나면 '오늘'이 바뀌므로 화면을 다시 계산합니다.
         let day = seoulDateTime(new Date()).date;
         const clock = setInterval(() => {
+            setMinute(Date.now());
             const next = seoulDateTime(new Date()).date;
             if (next !== day) {
                 day = next;
@@ -303,8 +309,9 @@ export default function LiveContiWorkspace(props: Props) {
         if (!loaded?.ok) return EMPTY_PLANNING_VIEW;
         const userId = source.planning.kind === 'none' ? null : source.planning.userId;
         if (!userId) return { ...EMPTY_PLANNING_VIEW, ready: true };
-        const seen = feedSeenAt[planningTeamId] ?? readStored(feedSeenStorageKey(planningTeamId));
-        const built = buildPlanningView({ state: planning.state, members: planning.members, userId, today: loaded.value.today, now: new Date(), setlists: loaded.value.data.setlists, feedSeenAt: seen });
+        const seenKey = feedSeenStorageKey(planningTeamId, userId);
+        const seen = feedSeenAt[seenKey] ?? readStored(seenKey) ?? readStored(feedSeenStorageKey(planningTeamId));
+        const built = buildPlanningView({ state: planning.state, members: planning.members, userId, today: loaded.value.today, now: new Date(minute), setlists: loaded.value.data.setlists, feedSeenAt: seen });
         return {
             ...built,
             sample: false,
@@ -314,13 +321,13 @@ export default function LiveContiWorkspace(props: Props) {
             actions: {
                 dispatch: planning.dispatch,
                 markFeedSeen: (at) => {
-                    writeStored(feedSeenStorageKey(planningTeamId), at);
-                    setFeedSeenAt((current) => ({ ...current, [planningTeamId]: at }));
+                    writeStored(seenKey, at);
+                    setFeedSeenAt((current) => ({ ...current, [seenKey]: at }));
                 },
             },
             planningHref: `/dashboard/planning?team=${encodeURIComponent(planningTeamId)}`,
         };
-    }, [loaded, source.planning, planningTeamId, planning, feedSeenAt]);
+    }, [loaded, source.planning, planningTeamId, planning, feedSeenAt, minute]);
 
     const data: ContiData | null = loaded?.ok
         ? { ...loaded.value.data, editor, roster: source.roster.length ? source.roster : planningView.roster.map((member) => member.name), planning: planningView }
@@ -328,18 +335,19 @@ export default function LiveContiWorkspace(props: Props) {
     const localViewerId = source.planning.kind === 'local' ? source.planning.userId : null;
 
     return (
-        <div className="mx-auto flex max-w-3xl flex-col gap-4">
-            <section className="flex flex-wrap items-end justify-between gap-3 px-1">
-                <div className="min-w-0">
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">콘티·악보</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
+        <div className="flex flex-col gap-5">
+            <PageHeader
+                title="콘티·악보"
+                description={
+                    <>
                         {source.kind === 'server' ? '서버에 저장된 콘티' : '곡 보관함에 저장된 콘티'}를 이번 주 순서·송폼·특이사항과 함께 봐요
-                    </p>
-                    <Link href="/dashboard/songs/deadline" className="mt-1.5 inline-flex min-h-8 items-center text-xs font-semibold text-primary underline-offset-2 hover:underline">
-                        콘티 마감 알림 목업 보기 →
-                    </Link>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <Link href="/dashboard/songs/deadline" className="ml-1.5 inline-flex items-center text-xs font-semibold text-brand underline-offset-2 hover:underline">
+                            마감 알림 목업 →
+                        </Link>
+                    </>
+                }
+                actions={
+                    <>
                     {source.teams.length > 1 && (
                         <label className="sr-only" htmlFor="conti-team">
                             팀 선택
@@ -350,7 +358,7 @@ export default function LiveContiWorkspace(props: Props) {
                             id="conti-team"
                             value={source.teamId}
                             onChange={(event) => chooseTeam(event.target.value)}
-                            className="min-h-10 max-w-40 rounded-full border border-border bg-card px-3 text-xs font-semibold text-foreground"
+                            className="h-9 max-w-40 rounded-full border border-border bg-card px-3 text-base font-semibold text-foreground sm:text-xs"
                         >
                             {source.teams.map((team) => (
                                 <option key={team.id} value={team.id}>
@@ -360,13 +368,13 @@ export default function LiveContiWorkspace(props: Props) {
                         </select>
                     )}
                     {localViewerId && source.viewers.length > 1 && (
-                        <label className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card pl-3 pr-2 text-xs font-semibold text-foreground">
+                        <label className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card pl-3.5 pr-2 text-xs font-semibold text-foreground focus-within:ring-2 focus-within:ring-ring/30">
                             <span className="text-muted-foreground">보는 사람</span>
                             <select
                                 aria-label="보는 사람"
                                 value={localViewerId}
                                 onChange={(event) => chooseViewer(event.target.value)}
-                                className="max-w-32 bg-transparent text-xs font-semibold text-foreground outline-none"
+                                className="max-w-32 bg-transparent text-base font-semibold text-foreground outline-none sm:text-xs"
                             >
                                 {source.viewers.map((member) => (
                                     <option key={member.userId} value={member.userId}>
@@ -377,25 +385,23 @@ export default function LiveContiWorkspace(props: Props) {
                             </select>
                         </label>
                     )}
-                    <Link
-                        href="/dashboard/songs/library"
-                        className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
-                    >
+                    <Link href="/dashboard/songs/library" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                         <Library size={15} aria-hidden="true" />
                         곡 보관함
                     </Link>
-                </div>
-            </section>
+                    </>
+                }
+            />
             {teamError && <p role="alert" className="px-1 text-sm text-destructive">{teamError}</p>}
 
             {!loaded ? (
-                <div role="status" className="rounded-[2rem] bg-card px-6 py-16 text-center text-sm text-muted-foreground">
+                <div role="status" className="max-w-3xl rounded-3xl bg-muted/60 px-6 py-16 text-center text-sm text-muted-foreground">
                     콘티를 불러오는 중…
                 </div>
             ) : !loaded.ok ? (
-                <div role="alert" className="rounded-[2rem] bg-card px-6 py-12 text-center">
+                <div role="alert" className="max-w-3xl rounded-3xl bg-destructive/10 px-6 py-12 text-center">
                     <p className="text-sm font-semibold text-foreground">{loaded.error}</p>
-                    <Link href="/dashboard/songs/library" className="mt-3 inline-flex min-h-10 items-center text-sm font-semibold text-primary underline-offset-2 hover:underline">
+                    <Link href="/dashboard/songs/library" className="mt-3 inline-flex min-h-10 items-center text-sm font-semibold text-brand underline-offset-2 hover:underline">
                         곡 보관함에서 확인하기
                     </Link>
                 </div>

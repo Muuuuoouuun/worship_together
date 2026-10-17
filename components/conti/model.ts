@@ -12,7 +12,8 @@ export function resolveScreen(tab: string | null | undefined, setlist: string | 
     const setlistId = setlist || undefined;
     return { screen: screen === 'order' && !setlistId ? 'conti' : screen, setlistId };
 }
-export type Tone = 'sky' | 'mint' | 'peach' | 'lilac' | 'sand';
+export type { Tone } from '@/components/ui/tones';
+import type { Tone } from '@/components/ui/tones';
 export type SetlistStatus = 'done' | 'confirmed' | 'writing' | 'empty';
 export type LinkKind = 'video' | 'sheet' | 'mr' | 'other';
 
@@ -50,6 +51,8 @@ export interface ContiSong {
     links: SongLink[];
     /** 인도자가 정한 특이사항 */
     notes: string[];
+    /** 이 곡에서 다음 곡으로 넘어갈 때의 메모 */
+    transitionNote?: string | null;
     /** 팀원들이 남긴 코멘트 */
     comments: SongComment[];
 }
@@ -90,10 +93,11 @@ export const SECTION_PALETTE = ['I', 'V1', 'V2', 'V3', 'PC', 'C', 'B', 'Int', 'T
 export const LINK_LABEL: Record<LinkKind, string> = { video: '원곡 영상', sheet: '악보', mr: 'MR', other: '링크' };
 
 export const SETLIST_STATUS: Record<SetlistStatus, { label: string; dot: string; text: string }> = {
-    done: { label: '완료', dot: 'bg-neutral-300 dark:bg-neutral-600', text: 'text-neutral-500 dark:text-neutral-400' },
-    confirmed: { label: '확정', dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
-    writing: { label: '작성 중', dot: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400' },
-    empty: { label: '미작성', dot: 'bg-neutral-300 dark:bg-neutral-600', text: 'text-neutral-500 dark:text-neutral-400' },
+    // 색은 ui.tsx 의 STATUS 와 같은 값입니다 (모델 파일이 화면 모듈을 불러오지 않도록 문자열로 둡니다).
+    done: { label: '완료', dot: 'bg-muted-foreground/30', text: 'text-muted-foreground' },
+    confirmed: { label: '확정', dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400' },
+    writing: { label: '작성 중', dot: 'bg-amber-400', text: 'text-amber-700 dark:text-amber-400' },
+    empty: { label: '미작성', dot: 'bg-muted-foreground/30', text: 'text-muted-foreground' },
 };
 
 export function songsOf(items: OrderItem[]): ContiSong[] {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Activity,
     Bell,
@@ -13,6 +13,7 @@ import {
     EyeOff,
     FileText,
     History,
+    Footprints,
     Keyboard,
     ListMusic,
     Maximize2,
@@ -27,29 +28,43 @@ import {
     Zap,
 } from 'lucide-react';
 import { usePageTurner } from '@/hooks/usePageTurner';
+import { useMyPart, useOverlayPersonal } from '@/hooks/useMarkPartPrefs';
+import { useSongFormStepper } from '@/hooks/useSongFormStepper';
+import { useChartLyricsOnly } from '@/hooks/useChartLyricsOnly';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
-import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
+import BeatIndicator from '@/components/session/BeatIndicator';
+import StageClickControls from '@/components/session/StageClickControls';
 import { isStageAudioEnabled, setStageAudioEnabled, playStageCueSound } from '@/lib/stageAudioCue';
 import { readSongStageNote, saveSongStageNote, STAGE_NOTE_CHANGED_EVENT } from '@/lib/stageNotesStorage';
 import { getCueCategory } from '@/types/session';
 import {
     createSampleSheetDocument,
-    pointsToSvgPath,
     readSheet,
     saveSheet,
     sheetKey,
     type SheetDocument,
     type SheetMark,
 } from '@/lib/sheetAnnotations';
+import { marksForParts, marksNotIn, PART_ALL_LABEL, PART_LABELS, parsePart, SHEET_PARTS } from '@/lib/markParts';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
 import SongFormMarkup, { SongFormSectionMarker } from './SongFormMarkup';
+import SheetInkLayer from './SheetInkLayer';
+import { normalizeKey } from '@/lib/leadSheet';
+import { formatKeyLabel, resolveKey } from '@/lib/stageSongPlan';
 
 export interface LiveStageScoreViewerProps {
     teamId: string;
     songId: string;
     title: string;
     originalKey?: string | null;
+    /** 이번 주 Key (콘티에서 정한 Key). 있으면 Key 표기와 샘플 악보에 originalKey 대신 씁니다. */
+    targetKey?: string | null;
+    /** 이 곡의 인도자 디렉팅 메모 */
+    directionNotes?: string[];
+    /** 이 곡에서 다음 곡으로 넘어갈 때의 메모 */
+    transitionNote?: string | null;
+    nextSongKey?: string | null;
     currentBpm?: number | null;
     bpmEnabled?: boolean;
     isActive?: boolean;
@@ -87,6 +102,10 @@ export default function LiveStageScoreViewer({
     songId,
     title,
     originalKey,
+    targetKey,
+    directionNotes = [],
+    transitionNote,
+    nextSongKey,
     currentBpm,
     bpmEnabled = false,
     isActive = true,
@@ -119,6 +138,8 @@ export default function LiveStageScoreViewer({
 }: LiveStageScoreViewerProps) {
     const [sheet, setSheet] = useState<SheetDocument | null>(null);
     const [sheetSource, setSheetSource] = useState<'published' | 'draft'>('published');
+    /** My own draft, when it can be drawn over the team copy (same page count). */
+    const [personalSheet, setPersonalSheet] = useState<SheetDocument | null>(null);
     const [loaded, setLoaded] = useState(false);
     const [cueBanner, setCueBanner] = useState<{ message: string; role?: string | null; accent?: string | null } | null>(null);
     const [pageTurnFlash, setPageTurnFlash] = useState<'prev' | 'next' | null>(null);
@@ -230,9 +251,12 @@ export default function LiveStageScoreViewer({
         }
     }, [updateBpm]);
 
+    // The key played this week: the setlist's key first, then the library's original key.
+    const songKey = resolveKey(originalKey, targetKey);
     const loadSampleSheet = async () => {
         try {
-            const sampleDoc = createSampleSheetDocument(title);
+            // Drawn in the key played this week when it is known (major keys).
+            const sampleDoc = await createSampleSheetDocument(title, normalizeKey(songKey.key) ?? 'C');
             const publishedKey = sheetKey(teamId, songId, true);
             await saveSheet(publishedKey, sampleDoc);
             setSheet(sampleDoc);
@@ -257,17 +281,36 @@ export default function LiveStageScoreViewer({
     const [fitMode, setFitMode] = useState<'height' | 'width'>('height');
     const [isDualPage, setIsDualPage] = useState<boolean>(false);
 
+    // 내 파트 hides other parts' marks; 내 필기 겹치기 draws my draft over the team copy. Both are kept per device.
+    const { part: myPart, visible: visibleParts, setPart: setMyPart } = useMyPart();
+    const { on: overlayChoice, setOn: setOverlayChoice } = useOverlayPersonal();
+    const canOverlay = sheetSource === 'published' && personalSheet !== null && personalSheet.pages.length === (sheet?.pages.length ?? 0);
+    const overlayOn = overlayChoice && canOverlay;
+    // Per page: the draft's marks the team copy doesn't already hold (right after publishing they are the same marks).
+    const personalMarks = useMemo(
+        () => (overlayOn && sheet && personalSheet ? sheet.pages.map((item, index) => marksNotIn(personalSheet.pages[index].marks, item.marks)) : null),
+        [overlayOn, sheet, personalSheet]
+    );
+
     const containerRef = useRef<HTMLDivElement | null>(null);
     const cueTimeoutRef = useRef<number | null>(null);
     const flashTimeoutRef = useRef<number | null>(null);
 
     const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen();
     const { isActive: isWakeLockActive, isSupported: isWakeLockSupported, toggle: toggleWakeLock } = useScreenWakeLock(isActive);
-    const { activeBeat, blinkActive } = useVisualMetronome(bpmEnabled && isActive, effectiveBpm);
+    // The beat dots, giant bar and edge flash each run the metronome in a BeatIndicator leaf,
+    // so a tick never re-renders the score page and its annotation layer.
+    const metronomeEnabled = bpmEnabled && isActive;
 
-    const totalPages = sheet?.pages.length ?? 0;
-    const activePage = sheet?.pages[page - 1];
-    const secondPage = isDualPage && sheet?.pages[page] ? sheet.pages[page] : null;
+    // 가사만 (chord charts): this device's own lyrics-only pages, which can number differently from the saved ones.
+    const chartView = useChartLyricsOnly(sheet);
+    const shownPages = chartView.pages;
+    const totalPages = shownPages?.length ?? 0;
+    const pageIndex = (chartView.lyricsOnly ? Math.min(page, totalPages) : page) - 1;
+    const activePage = shownPages?.[pageIndex];
+    const secondPage = isDualPage && shownPages?.[pageIndex + 1] ? shownPages[pageIndex + 1] : null;
+    // Lyrics-only pages are laid out afresh and carry no marks, so personal marks would land in the wrong place.
+    const overlayMarks = chartView.lyricsOnly ? null : personalMarks;
 
     // Save preferences
     useEffect(() => {
@@ -296,6 +339,24 @@ export default function LiveStageScoreViewer({
         setPageTurnFlash(direction);
         if (flashTimeoutRef.current) window.clearTimeout(flashTimeoutRef.current);
         flashTimeoutRef.current = window.setTimeout(() => setPageTurnFlash(null), 300);
+    };
+
+    // Pedal 섹션 이동 mode: walk the song form band, turning to each section marker's page.
+    const stepper = useSongFormStepper({
+        pages: shownPages,
+        page,
+        canTurnPage,
+        onPageChange: (next) => {
+            showPageTurnFlash(next > page ? 'next' : 'prev');
+            onPageChange(next);
+        },
+        resetKey: songId,
+    });
+    const stepSection = (direction: 1 | -1) => {
+        if (!stepper.step(direction)) return false;
+        setIsFollowLeader(false);
+        triggerHaptic(15);
+        return true;
     };
 
     const handleSendStageCue = (message: string) => {
@@ -341,6 +402,7 @@ export default function LiveStageScoreViewer({
             try {
                 const [published, draft] = await Promise.all([readSheet(publishedKey), readSheet(draftKey)]);
                 if (!active) return;
+                setPersonalSheet(published && published.pages.length > 0 && draft?.pages.length === published.pages.length ? draft : null);
                 if (published && published.pages.length > 0) {
                     setSheet(published);
                     setSheetSource('published');
@@ -395,6 +457,7 @@ export default function LiveStageScoreViewer({
     // Bluetooth Foot Pedal & Keyboard Navigation
     usePageTurner({
         onNext: () => {
+            if (stepSection(1)) return;
             const step = isDualPage ? 2 : 1;
             if (canTurnPage && totalPages > 0) {
                 if (page + step <= totalPages) {
@@ -410,6 +473,7 @@ export default function LiveStageScoreViewer({
             }
         },
         onPrev: () => {
+            if (stepSection(-1)) return;
             const step = isDualPage ? 2 : 1;
             if (canTurnPage && page > 1) {
                 setIsFollowLeader(false);
@@ -504,136 +568,41 @@ export default function LiveStageScoreViewer({
         };
     }, [latestCueMessage, latestCueRole, latestCueAccent, audioCueEnabled]);
 
-    // Renders marks in layered order: highlighters first (underneath), then pens, then stamps
-    function renderMarks(marks: SheetMark[], pageObj: { width: number; height: number }) {
+    // Hand-drawn marks come from the shared memoized layer; song form markup draws on top with the pedal highlight.
+    function renderMarks(marks: SheetMark[], pageObj: { width: number; height: number }, personal?: readonly SheetMark[]) {
         const ratio = pageObj.height / pageObj.width;
-
-        const renderSingleMark = (mark: SheetMark) => {
-            const point = mark.points[0];
-
-            if (mark.kind === 'songform') {
-                return (
-                    <SongFormMarkup key={mark.id} sections={mark.sections ?? []} anchor={point} ratio={ratio} fontSize={mark.fontSize} opacity={mark.opacity} />
-                );
-            }
-
-            if (mark.kind === 'section') {
-                return (
-                    <SongFormSectionMarker key={mark.id} label={mark.text ?? ''} anchor={point} ratio={ratio} fontSize={mark.fontSize} opacity={mark.opacity} />
-                );
-            }
-
-            if (mark.kind === 'stamp') {
-                return (
-                    <text
-                        key={mark.id}
-                        x={Math.min(point[0], 780)}
-                        y={Math.max(point[1] * ratio, 25)}
-                        fill={mark.color}
-                        fontSize="25"
-                        fontWeight="800"
-                        stroke={isDarkInverted ? '#000' : '#fff'}
-                        strokeWidth="3"
-                        paintOrder="stroke"
-                    >
-                        {mark.text}
-                    </text>
-                );
-            }
-
-            if (mark.kind === 'highlighter') {
-                return (
-                    <path
-                        key={mark.id}
-                        d={pointsToSvgPath(mark.points, ratio)}
-                        fill="none"
-                        stroke={mark.color}
-                        strokeWidth={mark.strokeWidth || 16}
-                        strokeLinecap="square"
-                        strokeLinejoin="round"
-                        style={{ mixBlendMode: isDarkInverted ? 'screen' : 'multiply', opacity: mark.opacity ?? 0.55 }}
-                    />
-                );
-            }
-
-            if (mark.kind === 'text') {
-                const fSize = mark.fontSize ?? 20;
-                return (
-                    <g key={mark.id}>
-                        <rect
-                            x={Math.min(point[0], 900) - 4}
-                            y={Math.max(point[1] * ratio, 20) - fSize}
-                            width={(mark.text?.length ?? 3) * (fSize * 0.65) + 8}
-                            height={fSize + 6}
-                            rx="4"
-                            fill={isDarkInverted ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.75)'}
-                        />
-                        <text
-                            x={Math.min(point[0], 900)}
-                            y={Math.max(point[1] * ratio, 20) - 2}
-                            fill={isDarkInverted ? '#000' : mark.color}
-                            fontSize={fSize}
-                            fontWeight="800"
-                            fontFamily="monospace, sans-serif"
-                        >
-                            {mark.text}
-                        </text>
-                    </g>
-                );
-            }
-
-            if (mark.kind === 'rect') {
-                if (mark.points.length < 2) return null;
-                const [p1, p2] = mark.points;
-                const minX = Math.min(p1[0], p2[0]);
-                const maxX = Math.max(p1[0], p2[0]);
-                const minY = Math.min(p1[1], p2[1]) * ratio;
-                const maxY = Math.max(p1[1], p2[1]) * ratio;
-                return (
-                    <rect
-                        key={mark.id}
-                        x={minX}
-                        y={minY}
-                        width={maxX - minX}
-                        height={maxY - minY}
-                        fill={mark.color}
-                        fillOpacity={mark.opacity ?? 0.15}
-                        stroke={mark.color}
-                        strokeWidth={mark.strokeWidth || 3}
-                        rx="6"
-                    />
-                );
-            }
-
-            return (
-                <path
-                    key={mark.id}
-                    d={pointsToSvgPath(mark.points, ratio)}
-                    fill="none"
-                    stroke={mark.color}
-                    strokeWidth={mark.strokeWidth || 2.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                />
-            );
-        };
-
-        const highlighters = marks.filter((m) => m.kind === 'highlighter');
-        const rects = marks.filter((m) => m.kind === 'rect');
-        const pens = marks.filter((m) => m.kind === 'pen');
-        const stamps = marks.filter((m) => m.kind === 'stamp');
-        const texts = marks.filter((m) => m.kind === 'text');
-        // Section markers draw above the song form band.
         const songForms = [...marks.filter((m) => m.kind === 'songform'), ...marks.filter((m) => m.kind === 'section')];
-
         return (
             <>
-                {highlighters.map(renderSingleMark)}
-                {rects.map(renderSingleMark)}
-                {pens.map(renderSingleMark)}
-                {stamps.map(renderSingleMark)}
-                {texts.map(renderSingleMark)}
-                {songForms.map(renderSingleMark)}
+                <SheetInkLayer marks={marksForParts(marks, visibleParts)} ratio={ratio} dark={isDarkInverted} />
+                {personal ? (
+                    <g data-layer="personal">
+                        <SheetInkLayer marks={marksForParts(personal, visibleParts)} ratio={ratio} dark={isDarkInverted} />
+                    </g>
+                ) : null}
+                {songForms.map((mark) =>
+                    mark.kind === 'songform' ? (
+                        <SongFormMarkup
+                            key={mark.id}
+                            sections={mark.sections ?? []}
+                            anchor={mark.points[0]}
+                            ratio={ratio}
+                            fontSize={mark.fontSize}
+                            opacity={mark.opacity}
+                            currentIndex={stepper.active && stepper.route?.bandId === mark.id ? stepper.index : null}
+                        />
+                    ) : (
+                        <SongFormSectionMarker
+                            key={mark.id}
+                            label={mark.text ?? ''}
+                            anchor={mark.points[0]}
+                            ratio={ratio}
+                            fontSize={mark.fontSize}
+                            opacity={mark.opacity}
+                            current={stepper.active && stepper.stop?.markId === mark.id}
+                        />
+                    )
+                )}
             </>
         );
     }
@@ -672,7 +641,8 @@ export default function LiveStageScoreViewer({
 
             {/* Stage Top HUD (Zen mode collapses it smoothly with pure whitespace) */}
             <header
-                className={`mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#0a0f0e]/85 px-3.5 py-2 backdrop-blur-xl shadow-lg transition-all duration-300 ${
+                // z-40 keeps the settings popover above the score area's song form overlay (z-30).
+                className={`relative z-40 mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#0a0f0e]/85 px-3.5 py-2 backdrop-blur-xl shadow-lg transition-all duration-300 ${
                     isZenMode ? '-translate-y-4 opacity-0 pointer-events-none h-0 p-0 m-0 overflow-hidden' : 'opacity-100'
                 }`}
             >
@@ -757,9 +727,9 @@ export default function LiveStageScoreViewer({
                         <span className="truncate text-sm font-black text-white/95">
                             {title}
                         </span>
-                        {originalKey && (
+                        {songKey.key && (
                             <span className="inline-flex rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-black text-amber-300 shrink-0">
-                                Key {originalKey}
+                                {formatKeyLabel(songKey)}
                             </span>
                         )}
                         {currentSection && (
@@ -784,24 +754,26 @@ export default function LiveStageScoreViewer({
                                     ♩ {effectiveBpm}
                                 </span>
                                 <div className="flex items-center gap-1">
-                                    {[1, 2, 3, 4].map((beat) => {
-                                        const isDownbeat = beat === 1;
-                                        const isCurrent = activeBeat === beat && blinkActive;
-                                        return (
-                                            <span
-                                                key={beat}
-                                                className={`rounded-full transition-all duration-75 ${
-                                                    isCurrent
-                                                        ? isDownbeat
-                                                            ? 'h-2.5 w-2.5 bg-amber-300 shadow-[0_0_8px_#fde047]'
-                                                            : 'h-2 w-2 bg-emerald-400 shadow-[0_0_6px_#4ade80]'
-                                                        : isDownbeat
-                                                            ? 'h-2 w-2 bg-white/20'
-                                                            : 'h-1.5 w-1.5 bg-white/10'
-                                                }`}
-                                            />
-                                        );
-                                    })}
+                                    <BeatIndicator bpm={effectiveBpm} enabled={metronomeEnabled}>
+                                        {(activeBeat, blinkActive) => [1, 2, 3, 4].map((beat) => {
+                                            const isDownbeat = beat === 1;
+                                            const isCurrent = activeBeat === beat && blinkActive;
+                                            return (
+                                                <span
+                                                    key={beat}
+                                                    className={`rounded-full transition-all duration-75 ${
+                                                        isCurrent
+                                                            ? isDownbeat
+                                                                ? 'h-2.5 w-2.5 bg-amber-300 shadow-[0_0_8px_#fde047]'
+                                                                : 'h-2 w-2 bg-emerald-400 shadow-[0_0_6px_#4ade80]'
+                                                            : isDownbeat
+                                                                ? 'h-2 w-2 bg-white/20'
+                                                                : 'h-1.5 w-1.5 bg-white/10'
+                                                    }`}
+                                                />
+                                            );
+                                        })}
+                                    </BeatIndicator>
                                 </div>
                             </button>
 
@@ -933,11 +905,35 @@ export default function LiveStageScoreViewer({
                             {audioCueEnabled ? <Bell size={13} className="text-emerald-400" /> : <BellOff size={13} />}
                             <span className="hidden xl:inline text-[11px]">{audioCueEnabled ? '소리 ON' : '무음'}</span>
                         </button>
+
+                        {/* Count-in and click for the band; sound starts only after a tap. */}
+                        <StageClickControls bpm={effectiveBpm} />
                     </div>
                 ) : null}
 
                 {/* Right: Essential 3 Actions (Dark Invert, Zen Mode, Fullscreen) + Settings Popover */}
                 <div className="flex items-center gap-1.5 sm:gap-2">
+                    {/* Pedal mode: turn pages, or walk the song form section by section */}
+                    {stepper.available && (
+                        <button
+                            type="button"
+                            aria-pressed={stepper.sectionMode}
+                            aria-label={`페달: ${stepper.sectionMode ? '섹션 이동' : '페이지 넘김'}`}
+                            onClick={() => stepper.setSectionMode(!stepper.sectionMode)}
+                            className={`tap-target inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
+                                stepper.sectionMode
+                                    ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
+                                    : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10'
+                            }`}
+                            title="페달·방향키가 페이지를 넘길지, 송폼 순서대로 섹션 표시를 따라갈지 바꿉니다"
+                        >
+                            <Footprints size={14} />
+                            <span className="hidden sm:inline">
+                                {!stepper.sectionMode ? '페이지 넘김' : stepper.active && stepper.stop ? `${stepper.stop.label} · ${(stepper.index ?? 0) + 1}/${stepper.total}` : '섹션 이동'}
+                            </span>
+                        </button>
+                    )}
+
                     {/* Dark Inversion Toggle */}
                     <button
                         type="button"
@@ -990,6 +986,23 @@ export default function LiveStageScoreViewer({
                         <Activity size={13} className={realtimeStatus === 'connected' ? 'text-emerald-400 animate-pulse' : 'text-amber-400'} />
                         <span className="hidden sm:inline">상태 점검</span>
                     </button>
+
+                    {/* Chord chart: lyrics only, on this device */}
+                    {chartView.available && (
+                        <button
+                            type="button"
+                            aria-pressed={chartView.preferred}
+                            onClick={() => chartView.setLyricsOnly(!chartView.preferred)}
+                            className={`tap-target inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
+                                chartView.preferred
+                                    ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
+                                    : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10'
+                            }`}
+                            title={chartView.failed ? '가사만 보기를 만들지 못했습니다' : '이 기기에서만 코드를 숨기고 가사를 크게 봅니다'}
+                        >
+                            가사만{chartView.loading ? '…' : chartView.failed ? ' ⚠' : ''}
+                        </button>
+                    )}
 
                     {/* Master Settings Popover */}
                     <div className="relative">
@@ -1085,6 +1098,42 @@ export default function LiveStageScoreViewer({
                                             <option value="hidden">숨김</option>
                                         </select>
                                     </div>
+
+                                    {/* My part: other parts' marks hide, marks for everyone always show */}
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs text-white/70 font-medium">내 파트</span>
+                                        <select
+                                            aria-label="내 파트"
+                                            value={myPart ?? ''}
+                                            onChange={(e) => setMyPart(parsePart(e.target.value))}
+                                            className="rounded-lg bg-white/10 px-2 py-1 text-xs font-bold text-amber-300 border border-white/15 focus:outline-none"
+                                        >
+                                            <option value="">{PART_ALL_LABEL}</option>
+                                            {SHEET_PARTS.map((part) => (
+                                                <option key={part} value={part}>{PART_LABELS[part]}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* My draft over the team copy — only offered when there is a draft to draw */}
+                                    {canOverlay && (
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-xs text-white/70 font-medium">내 필기 겹치기</span>
+                                            <button
+                                                type="button"
+                                                aria-pressed={overlayOn}
+                                                aria-label="내 필기 겹치기"
+                                                onClick={() => setOverlayChoice(!overlayChoice)}
+                                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                                                    overlayOn
+                                                        ? 'bg-amber-400 text-black'
+                                                        : 'bg-white/10 text-white/60 hover:bg-white/15'
+                                                }`}
+                                            >
+                                                {overlayOn ? '켜짐' : '꺼짐'}
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Fit Mode */}
                                     <div className="flex items-center justify-between gap-2">
@@ -1317,42 +1366,48 @@ export default function LiveStageScoreViewer({
                 {/* Giant 4-Beat Bar HUD */}
                 {bpmEnabled && pulseMode === 'giant' && (
                     <div className="grid grid-cols-4 gap-1.5 p-1.5 bg-black/80 border-b border-white/15 shrink-0 z-20">
-                        {[1, 2, 3, 4].map((beat) => {
-                            const isDownbeat = beat === 1;
-                            const isHit = activeBeat === beat && blinkActive;
-                            return (
-                                <div
-                                    key={beat}
-                                    className={`h-4 sm:h-5 rounded-lg transition-all duration-75 text-center flex items-center justify-center font-mono font-black text-xs ${
-                                        isHit
-                                            ? isDownbeat
-                                                ? 'bg-amber-400 text-black shadow-[0_0_20px_#fbbf24] scale-[1.02]'
-                                                : 'bg-emerald-400 text-black shadow-[0_0_12px_#34d399] scale-[1.02]'
-                                            : isDownbeat
-                                            ? 'bg-amber-400/20 text-amber-300/40'
-                                            : 'bg-white/10 text-white/30'
-                                    }`}
-                                >
-                                    {beat === 1 ? '1 ●' : beat}
-                                </div>
-                            );
-                        })}
+                        <BeatIndicator bpm={effectiveBpm} enabled={metronomeEnabled}>
+                            {(activeBeat, blinkActive) => [1, 2, 3, 4].map((beat) => {
+                                const isDownbeat = beat === 1;
+                                const isHit = activeBeat === beat && blinkActive;
+                                return (
+                                    <div
+                                        key={beat}
+                                        className={`h-4 sm:h-5 rounded-lg transition-all duration-75 text-center flex items-center justify-center font-mono font-black text-xs ${
+                                            isHit
+                                                ? isDownbeat
+                                                    ? 'bg-amber-400 text-black shadow-[0_0_20px_#fbbf24] scale-[1.02]'
+                                                    : 'bg-emerald-400 text-black shadow-[0_0_12px_#34d399] scale-[1.02]'
+                                                : isDownbeat
+                                                ? 'bg-amber-400/20 text-amber-300/40'
+                                                : 'bg-white/10 text-white/30'
+                                        }`}
+                                    >
+                                        {beat === 1 ? '1 ●' : beat}
+                                    </div>
+                                );
+                            })}
+                        </BeatIndicator>
                     </div>
                 )}
 
                 {/* BPM Pulse Overlay (Edge Strobe or Fullscreen Flash) */}
-                {bpmEnabled && blinkActive && (pulseMode === 'edge' || pulseMode === 'fullscreen') && (
-                    <div
-                        className={`pointer-events-none absolute inset-0 z-30 transition-all duration-75 ${
-                            pulseMode === 'edge'
-                                ? activeBeat === 1
-                                    ? 'border-4 border-amber-300 shadow-[inset_0_0_60px_rgba(251,191,36,0.7)]'
-                                    : 'border-2 border-emerald-400 shadow-[inset_0_0_30px_rgba(52,211,153,0.4)]'
-                                : activeBeat === 1
-                                ? 'bg-amber-400/25 backdrop-brightness-125'
-                                : 'bg-emerald-400/12'
-                        }`}
-                    />
+                {bpmEnabled && (pulseMode === 'edge' || pulseMode === 'fullscreen') && (
+                    <BeatIndicator bpm={effectiveBpm} enabled={metronomeEnabled}>
+                        {(activeBeat, blinkActive) => blinkActive ? (
+                            <div
+                                className={`pointer-events-none absolute inset-0 z-30 transition-all duration-75 ${
+                                    pulseMode === 'edge'
+                                        ? activeBeat === 1
+                                            ? 'border-4 border-amber-300 shadow-[inset_0_0_60px_rgba(251,191,36,0.7)]'
+                                            : 'border-2 border-emerald-400 shadow-[inset_0_0_30px_rgba(52,211,153,0.4)]'
+                                        : activeBeat === 1
+                                        ? 'bg-amber-400/25 backdrop-brightness-125'
+                                        : 'bg-emerald-400/12'
+                                }`}
+                            />
+                        ) : null}
+                    </BeatIndicator>
                 )}
 
                 {activePage ? (
@@ -1391,7 +1446,7 @@ export default function LiveStageScoreViewer({
                                     viewBox={`0 0 1000 ${(1000 * activePage.height) / activePage.width}`}
                                     preserveAspectRatio="none"
                                 >
-                                    {renderMarks(activePage.marks, activePage)}
+                                    {renderMarks(activePage.marks, activePage, overlayMarks?.[pageIndex])}
                                 </svg>
                             </div>
 
@@ -1416,7 +1471,7 @@ export default function LiveStageScoreViewer({
                                         viewBox={`0 0 1000 ${(1000 * secondPage.height) / secondPage.width}`}
                                         preserveAspectRatio="none"
                                     >
-                                        {renderMarks(secondPage.marks, secondPage)}
+                                        {renderMarks(secondPage.marks, secondPage, overlayMarks?.[pageIndex + 1])}
                                     </svg>
                                 </div>
                             )}
@@ -1483,6 +1538,14 @@ export default function LiveStageScoreViewer({
                                 }`}
                             >
                                 {pageTurnFlash === 'prev' ? <ChevronLeft size={36} /> : <ChevronRight size={36} />}
+                            </div>
+                        )}
+
+                        {/* Legend for what is drawn: my draft over the team copy, and the part being shown */}
+                        {(overlayOn || myPart) && (
+                            <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-white/85">
+                                {overlayOn && <span className="rounded-full border border-sky-300/40 bg-black/70 px-2 py-0.5">팀 공유 + 내 필기</span>}
+                                {myPart && <span className="rounded-full border border-white/20 bg-black/70 px-2 py-0.5">내 파트 · {PART_LABELS[myPart]}</span>}
                             </div>
                         )}
 
@@ -1575,15 +1638,20 @@ export default function LiveStageScoreViewer({
                         </button>
                     </div>
                     <div className="space-y-1.5 text-white/80 text-[11px] leading-relaxed">
-                        <p>
-                            <strong className="text-amber-300">말씀 본문:</strong> 시편 100편 1-5절 (&quot;온 땅이여 여호와께 즐거운 찬송을 부를지어다&quot;)
-                        </p>
-                        <p>
-                            <strong className="text-emerald-300">곡간 멘트:</strong> &quot;오늘 이곳에 임재하신 주님을 바라봅니다. 잔잔한 마음으로 주님의 이름을 높여 찬양하겠습니다.&quot; (멘트 끝날 때 드럼 킥 진입)
-                        </p>
-                        <p>
-                            <strong className="text-rose-300">합심 기도:</strong> 찬양 후 환우들과 공동체를 위한 3분 통성 기도 (건반 E key 잔잔한 패드 유지)
-                        </p>
+                        {directionNotes.map((note, index) => (
+                            <p key={`${index}-${note}`}>
+                                <strong className="text-emerald-300">디렉팅 메모:</strong> {note}
+                            </p>
+                        ))}
+                        {transitionNote ? (
+                            <p>
+                                <strong className="text-rose-300">곡 전환:</strong> {transitionNote}
+                                {nextSongTitle ? <span className="text-white/50"> → {nextSongTitle}</span> : null}
+                            </p>
+                        ) : null}
+                        {directionNotes.length === 0 && !transitionNote ? (
+                            <p className="text-white/50">이 곡에 등록된 디렉팅 메모나 곡 전환 메모가 없어요. 콘티 편집에서 추가할 수 있어요.</p>
+                        ) : null}
                     </div>
                 </div>
             )}
@@ -1996,9 +2064,14 @@ export default function LiveStageScoreViewer({
                             }}
                             className="tap-target inline-flex items-center gap-1 rounded-xl border border-amber-400/50 bg-amber-400/20 px-3 py-1.5 text-xs font-black text-amber-200 hover:bg-amber-400/30 transition animate-pulse"
                         >
-                            <span>다음 곡: {nextSongTitle}</span>
+                            <span>다음 곡: {nextSongTitle}{nextSongKey ? ` · ${nextSongKey}` : ''}</span>
                             <ChevronsRight size={15} />
                         </button>
+                    ) : null}
+                    {page >= totalPages && hasNextSong && transitionNote ? (
+                        <span className="min-w-0 line-clamp-2 rounded-xl border border-rose-300/30 bg-rose-400/10 px-2.5 py-1.5 text-[11px] font-bold leading-snug text-rose-200" title={transitionNote}>
+                            곡 전환 · {transitionNote}
+                        </span>
                     ) : null}
 
                     {/* Recent Cue Pill Button */}
@@ -2030,7 +2103,7 @@ export default function LiveStageScoreViewer({
                             {sheetSource === 'published' ? '팀 공유본' : '내 필기본'}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-medium">
-                            ⌨️ 페달 넘김 가능
+                            {stepper.sectionMode && stepper.available ? '🦶 페달로 섹션 이동' : '⌨️ 페달 넘김 가능'}
                         </span>
                     </div>
                 </div>
@@ -2270,6 +2343,29 @@ export default function LiveStageScoreViewer({
                                         <span>다음 페이지 (끝페이지에서 누르면 다음 곡)</span>
                                     </div>
                                 </div>
+                                {stepper.available && (
+                                    <div className="space-y-1.5 border-t border-white/10 pt-2 text-[11px] text-white/80">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="font-bold text-white">페달 동작</span>
+                                            <span className="inline-flex gap-1" role="group" aria-label="페달 동작">
+                                                {([false, true] as const).map((on) => (
+                                                    <button
+                                                        key={String(on)}
+                                                        type="button"
+                                                        aria-pressed={stepper.sectionMode === on}
+                                                        onClick={() => stepper.setSectionMode(on)}
+                                                        className="rounded-lg border border-white/15 px-2 py-0.5 font-bold aria-pressed:bg-amber-400 aria-pressed:text-black"
+                                                    >
+                                                        {on ? '섹션 이동' : '페이지 넘김'}
+                                                    </button>
+                                                ))}
+                                            </span>
+                                        </div>
+                                        <p className="text-white/60">
+                                            섹션 이동: 악보에 얹은 송폼 순서대로 다음 섹션의 마디 표시로 넘어가고, 그 표시가 있는 페이지를 엽니다. 송폼 끝에서는 다시 페이지를 넘깁니다.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">

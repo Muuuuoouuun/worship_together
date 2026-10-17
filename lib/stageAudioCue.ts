@@ -33,6 +33,11 @@ function getAudioContext(): AudioContext | null {
     return audioCtx;
 }
 
+/** The shared AudioContext for stage sounds. Call it from a user gesture; it is created lazily. */
+export function getStageAudioContext(): AudioContext | null {
+    return getAudioContext();
+}
+
 export function isStageAudioEnabled(): boolean {
     if (typeof window === 'undefined') return false;
     try {

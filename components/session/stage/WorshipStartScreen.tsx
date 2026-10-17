@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { ChevronLeft, Heart, Play, Radio } from 'lucide-react';
-import { useVisualMetronome } from '@/components/session/SessionBpmConsole';
+import BeatIndicator from '@/components/session/BeatIndicator';
 import { getStageBeatDurationStyle, useStageBeatPhase } from '@/hooks/useStageBeatPhase';
 import { buildTempoChart, isUsableBpm } from '@/lib/stageTempo';
 import type { SessionFeedbackRole, SessionParticipant, SongRow } from '@/types/session';
@@ -70,8 +70,6 @@ export default function WorshipStartScreen({
     const [tab, setTab] = useState<StartTab>('tempo');
     const tabsId = useId();
     const pulseBpm = isUsableBpm(bpm) ? bpm : null;
-    // The opening tempo previews on this device even before the shared tempo guide is turned on.
-    const { activeBeat, blinkActive } = useVisualMetronome(Boolean(pulseBpm), pulseBpm);
     const phaseRef = useStageBeatPhase<HTMLDivElement>(pulseBpm);
     const chart = useMemo(() => buildTempoChart(songs, currentSong?.id ?? null, { width: 320, height: 112 }), [songs, currentSong?.id]);
     const deviceCount = participants.length + 1;
@@ -119,18 +117,21 @@ export default function WorshipStartScreen({
                         </div>
                     </>
                 ) : null}
-                {BEAT_TICKS.map((tick) => (
-                    <span
-                        key={tick.beat}
-                        aria-hidden="true"
-                        className="absolute -translate-x-1/2 -translate-y-1/2"
-                        style={{ left: tick.left, top: tick.top }}
-                    >
+                {/* The opening tempo previews on this device even before the shared tempo guide is turned on. */}
+                <BeatIndicator bpm={pulseBpm} enabled={Boolean(pulseBpm)}>
+                    {(activeBeat, blinkActive) => BEAT_TICKS.map((tick) => (
                         <span
-                            className={`stage-pulse-tick block rounded-full bg-(--stage-accent) ${tick.beat === 1 ? 'size-2.5' : 'size-2'} ${pulseBpm && activeBeat === tick.beat && blinkActive ? 'stage-pulse-tick--on' : ''}`}
-                        />
-                    </span>
-                ))}
+                            key={tick.beat}
+                            aria-hidden="true"
+                            className="absolute -translate-x-1/2 -translate-y-1/2"
+                            style={{ left: tick.left, top: tick.top }}
+                        >
+                            <span
+                                className={`stage-pulse-tick block rounded-full bg-(--stage-accent) ${tick.beat === 1 ? 'size-2.5' : 'size-2'} ${pulseBpm && activeBeat === tick.beat && blinkActive ? 'stage-pulse-tick--on' : ''}`}
+                            />
+                        </span>
+                    ))}
+                </BeatIndicator>
 
                 <div
                     aria-hidden="true"

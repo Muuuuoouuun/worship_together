@@ -11,6 +11,8 @@ export interface SongDraft {
     lead: string;
     form: string[];
     notes: string;
+    /** 이 곡에서 다음 곡으로 넘어갈 때의 메모 */
+    transition: string;
     video: string;
     sheet: string;
     mr: string;

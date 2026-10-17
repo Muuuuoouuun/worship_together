@@ -12,6 +12,30 @@ import {
 const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif';
 /** Hidden until hover on mouse/pen devices; always shown while editing on touch screens (no hover). */
 const REMOVE_BADGE_CLASS = 'opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100';
+/** The section the pedal is on (섹션 이동 mode). */
+const CURRENT_COLOR = '#f59e0b';
+/** The mark arrow keys move while the 송폼 tool is open. */
+const FOCUS_COLOR = '#2563eb';
+
+/** A rounded ring just outside a chip box. */
+function Ring({ box, scale, color, dashed = false, pulse = false }: { box: SongFormChipBox; scale: number; color: string; dashed?: boolean; pulse?: boolean }) {
+    const pad = (pulse ? 6 : 4) * scale;
+    return (
+        <rect
+            x={box.x - pad}
+            y={box.y - pad}
+            width={box.width + pad * 2}
+            height={box.height + pad * 2}
+            rx={13 * scale}
+            fill="none"
+            stroke={color}
+            strokeWidth={(pulse ? 4 : 2.5) * scale}
+            strokeDasharray={dashed ? `${7 * scale} ${5 * scale}` : undefined}
+            className={pulse ? 'motion-safe:animate-pulse' : undefined}
+            pointerEvents="none"
+        />
+    );
+}
 
 type ChipProps = {
     box: SongFormChipBox;
@@ -98,6 +122,10 @@ type BandProps = {
     dragging?: boolean;
     /** When set (editing), each chip shows a hover × that removes it. */
     onRemoveChip?: (index: number) => void;
+    /** Chip the pedal is on in 섹션 이동 mode. */
+    currentIndex?: number | null;
+    /** Arrow keys move this band. */
+    focused?: boolean;
 };
 
 /** Renders a 'songform' sheet mark: I → V1 → C … chips on a plate, inside the page's SVG overlay. */
@@ -112,11 +140,14 @@ export default function SongFormMarkup({
     selected = false,
     dragging = false,
     onRemoveChip,
+    currentIndex = null,
+    focused = false,
 }: BandProps) {
     const m = songFormMetrics(fontSize);
     const tint = isSongFormTint(opacity);
     const { plate, chips, arrows } = layoutSongFormMarkup(sections, [anchor[0], anchor[1] * ratio], fontSize);
-    const outlined = selected || dragging;
+    const outlined = selected || dragging || focused;
+    const current = currentIndex === null ? null : chips[currentIndex];
     return (
         <g className={className} onClick={onClick} opacity={dragging ? 0.75 : 1}>
             <title>{`송폼: ${sections.join(' → ')}`}</title>
@@ -128,10 +159,10 @@ export default function SongFormMarkup({
                 rx={14 * m.scale}
                 fill="#ffffff"
                 fillOpacity={tint ? 0.28 : 0.92}
-                stroke={outlined ? '#f59e0b' : '#0f172a'}
+                stroke={focused ? FOCUS_COLOR : outlined ? '#f59e0b' : '#0f172a'}
                 strokeOpacity={outlined ? 1 : tint ? 0 : 0.18}
                 strokeWidth={outlined ? 3 : 1.5}
-                strokeDasharray={dragging ? '8 6' : undefined}
+                strokeDasharray={dragging || focused ? '8 6' : undefined}
             />
             {arrows.map((arrow, index) => (
                 <path
@@ -153,6 +184,7 @@ export default function SongFormMarkup({
                     onRemove={onRemoveChip && !dragging ? () => onRemoveChip(index) : undefined}
                 />
             ))}
+            {current && <Ring box={current} scale={m.scale} color={CURRENT_COLOR} pulse />}
         </g>
     );
 }
@@ -168,6 +200,10 @@ type MarkerProps = {
     selected?: boolean;
     dragging?: boolean;
     onRemove?: () => void;
+    /** The pedal is on this section in 섹션 이동 mode. */
+    current?: boolean;
+    /** Arrow keys move this marker. */
+    focused?: boolean;
 };
 
 /** Renders a 'section' sheet mark: one section chip placed at the measure where that section starts. */
@@ -182,13 +218,17 @@ export function SongFormSectionMarker({
     selected = false,
     dragging = false,
     onRemove,
+    current = false,
+    focused = false,
 }: MarkerProps) {
     const box = layoutSectionMarker(label, [anchor[0], anchor[1] * ratio], fontSize);
     const m = songFormMetrics(fontSize);
     return (
         <g className={className} onClick={onClick} opacity={dragging ? 0.75 : 1}>
             <title>{`섹션: ${label}`}</title>
-            {(selected || dragging) && (
+            {current && <Ring box={box} scale={m.scale} color={CURRENT_COLOR} pulse />}
+            {focused && !dragging && <Ring box={box} scale={m.scale} color={FOCUS_COLOR} dashed />}
+            {(selected || dragging) && !focused && (
                 <rect
                     x={box.x - 4 * m.scale}
                     y={box.y - 4 * m.scale}

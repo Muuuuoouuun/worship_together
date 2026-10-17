@@ -28,7 +28,14 @@ export interface PartAssignment {
     mine: boolean;
     /** 대체 인원을 찾는 중 (열린 긴급 요청이 있음) */
     substituteOpen: boolean;
-    volunteers: { id: string; name: string; /** 아직 팀원인지 (팀을 나간 사람은 확정할 수 없습니다) */ member: boolean }[];
+    volunteers: {
+        id: string;
+        name: string;
+        /** 아직 팀원인지 (팀을 나간 사람은 확정할 수 없습니다) */
+        member: boolean;
+        /** 지원한 뒤 같은 시간대의 다른 자리에 배치되어 지금은 확정할 수 없음 (그 일정이 취소되면 다시 확정할 수 있습니다) */
+        placed: boolean;
+    }[];
     invitedAt?: string;
     /** 보는 사람이 이 자리에 대체 지원할 수 있는지 (빈자리·불참·대체 모집 중이고, 같은 일정에 이미 배치되지 않음) */
     canVolunteer: boolean;
@@ -187,6 +194,9 @@ export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'services' 
 /** 일정·요청 화면(SchedulePanel)과 같은 이름을 씁니다. */
 const ALERT_KIND_LABEL: Record<UrgentAlert['kind'], string> = { absence: '불참 알림', substitute: '대체 인원 요청', notice: '긴급 공지' };
 
+/** 저장값은 UTC('Z')와 '+09:00' 형식이 섞여 있어 문자열이 아니라 시각으로 정렬합니다. */
+const byStart = (a: TeamSchedule, b: TeamSchedule) => Date.parse(a.startsAt) - Date.parse(b.startsAt);
+
 export function buildPlanningView(input: BuildInput): BuiltPlanning {
     const { state, members, userId, today, now } = input;
     const me = members.find((member) => member.userId === userId) ?? null;
@@ -199,14 +209,14 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
     const openAlert = (eventId: string, slotId: string) => state.alerts.some((alert) => alert.eventId === eventId && alert.slotId === slotId && !alert.resolvedAt);
     /** 겹치는 시간의 다른 일정(또는 같은 일정의 다른 자리)에 이미 배치된 사람은 지원할 수 없습니다 (lib/planning 의 available 과 같은 규칙). */
     const overlaps = (a: TeamSchedule, b: TeamSchedule) => Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
-    const placedElsewhere = (event: TeamSchedule, slot: TeamSchedule['slots'][number]) =>
-        live.some((other) => overlaps(other, event) && other.slots.some((item) => item.id !== slot.id && item.memberId === userId && item.attendance !== 'absent'));
+    const placedElsewhere = (event: TeamSchedule, slot: TeamSchedule['slots'][number], memberId = userId) =>
+        live.some((other) => overlaps(other, event) && other.slots.some((item) => item.id !== slot.id && item.memberId === memberId && item.attendance !== 'absent'));
     const canVolunteerFor = (event: TeamSchedule, slot: TeamSchedule['slots'][number]) =>
         Boolean(me) && slot.memberId !== userId && (!slot.memberId || slot.attendance === 'absent' || openAlert(event.id, slot.id)) && !placedElsewhere(event, slot);
 
     const services: ServiceDay[] = live
         .filter((event) => event.kind === 'worship')
-        .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+        .sort(byStart)
         .map((event) => {
             const { date, time } = seoulDateTime(event.startsAt);
             const assignments = [...event.slots]
@@ -221,7 +231,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                     note: slot.attendance === 'absent' && slot.declineReason ? slot.declineReason : undefined,
                     mine: Boolean(slot.memberId && slot.memberId === userId),
                     substituteOpen: openAlert(event.id, slot.id),
-                    volunteers: slot.volunteers.map((id) => ({ id, name: nameOf(id) ?? '팀원', member: nameOf(id) !== null })),
+                    volunteers: slot.volunteers.map((id) => ({ id, name: nameOf(id) ?? '팀원', member: nameOf(id) !== null, placed: placedElsewhere(event, slot, id) })),
                     invitedAt: slot.invitedAt,
                     canVolunteer: canVolunteerFor(event, slot),
                     volunteered: slot.volunteers.includes(userId),
@@ -247,7 +257,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
         });
 
     const events: TeamEvent[] = live
-        .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+        .sort(byStart)
         .map((event) => {
             const start = seoulDateTime(event.startsAt);
             return {

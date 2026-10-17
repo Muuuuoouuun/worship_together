@@ -5,7 +5,7 @@ import { CalendarPlus, House, Inbox, ListMusic, MessageSquarePlus, Plus, UsersRo
 import { cn } from '@/lib/utils';
 import { resolveScreen, type ScreenId } from './model';
 import { ContiProvider, type ContiData } from './context';
-import { ink, line, selected } from './ui';
+import { ink, line, selected, sub } from './ui';
 import WeekScreen from './WeekScreen';
 import ContiScreen from './ContiScreen';
 import OrderScreen from './OrderScreen';
@@ -114,18 +114,17 @@ export default function ContiWorkspace({
             {screen === 'order' && <OrderScreen setlistId={setlistId} onBack={() => go('conti')} onSelect={selectSetlist} />}
             {screen === 'team' && <TeamScreen openOrder={openOrder} />}
             {screen === 'requests' && <RequestScreen />}
-            {screen === 'alerts' && <AlertsScreen onBack={() => go('week')} openOrder={openOrder} go={go} />}
+            {screen === 'alerts' && <AlertsScreen onBack={embedded ? undefined : () => go('week')} openOrder={openOrder} go={go} />}
         </ContiProvider>
     );
 
     if (embedded) {
         const activeTab = screen === 'order' ? 'conti' : screen;
         return (
-            <div className="relative isolate -mx-3 break-keep bg-white ring-black/5 dark:bg-neutral-900 dark:ring-white/10 sm:mx-0 sm:rounded-[2rem] sm:shadow-sm sm:ring-1">
-                <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 sm:rounded-t-[2rem]" style={TOP_GLOW} />
-
-                <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 border-b border-neutral-100 bg-white/90 backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-900/90 sm:rounded-t-[2rem] lg:top-0">
-                    <div role="tablist" aria-label="콘티·악보 화면" className="no-scrollbar flex gap-5 overflow-x-auto px-5 sm:px-8">
+            // 다른 화면처럼 바탕 위에 바로 놓습니다 (카드 틀 없음).
+            <div className="relative isolate max-w-3xl break-keep">
+                <div className="sticky top-[var(--app-header-h,0px)] z-20 -mx-4 border-b border-border/70 bg-background/95 px-4 sm:mx-0 sm:px-0 lg:top-0">
+                    <div role="tablist" aria-label="콘티·악보 화면" className="no-scrollbar flex gap-5 overflow-x-auto">
                         {PAGE_TABS.map((tab) => {
                             const active = activeTab === tab.id;
                             const count = tab.id === 'requests' ? openCount : tab.id === 'alerts' ? unread : 0;
@@ -138,12 +137,12 @@ export default function ContiWorkspace({
                                     onClick={() => go(tab.id)}
                                     className={cn(
                                         'relative -mb-px flex h-12 shrink-0 items-center gap-1.5 border-b-2 text-sm transition',
-                                        active ? cn('border-neutral-900 font-semibold dark:border-white', ink) : 'border-transparent text-neutral-500 dark:text-neutral-400',
+                                        active ? cn('border-foreground font-semibold', ink) : cn('border-transparent', sub),
                                     )}
                                 >
                                     {tab.label}
                                     {count > 0 && (
-                                        <span className="flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-semibold tabular-nums text-white">
+                                        <span className="flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold tabular-nums text-secondary-foreground">
                                             {count}
                                         </span>
                                     )}
@@ -153,13 +152,13 @@ export default function ContiWorkspace({
                     </div>
                 </div>
 
-                <div className="px-5 pb-10 pt-6 sm:px-8 sm:pt-8">{screens}</div>
+                <div className="pb-10 pt-6">{screens}</div>
             </div>
         );
     }
 
     return (
-        <div className={cn('relative isolate flex flex-col break-keep bg-white dark:bg-neutral-900', framed ? 'h-full overflow-hidden' : 'min-h-dvh')}>
+        <div className={cn('relative isolate flex flex-col break-keep bg-card', framed ? 'h-full overflow-hidden' : 'min-h-dvh')}>
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72" style={TOP_GLOW} />
 
             <div ref={scrollRef} className={cn('flex-1', framed && 'no-scrollbar overflow-y-auto overscroll-contain')}>
@@ -171,7 +170,7 @@ export default function ContiWorkspace({
             <div
                 aria-hidden="true"
                 className={cn(
-                    'pointer-events-none z-20 h-28 bg-gradient-to-t from-white via-white/80 to-transparent dark:from-neutral-900 dark:via-neutral-900/80',
+                    'pointer-events-none z-20 h-28 bg-gradient-to-t from-card via-card/80 to-transparent',
                     framed ? 'absolute inset-x-0 bottom-0' : 'fixed inset-x-0 bottom-0 mx-auto max-w-md',
                 )}
             />
@@ -182,24 +181,24 @@ export default function ContiWorkspace({
                         type="button"
                         aria-label="닫기"
                         onClick={() => setSheetOpen(false)}
-                        className={cn('z-30 bg-neutral-900/10 backdrop-blur-[1px] dark:bg-black/40', framed ? 'absolute inset-0' : 'fixed inset-0')}
+                        className={cn('z-30 bg-foreground/10 backdrop-blur-[1px] dark:bg-black/40', framed ? 'absolute inset-0' : 'fixed inset-0')}
                     />
                     <div
                         role="menu"
                         aria-label="빠른 추가"
                         className={cn(
-                            'z-40 overflow-hidden rounded-3xl bg-white p-2 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.3)] ring-1 ring-neutral-100 animate-in fade-in slide-in-from-bottom-2 duration-150 dark:bg-neutral-800 dark:ring-neutral-700',
+                            'z-40 overflow-hidden rounded-3xl bg-card p-2 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.3)] ring-1 ring-border animate-in fade-in slide-in-from-bottom-2 duration-150',
                             framed ? 'absolute inset-x-4 bottom-24' : 'fixed inset-x-4 bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5rem)] mx-auto max-w-[26rem]',
                         )}
                     >
                         {QUICK_ACTIONS.map((action) => (
-                            <button key={action.label} type="button" role="menuitem" onClick={() => setSheetOpen(false)} className="flex w-full items-center gap-3.5 rounded-2xl px-3 py-3 text-left transition hover:bg-neutral-50 dark:hover:bg-neutral-700/50">
+                            <button key={action.label} type="button" role="menuitem" onClick={() => setSheetOpen(false)} className="flex w-full items-center gap-3.5 rounded-2xl px-3 py-3 text-left transition hover:bg-muted">
                                 <span className={cn('flex size-10 items-center justify-center rounded-2xl border', line, ink)}>
                                     <action.icon size={18} aria-hidden="true" />
                                 </span>
                                 <span>
                                     <span className={cn('block text-sm font-medium', ink)}>{action.label}</span>
-                                    <span className="block text-xs text-neutral-500 dark:text-neutral-400">{action.detail}</span>
+                                    <span className={cn('block text-xs', sub)}>{action.detail}</span>
                                 </span>
                             </button>
                         ))}
@@ -211,7 +210,7 @@ export default function ContiWorkspace({
                 aria-label="시안 앱 메뉴"
                 className={cn('z-40', framed ? 'absolute inset-x-4 bottom-4' : 'fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] mx-auto max-w-[26rem]')}
             >
-                <div className="flex h-16 items-center justify-around rounded-[1.75rem] bg-white/95 px-2 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.22)] ring-1 ring-neutral-100 backdrop-blur dark:bg-neutral-800/95 dark:ring-neutral-700">
+                <div className="flex h-16 items-center justify-around rounded-[1.75rem] bg-card/95 px-2 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.22)] ring-1 ring-border backdrop-blur">
                     {NAV.slice(0, 2).map((item) => (
                         <NavButton key={item.id} item={item} active={activeNav === item.id} onClick={() => go(item.id)} />
                     ))}
@@ -241,12 +240,12 @@ function NavButton({ item, active, onClick, badge = 0 }: { item: (typeof NAV)[nu
             onClick={onClick}
             aria-label={item.label}
             aria-current={active ? 'page' : undefined}
-            className={cn('relative flex h-12 w-14 flex-col items-center justify-center gap-0.5 transition', active ? 'text-primary' : 'text-neutral-500 dark:text-neutral-400')}
+            className={cn('relative flex h-12 w-14 flex-col items-center justify-center gap-0.5 transition', active ? 'text-foreground' : 'text-muted-foreground')}
         >
             <span className="relative">
                 <Icon size={21} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
                 {badge > 0 && (
-                    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-semibold tabular-nums text-white ring-2 ring-white dark:ring-neutral-800">
+                    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold tabular-nums text-secondary-foreground ring-2 ring-card">
                         {badge}
                     </span>
                 )}

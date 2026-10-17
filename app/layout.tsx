@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Merriweather } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import PwaProvider from "./PwaProvider";
 import "./globals.css";
 
@@ -8,15 +8,11 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
+// 고정폭 글꼴은 초대 코드·무대 단축키 표시에만 쓰므로 미리 내려받지 않습니다.
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-});
-
-const merriweather = Merriweather({
-  variable: "--font-merriweather",
-  subsets: ["latin"],
-  weight: ["300", "400", "700", "900"],
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -49,8 +45,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F7F5EF" },
-    { media: "(prefers-color-scheme: dark)", color: "#101817" },
+    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#121212" },
   ],
 };
 
@@ -75,7 +71,7 @@ export default function RootLayout({
   return (
     <html lang="ko" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${merriweather.variable} antialiased font-sans`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
       >
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <PwaProvider />

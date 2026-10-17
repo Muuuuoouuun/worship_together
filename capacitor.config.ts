@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   appId: "com.worshiptogether.app",
   appName: "Worship Together",
   webDir: "mobile-www",
-  backgroundColor: "#FDFCF0",
+  backgroundColor: "#FFFFFF",
   server: serverUrl
     ? {
         url: serverUrl,

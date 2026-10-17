@@ -1,4 +1,5 @@
-const CACHE_VERSION = "worship-together-v1";
+// v2: 새 디자인의 오프라인 화면을 배포하고, 예전 v1 캐시(배포마다 쌓이던 코드 조각)를 지웁니다.
+const CACHE_VERSION = "worship-together-v2";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE_URLS = [
@@ -91,10 +92,7 @@ async function cacheFirst(request) {
   return response;
 }
 
+// /_next/static 코드 조각은 브라우저 HTTP 캐시(immutable)가 이미 맡으므로 여기서 따로 쌓지 않습니다.
 function isStaticAsset(pathname) {
-  return (
-    pathname === OFFLINE_URL ||
-    pathname.startsWith("/icons/") ||
-    pathname.startsWith("/_next/static/")
-  );
+  return pathname === OFFLINE_URL || pathname.startsWith("/icons/");
 }

@@ -1,116 +1,66 @@
-"use client";
+'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { Modal } from '@/components/ui/Modal';
+import { usePathname } from 'next/navigation';
 import { ChevronRight, Menu } from 'lucide-react';
-import { primaryNavItems, secondaryNavItems } from './navItems';
+import { Modal } from '@/components/ui/Modal';
+import { cn } from '@/lib/utils';
+import { isNavActive, primaryNavItems, secondaryNavItems } from './navItems';
 
-interface MobileNavProps {
-    currentPath: string;
-}
+const tab = 'relative flex select-none flex-col items-center justify-center gap-1 transition-colors';
 
-export default function MobileNav({ currentPath }: MobileNavProps) {
-    const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-
-    const isItemActive = (href: string) =>
-        href === '/dashboard'
-            ? currentPath === '/dashboard'
-            : currentPath === href || currentPath.startsWith(href + '/') || currentPath.startsWith(href + '?');
-
-    const isSecondaryActive = secondaryNavItems.some((item) => isItemActive(item.href));
+/** 모바일 하단 내비게이션 + 더보기 시트 */
+export default function MobileNav() {
+    const pathname = usePathname() ?? '';
+    // 시트를 연 화면을 기억해, 뒤로 가기 등으로 화면이 바뀌면 닫힌 것으로 봅니다 (공통 틀은 다시 만들어지지 않음).
+    const [openedOn, setOpenedOn] = useState<string | null>(null);
+    const moreOpen = openedOn === pathname;
+    const setMoreOpen = (open: boolean) => setOpenedOn(open ? pathname : null);
+    const secondaryActive = secondaryNavItems.some((item) => isNavActive(pathname, item.href));
 
     return (
         <>
-            {/* 모바일 하단 고정 내비게이션 바 */}
-            <nav
-                aria-label="하단 모바일 내비게이션"
-                className="fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-card/90 backdrop-blur-lg pb-[env(safe-area-inset-bottom)] lg:hidden shadow-lg"
-            >
-                <div className="grid grid-cols-5 h-16 safe-area-x">
+            <nav aria-label="하단 모바일 내비게이션" className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg lg:hidden">
+                <div className="safe-area-x grid h-16 grid-cols-5">
                     {primaryNavItems.map((item) => {
-                        const active = isItemActive(item.href);
-
+                        const active = isNavActive(pathname, item.href);
                         return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                aria-current={active ? 'page' : undefined}
-                                className={`relative flex flex-col items-center justify-center gap-1 transition-colors select-none ${
-                                    active
-                                        ? 'text-primary font-bold'
-                                        : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                            >
-                                {active && (
-                                    <span className="absolute top-0 h-0.5 w-8 rounded-full bg-primary" />
-                                )}
-                                <item.icon size={20} className={active ? 'scale-110 transition-transform' : ''} />
+                            <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={cn(tab, active ? 'font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                                {active && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-foreground" aria-hidden="true" />}
+                                <item.icon size={20} aria-hidden="true" />
                                 <span className="text-[11px] leading-tight tracking-tight">{item.label}</span>
                             </Link>
                         );
                     })}
-
-                    {/* 더보기 메뉴 버튼 */}
-                    <button
-                        type="button"
-                        onClick={() => setIsMoreMenuOpen(true)}
-                        aria-label="더보기 메뉴 열기"
-                        className={`relative flex flex-col items-center justify-center gap-1 transition-colors select-none ${
-                            isSecondaryActive
-                                ? 'text-primary font-bold'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        {isSecondaryActive && (
-                            <span className="absolute top-0 h-0.5 w-8 rounded-full bg-primary" />
-                        )}
-                        <Menu size={20} className={isSecondaryActive ? 'scale-110 transition-transform' : ''} />
+                    <button type="button" onClick={() => setMoreOpen(true)} aria-label="더보기 메뉴 열기" className={cn(tab, secondaryActive ? 'font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                        {secondaryActive && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-foreground" aria-hidden="true" />}
+                        <Menu size={20} aria-hidden="true" />
                         <span className="text-[11px] leading-tight tracking-tight">더보기</span>
                     </button>
                 </div>
             </nav>
 
-            {/* 모바일 더보기 바텀시트 모달 */}
-            <Modal
-                open={isMoreMenuOpen}
-                onOpenChange={setIsMoreMenuOpen}
-                title="더보기 메뉴"
-                description="나눔, 돌봄, 봉사 등 팀 커뮤니티로 연결됩니다."
-            >
-                <div className="space-y-2 py-2">
+            <Modal open={moreOpen} onOpenChange={setMoreOpen} title="더보기" description="나눔, 돌봄, 섬김, 그룹">
+                <ul className="divide-y divide-border/70">
                     {secondaryNavItems.map((item) => {
-                        const active = isItemActive(item.href);
-
+                        const active = isNavActive(pathname, item.href);
                         return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                onClick={() => setIsMoreMenuOpen(false)}
-                                className={`flex items-center justify-between rounded-xl border p-3.5 transition-all ${
-                                    active
-                                        ? 'border-primary bg-primary/10 text-primary font-bold'
-                                        : 'border-border bg-card text-foreground hover:bg-muted'
-                                }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div
-                                        className={`flex size-10 items-center justify-center rounded-xl ${
-                                            active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                                        }`}
-                                    >
-                                        <item.icon size={20} />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-semibold">{item.label}</p>
-                                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                                    </div>
-                                </div>
-                                <ChevronRight size={18} className="text-muted-foreground" />
-                            </Link>
+                            <li key={item.href}>
+                                <Link href={item.href} onClick={() => setMoreOpen(false)} aria-current={active ? 'page' : undefined} className="flex items-center gap-3.5 py-3.5">
+                                    <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-2xl', active ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground')}>
+                                        <item.icon size={18} aria-hidden="true" />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className={cn('block text-[15px] text-foreground', active ? 'font-semibold' : 'font-medium')}>{item.label}</span>
+                                        <span className="block text-xs text-muted-foreground">{item.description}</span>
+                                    </span>
+                                    <ChevronRight size={16} className="text-muted-foreground" aria-hidden="true" />
+                                </Link>
+                            </li>
                         );
                     })}
-                </div>
+                </ul>
             </Modal>
         </>
     );

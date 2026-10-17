@@ -14,8 +14,10 @@ import {
     type PrototypeLibrary,
 } from '@/lib/libraryPrototypeStorage';
 import { readSongForm } from '@/lib/songFormStorage';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
+import PageTabs, { type PageTab } from '@/components/ui/PageTabs';
+import { STATUS } from '@/components/ui/status';
+import { cn } from '@/lib/utils';
 import {
     BarChart3,
     Bell,
@@ -24,7 +26,6 @@ import {
     ChevronDown,
     ChevronUp,
     Copy,
-    ListMusic,
     MessageSquareText,
     Music,
     Plus,
@@ -43,6 +44,13 @@ import SetlistTimeline from './SetlistTimeline';
 import SongUsageInsights from './SongUsageInsights';
 import { duplicateSetlistFromTemplate, deleteSong, deleteSetlist } from '@/actions/libraryActions';
 
+type LibraryTab = 'catalog' | 'timeline' | 'insights' | 'bpm';
+
+/** 날짜 형식기는 한 번만 만듭니다 (콘티마다 새로 만들면 느립니다). */
+const WORSHIP_DATE = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'short', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+
+const iconButton = 'inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive';
+
 export default function LibraryWorkspace({
     initialSongs,
     initialSetlists,
@@ -54,7 +62,7 @@ export default function LibraryWorkspace({
     teamId: string;
     hasBackend: boolean;
 }) {
-    const seed: PrototypeLibrary = {
+    const [library, setLibrary] = useState<PrototypeLibrary>(() => ({
         version: 1,
         songs: initialSongs,
         setlists: initialSetlists.map((setlist) => ({
@@ -67,14 +75,12 @@ export default function LibraryWorkspace({
             created_at: setlist.created_at,
             updated_at: setlist.updated_at,
         })),
-    };
-
-    const [library, setLibrary] = useState(seed);
+    }));
     const [ready, setReady] = useState(false);
     const [message, setMessage] = useState('');
     const [search, setSearch] = useState('');
     const [expanded, setExpanded] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'catalog' | 'timeline' | 'insights' | 'bpm'>('catalog');
+    const [activeTab, setActiveTab] = useState<LibraryTab>('catalog');
 
     useEffect(() => {
         function refresh() {
@@ -241,418 +247,280 @@ export default function LibraryWorkspace({
         );
     }, [songs, deferredSearch]);
 
-    const setlistsWithSongs: SetlistWithSongs[] = useMemo(() => {
-        return setlists.map((s) => ({
-            id: s.id,
-            team_id: s.team_id,
-            title: s.title,
-            theme: s.theme,
-            worship_date: s.worship_date,
-            song_order: s.song_order,
-            created_at: s.created_at,
-            updated_at: s.updated_at,
-            songs: normalizeSetlistSongOrder(s.song_order)
-                .map((id: string) => songs.find((song: LibrarySong) => song.id === id))
-                .filter((song): song is LibrarySong => Boolean(song)),
-        }));
-    }, [setlists, songs]);
+    const songById = useMemo(() => new Map(songs.map((song) => [song.id, song] as const)), [songs]);
+
+    /** 콘티마다 한 번만 계산 (검색어를 칠 때마다 다시 만들지 않습니다) */
+    const setlistRows = useMemo(
+        () =>
+            setlists.map((setlist) => {
+                const ids = normalizeSetlistSongOrder(setlist.song_order);
+                const ordered = ids.map((id) => songById.get(id));
+                const dateLabel = WORSHIP_DATE.format(new Date(setlist.worship_date));
+                return {
+                    setlist,
+                    ids,
+                    ordered,
+                    dateLabel,
+                    shareText: [setlist.title, dateLabel, ...ordered.map((song, i) => `${i + 1}. ${song?.title ?? '알 수 없는 곡'}`)].join('\n'),
+                    titles: ordered.map((song) => song?.title).filter(Boolean).join('||'),
+                };
+            }),
+        [setlists, songById],
+    );
+
+    const setlistsWithSongs: SetlistWithSongs[] = useMemo(
+        () =>
+            setlistRows.map(({ setlist, ordered }) => ({
+                id: setlist.id,
+                team_id: setlist.team_id,
+                title: setlist.title,
+                theme: setlist.theme,
+                worship_date: setlist.worship_date,
+                song_order: setlist.song_order,
+                created_at: setlist.created_at,
+                updated_at: setlist.updated_at,
+                songs: ordered.filter((song): song is LibrarySong => Boolean(song)),
+            })),
+        [setlistRows],
+    );
+
+    const tabs: PageTab<LibraryTab>[] = [
+        { id: 'catalog', label: '곡 & 콘티', icon: <Music size={15} aria-hidden="true" /> },
+        { id: 'timeline', label: '콘티 타임라인', count: setlists.length, icon: <CalendarClock size={15} aria-hidden="true" /> },
+        { id: 'insights', label: '선곡 통계', icon: <BarChart3 size={15} aria-hidden="true" /> },
+        { id: 'bpm', label: 'BPM & 메트로놈', icon: <SlidersHorizontal size={15} aria-hidden="true" /> },
+    ];
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-200">
-            {/* 상태 요약 바 */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
-                <div className="flex items-center gap-2">
-                    <Badge variant={hasBackend ? 'success' : 'secondary'} size="sm" dot>
-                        {hasBackend ? '서버 연결됨' : '브라우저 로컬 저장'}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                        찬양 {songs.length}곡 · 콘티 {setlists.length}개
-                    </span>
-                </div>
+        <div className="space-y-6">
+            {/* 저장 위치 · 개수 */}
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className={cn('size-1.5 rounded-full', hasBackend ? STATUS.ok.dot : STATUS.idle.dot)} aria-hidden="true" />
+                    {hasBackend ? '서버 연결됨' : '브라우저 로컬 저장'}
+                    <span aria-hidden="true">·</span>
+                    찬양 {songs.length}곡 · 콘티 {setlists.length}개
+                </p>
                 {message && (
-                    <p role="status" aria-live="polite" className="text-xs font-semibold text-secondary">
+                    <p role="status" aria-live="polite" className="text-xs font-medium text-foreground">
                         {message}
                     </p>
                 )}
             </div>
 
-            {/* 메인 탭 전환 바 */}
-            <div className="flex overflow-x-auto no-scrollbar gap-2 border-b border-border pb-2">
-                <Button
-                    type="button"
-                    variant={activeTab === 'catalog' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setActiveTab('catalog')}
-                    className="rounded-xl text-xs font-bold shrink-0"
-                >
-                    <Music size={15} />
-                    <span>곡 & 콘티 보관함</span>
-                </Button>
-                <Button
-                    type="button"
-                    variant={activeTab === 'timeline' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setActiveTab('timeline')}
-                    className="rounded-xl text-xs font-bold shrink-0"
-                >
-                    <CalendarClock size={15} />
-                    <span>콘티 타임라인 ({setlists.length})</span>
-                </Button>
-                <Button
-                    type="button"
-                    variant={activeTab === 'insights' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setActiveTab('insights')}
-                    className="rounded-xl text-xs font-bold shrink-0"
-                >
-                    <BarChart3 size={15} />
-                    <span>선곡 통계 분석</span>
-                </Button>
-                <Button
-                    type="button"
-                    variant={activeTab === 'bpm' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setActiveTab('bpm')}
-                    className="rounded-xl text-xs font-bold shrink-0"
-                >
-                    <SlidersHorizontal size={15} />
-                    <span>BPM & 메트로놈</span>
-                </Button>
-            </div>
+            <PageTabs label="곡 보관함 화면" tabs={tabs} value={activeTab} onChange={setActiveTab} />
 
-            {activeTab === 'timeline' && (
-                <div className="animate-in fade-in duration-200">
-                    <SetlistTimeline setlists={setlistsWithSongs} />
-                </div>
-            )}
+            {activeTab === 'timeline' && <SetlistTimeline setlists={setlistsWithSongs} />}
 
-            {activeTab === 'insights' && (
-                <div className="animate-in fade-in duration-200">
-                    <SongUsageInsights setlists={setlistsWithSongs} songs={songs} />
-                </div>
-            )}
+            {activeTab === 'insights' && <SongUsageInsights setlists={setlistsWithSongs} songs={songs} />}
 
-            {activeTab === 'bpm' && (
-                <div className="animate-in fade-in duration-200">
-                    <SongBpmPresetManager
-                        songs={songs}
-                        disabled={!ready}
-                        saveAction={hasBackend ? undefined : updateBpm}
-                    />
-                </div>
-            )}
+            {activeTab === 'bpm' && <SongBpmPresetManager songs={songs} disabled={!ready} saveAction={hasBackend ? undefined : updateBpm} />}
 
             {activeTab === 'catalog' && (
-                <div className="grid items-start gap-6 xl:grid-cols-2 animate-in fade-in duration-200">
-                    {/* 좌측: 찬양곡 및 송폼 */}
-                    <div className="min-w-0 space-y-5">
-                        <section className="rounded-3xl border border-border/80 bg-card p-5 shadow-xs sm:p-6">
-                            <div className="flex items-center justify-between gap-2 mb-4">
-                                <div className="flex items-center gap-2 font-bold text-foreground">
-                                    <Music size={20} className="text-primary" />
-                                    <h2 className="text-lg font-bold">곡 보관함 & 송폼</h2>
-                                </div>
-                                <span className="text-xs text-muted-foreground">{filtered.length}곡 검색됨</span>
-                            </div>
+                <div className="grid items-start gap-10 xl:grid-cols-2 xl:gap-12">
+                    {/* 곡 보관함 & 송폼 */}
+                    <section aria-labelledby="library-songs" className="min-w-0 space-y-4">
+                        <div className="flex items-center justify-between gap-2">
+                            <h2 id="library-songs" className="text-[17px] font-semibold tracking-tight text-foreground">
+                                곡 보관함 & 송폼
+                            </h2>
+                            <span className="text-xs text-muted-foreground">{filtered.length}곡 검색됨</span>
+                        </div>
 
-                            {/* 검색창 */}
-                            <div className="relative mb-4">
-                                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                                <input
-                                    className="min-h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="곡명 또는 아티스트 검색…"
-                                />
-                            </div>
+                        <label className="relative block">
+                            <span className="sr-only">곡 검색</span>
+                            <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                            <input
+                                className="h-11 w-full rounded-full bg-muted pl-11 pr-4 text-base text-foreground outline-none placeholder:text-muted-foreground/80 focus-visible:ring-2 focus-visible:ring-ring/30 sm:text-sm"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="곡명 또는 아티스트 검색…"
+                            />
+                        </label>
 
-                            {/* 곡 목록 */}
-                            <div className="space-y-2.5">
-                                {filtered.map((song) => (
-                                    <div
-                                        key={song.id}
-                                        className="overflow-hidden rounded-2xl border border-border/70 bg-card transition-all hover:border-primary/40"
-                                    >
-                                        <div className="flex items-center justify-between p-3.5">
-                                            <button
-                                                type="button"
-                                                className="tap-target flex-1 flex items-center justify-between text-left transition"
-                                                aria-expanded={expanded === song.id}
-                                                onClick={() => setExpanded((id) => (id === song.id ? null : song.id))}
+                        <ul className="divide-y divide-border/70">
+                            {filtered.map((song) => (
+                                <li key={song.id} className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                                            aria-expanded={expanded === song.id}
+                                            onClick={() => setExpanded((id) => (id === song.id ? null : song.id))}
+                                        >
+                                            <span className="min-w-0">
+                                                <span className="block truncate text-[15px] font-medium text-foreground">{song.title}</span>
+                                                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                                    {[song.artist, song.original_key && `Key ${song.original_key}`, song.bpm && `${song.bpm} BPM`].filter(Boolean).join(' · ') || '정보 없음'}
+                                                </span>
+                                            </span>
+                                            <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-muted-foreground">
+                                                송폼
+                                                {expanded === song.id ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
+                                            </span>
+                                        </button>
+
+                                        {hasBackend ? (
+                                            <form
+                                                action={deleteSong}
+                                                onSubmit={(e) => {
+                                                    if (!window.confirm('이 곡을 삭제하시겠습니까?')) e.preventDefault();
+                                                }}
                                             >
-                                                <div className="min-w-0 pr-3">
-                                                    <span className="block font-bold text-foreground text-sm truncate">{song.title}</span>
-                                                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                                        {song.artist && (
-                                                            <span className="text-xs text-muted-foreground">{song.artist}</span>
-                                                        )}
-                                                        {song.original_key && (
-                                                            <Badge variant="outline" size="sm">
-                                                                {song.original_key}
-                                                            </Badge>
-                                                        )}
-                                                        {song.bpm && (
-                                                            <Badge variant="subtle" size="sm">
-                                                                {song.bpm} BPM
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-1 text-xs font-semibold text-secondary shrink-0">
-                                                    <span>송폼</span>
-                                                    {expanded === song.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                                </div>
+                                                <input type="hidden" name="songId" value={song.id} />
+                                                <input type="hidden" name="teamId" value={teamId} />
+                                                <button type="submit" title="곡 삭제" aria-label={`${song.title} 삭제`} className={iconButton}>
+                                                    <Trash2 size={15} aria-hidden="true" />
+                                                </button>
+                                            </form>
+                                        ) : (
+                                            <button type="button" title="곡 삭제" aria-label={`${song.title} 삭제`} onClick={() => removeSong(song.id)} className={iconButton}>
+                                                <Trash2 size={15} aria-hidden="true" />
                                             </button>
-
-                                            <div className="ml-2 pl-2 border-l border-border/60">
-                                                {hasBackend ? (
-                                                    <form action={deleteSong} onSubmit={(e) => {
-                                                        if (!window.confirm('이 곡을 삭제하시겠습니까?')) e.preventDefault();
-                                                    }}>
-                                                        <input type="hidden" name="songId" value={song.id} />
-                                                        <input type="hidden" name="teamId" value={teamId} />
-                                                        <button
-                                                            type="submit"
-                                                            title="곡 삭제"
-                                                            className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-muted"
-                                                        >
-                                                            <Trash2 size={15} />
-                                                        </button>
-                                                    </form>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        title="곡 삭제"
-                                                        onClick={() => removeSong(song.id)}
-                                                        className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-muted"
-                                                    >
-                                                        <Trash2 size={15} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {expanded === song.id && ready && (
-                                            <div className="border-t border-border/60 bg-muted/20 p-4">
-                                                <SongFormEditor
-                                                    key={song.id}
-                                                    songId={song.id}
-                                                    teamId={teamId}
-                                                    initialForm={readSongForm(song.id, teamId)}
-                                                />
-                                            </div>
                                         )}
                                     </div>
-                                ))}
-                                {!filtered.length && (
-                                    <p className="py-8 text-center text-xs text-muted-foreground">표시할 곡이 없습니다.</p>
-                                )}
-                            </div>
-                        </section>
 
-                        {/* 새 곡 추가 접이식 */}
-                        <details className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs sm:p-5">
-                            <summary className="min-h-11 cursor-pointer font-bold text-foreground hover:text-primary transition-colors flex items-center justify-between">
-                                <span className="flex items-center gap-2">
-                                    <Plus size={16} className="text-secondary" />
-                                    <span>새 곡 추가하기</span>
+                                    {expanded === song.id && ready && (
+                                        <div className="mt-2 rounded-2xl bg-muted/60 p-4">
+                                            <SongFormEditor key={song.id} songId={song.id} teamId={teamId} initialForm={readSongForm(song.id, teamId)} />
+                                        </div>
+                                    )}
+                                </li>
+                            ))}
+                            {!filtered.length && <li className="py-10 text-center text-sm text-muted-foreground">표시할 곡이 없습니다.</li>}
+                        </ul>
+
+                        <details className="group border-t border-border/70 pt-4">
+                            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+                                <span className="flex size-9 items-center justify-center rounded-xl bg-brand text-brand-foreground" aria-hidden="true">
+                                    <Plus size={18} strokeWidth={2.25} />
                                 </span>
-                                <span className="text-xs text-muted-foreground font-normal">펼치기</span>
+                                <span className="flex-1 text-[15px] font-medium text-foreground">새 곡 추가하기</span>
+                                <ChevronDown size={16} className="text-muted-foreground transition group-open:rotate-180" aria-hidden="true" />
                             </summary>
-                            <div className="mt-4 pt-3 border-t border-border/60">
+                            <div className="pt-4">
                                 <SongComposer disabled={!ready} saveAction={hasBackend ? undefined : addSong} />
                             </div>
                         </details>
-                    </div>
+                    </section>
 
-                    {/* 우측: 저장된 콘티 목록 */}
-                    <div className="min-w-0 space-y-5">
-                        <section className="rounded-3xl border border-border/80 bg-card p-5 shadow-xs sm:p-6">
-                            <div className="flex items-center justify-between gap-2 mb-4">
-                                <div className="flex items-center gap-2 font-bold text-foreground">
-                                    <ListMusic size={20} className="text-secondary" />
-                                    <h2 className="text-lg font-bold">저장된 콘티 목록</h2>
-                                </div>
-                                <Badge variant="outline" size="sm">
-                                    {setlists.length}개
-                                </Badge>
-                            </div>
+                    {/* 저장된 콘티 목록 */}
+                    <section aria-labelledby="library-setlists" className="min-w-0 space-y-4">
+                        <div className="flex items-center justify-between gap-2">
+                            <h2 id="library-setlists" className="text-[17px] font-semibold tracking-tight text-foreground">
+                                저장된 콘티 목록
+                            </h2>
+                            <span className="text-xs text-muted-foreground">{setlists.length}개</span>
+                        </div>
 
-                            <div className="space-y-4">
-                                {setlists.map((setlist) => {
-                                    const ids = normalizeSetlistSongOrder(setlist.song_order);
-                                    const ordered = ids.map((id) => songs.find((song) => song.id === id));
-                                    const date = new Date(setlist.worship_date).toLocaleString('ko-KR', {
-                                        timeZone: 'Asia/Seoul',
-                                        year: 'numeric',
-                                        month: 'short',
-                                        day: 'numeric',
-                                        weekday: 'short',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                    });
-
-                                    return (
-                                        <div
-                                            key={setlist.id}
-                                            className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:border-secondary/40"
-                                        >
-                                            <div className="flex items-start justify-between gap-2">
-                                                <div>
-                                                    <h3 className="font-bold text-foreground text-base">{setlist.title}</h3>
-                                                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                        <Calendar size={13} />
-                                                        <span>{date}</span>
-                                                        {setlist.theme && (
-                                                            <>
-                                                                <span>•</span>
-                                                                <span className="text-secondary font-medium">{setlist.theme}</span>
-                                                            </>
-                                                        )}
-                                                    </p>
-                                                </div>
-                                                <Badge variant="subtle" size="sm">
-                                                    {ordered.length}곡
-                                                </Badge>
-                                            </div>
-
-                                            {/* 수록곡 순서 */}
-                                            <ol className="my-3.5 space-y-1.5 rounded-xl bg-muted/40 p-3 text-xs">
-                                                {ordered.map((song, i) => (
-                                                    <li key={`${ids[i]}-${i}`} className="flex items-center gap-2">
-                                                        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-card text-[11px] font-bold text-muted-foreground">
-                                                            {i + 1}
-                                                        </span>
-                                                        <span className="font-medium text-foreground truncate">
-                                                            {song?.title ?? '곡을 찾을 수 없습니다.'}
-                                                        </span>
-                                                        {song?.original_key && (
-                                                            <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
-                                                                {song.original_key}
-                                                            </span>
-                                                        )}
-                                                    </li>
-                                                ))}
-                                            </ol>
-
-                                            {/* 액션 버튼들 */}
-                                            <div className="flex flex-wrap items-center gap-2 pt-1">
-                                                <Link
-                                                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
-                                                    href={`/dashboard/planning?team=${encodeURIComponent(teamId)}&tab=schedule&linkSetlistId=${encodeURIComponent(setlist.id)}&linkSetlistTitle=${encodeURIComponent(setlist.title)}&linkSetlistSongs=${encodeURIComponent(ordered.map((s) => s?.title).filter(Boolean).join('||'))}`}
-                                                    title="이 콘티를 예배 일정에 연결하고 당번에게 알림 보내기"
-                                                >
-                                                    <Bell size={14} />
-                                                    <span>일정 연결 & 당번 알림</span>
-                                                </Link>
-
-                                                <Link
-                                                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
-                                                    href={`/dashboard/planning?team=${encodeURIComponent(teamId)}&tab=requests&setlistId=${encodeURIComponent(setlist.id)}&setlistTitle=${encodeURIComponent(setlist.title)}`}
-                                                >
-                                                    <MessageSquareText size={14} className="text-secondary" />
-                                                    <span>질문·요청</span>
-                                                </Link>
-
-                                                <SetlistShareButton
-                                                    shareText={[
-                                                        setlist.title,
-                                                        date,
-                                                        ...ordered.map((song, i) => `${i + 1}. ${song?.title ?? '알 수 없는 곡'}`),
-                                                    ].join('\n')}
-                                                />
-
-                                                {hasBackend ? (
-                                                    <form action={duplicateSetlistFromTemplate}>
-                                                        <input type="hidden" name="setlistId" value={setlist.id} />
-                                                        <input type="hidden" name="teamId" value={teamId} />
-                                                        <button className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted">
-                                                            <Copy size={14} />
-                                                            <span>다음 주 복제</span>
-                                                        </button>
-                                                    </form>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
-                                                        onClick={() => duplicate(setlist.id)}
-                                                    >
-                                                        <Copy size={14} />
-                                                        <span>다음 주 복제</span>
-                                                    </button>
-                                                )}
-
-                                                {/* 콘티 삭제 */}
-                                                {hasBackend ? (
-                                                    <form action={deleteSetlist} onSubmit={(e) => {
-                                                        if (!window.confirm('이 콘티를 삭제하시겠습니까?')) e.preventDefault();
-                                                    }}>
-                                                        <input type="hidden" name="setlistId" value={setlist.id} />
-                                                        <input type="hidden" name="teamId" value={teamId} />
-                                                        <button
-                                                            type="submit"
-                                                            title="콘티 삭제"
-                                                            className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-destructive/20 bg-destructive/5 px-2.5 text-xs font-semibold text-destructive hover:bg-destructive/15 transition-colors"
-                                                        >
-                                                            <Trash2 size={14} />
-                                                            <span>삭제</span>
-                                                        </button>
-                                                    </form>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        title="콘티 삭제"
-                                                        onClick={() => removeSetlist(setlist.id)}
-                                                        className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-destructive/20 bg-destructive/5 px-2.5 text-xs font-semibold text-destructive hover:bg-destructive/15 transition-colors"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                        <span>삭제</span>
-                                                    </button>
-                                                )}
-
-                                                {/* 항상 예배 열기 및 팀원 화면 제공 */}
-                                                {ordered.length > 0 && (
-                                                    <>
-                                                        <Link
-                                                            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-bold text-primary-foreground transition hover:bg-primary/90"
-                                                            href={`/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(setlist.id)}&team=${encodeURIComponent(teamId)}`}
-                                                        >
-                                                            <Radio size={14} />
-                                                            <span>예배 열기</span>
-                                                        </Link>
-                                                        <Link
-                                                            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-semibold text-foreground transition hover:bg-muted"
-                                                            href={`/session/${DEMO_SESSION_ID}/team?setlist=${encodeURIComponent(setlist.id)}&team=${encodeURIComponent(teamId)}`}
-                                                        >
-                                                            <UsersRound size={14} />
-                                                            <span>팀원 화면</span>
-                                                        </Link>
-                                                    </>
-                                                )}
-                                            </div>
+                        <ul className="divide-y divide-border/70">
+                            {setlistRows.map(({ setlist, ids, ordered, dateLabel, shareText, titles }) => (
+                                <li key={setlist.id} className="py-5 first:pt-1">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                                                <Calendar size={12} aria-hidden="true" />
+                                                {dateLabel}
+                                            </p>
+                                            <h3 className="mt-0.5 text-[15px] font-semibold tracking-tight text-foreground">{setlist.title}</h3>
+                                            {setlist.theme && <p className="mt-0.5 text-xs text-muted-foreground">{setlist.theme}</p>}
                                         </div>
-                                    );
-                                })}
-                                {!setlists.length && (
-                                    <p className="py-8 text-center text-xs text-muted-foreground">아직 저장된 콘티가 없습니다.</p>
-                                )}
-                            </div>
-                        </section>
+                                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{ordered.length}곡</span>
+                                    </div>
 
-                        {/* 새 콘티 만들기 접이식 */}
-                        <details className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs sm:p-5">
-                            <summary className="min-h-11 cursor-pointer font-bold text-foreground hover:text-primary transition-colors flex items-center justify-between">
-                                <span className="flex items-center gap-2">
-                                    <Plus size={16} className="text-secondary" />
-                                    <span>새 콘티 만들기</span>
+                                    <ol className="mt-3 space-y-1.5 text-[13px]">
+                                        {ordered.map((song, i) => (
+                                            <li key={`${ids[i]}-${i}`} className="flex items-center gap-3">
+                                                <span className="w-3 tabular-nums text-muted-foreground">{i + 1}</span>
+                                                <span className="min-w-0 flex-1 truncate text-foreground">{song?.title ?? '곡을 찾을 수 없습니다.'}</span>
+                                                {song?.original_key && <span className="shrink-0 text-xs text-muted-foreground">Key {song.original_key}</span>}
+                                            </li>
+                                        ))}
+                                    </ol>
+
+                                    <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                                        {ordered.length > 0 && (
+                                            <Link className={buttonVariants({ size: 'xs' })} href={`/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(setlist.id)}&team=${encodeURIComponent(teamId)}`}>
+                                                <Radio size={13} aria-hidden="true" />
+                                                예배 열기
+                                            </Link>
+                                        )}
+                                        {ordered.length > 0 && (
+                                            <Link className={buttonVariants({ variant: 'outline', size: 'xs' })} href={`/session/${DEMO_SESSION_ID}/team?setlist=${encodeURIComponent(setlist.id)}&team=${encodeURIComponent(teamId)}`}>
+                                                <UsersRound size={13} aria-hidden="true" />
+                                                팀원 화면
+                                            </Link>
+                                        )}
+                                        <Link
+                                            className={buttonVariants({ variant: 'outline', size: 'xs' })}
+                                            href={`/dashboard/planning?team=${encodeURIComponent(teamId)}&tab=schedule&linkSetlistId=${encodeURIComponent(setlist.id)}&linkSetlistTitle=${encodeURIComponent(setlist.title)}&linkSetlistSongs=${encodeURIComponent(titles)}`}
+                                            title="이 콘티를 예배 일정에 연결하고 당번에게 알림 보내기"
+                                        >
+                                            <Bell size={13} aria-hidden="true" />
+                                            일정 연결 & 당번 알림
+                                        </Link>
+                                        <Link
+                                            className={buttonVariants({ variant: 'outline', size: 'xs' })}
+                                            href={`/dashboard/planning?team=${encodeURIComponent(teamId)}&tab=requests&setlistId=${encodeURIComponent(setlist.id)}&setlistTitle=${encodeURIComponent(setlist.title)}`}
+                                        >
+                                            <MessageSquareText size={13} aria-hidden="true" />
+                                            질문·요청
+                                        </Link>
+                                        <SetlistShareButton shareText={shareText} />
+                                        {hasBackend ? (
+                                            <form action={duplicateSetlistFromTemplate}>
+                                                <input type="hidden" name="setlistId" value={setlist.id} />
+                                                <input type="hidden" name="teamId" value={teamId} />
+                                                <button className={buttonVariants({ variant: 'outline', size: 'xs' })}>
+                                                    <Copy size={13} aria-hidden="true" />
+                                                    다음 주 복제
+                                                </button>
+                                            </form>
+                                        ) : (
+                                            <button type="button" className={buttonVariants({ variant: 'outline', size: 'xs' })} onClick={() => duplicate(setlist.id)}>
+                                                <Copy size={13} aria-hidden="true" />
+                                                다음 주 복제
+                                            </button>
+                                        )}
+                                        {hasBackend ? (
+                                            <form
+                                                action={deleteSetlist}
+                                                onSubmit={(e) => {
+                                                    if (!window.confirm('이 콘티를 삭제하시겠습니까?')) e.preventDefault();
+                                                }}
+                                            >
+                                                <input type="hidden" name="setlistId" value={setlist.id} />
+                                                <input type="hidden" name="teamId" value={teamId} />
+                                                <button type="submit" title="콘티 삭제" className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'text-destructive hover:bg-destructive/10')}>
+                                                    <Trash2 size={13} aria-hidden="true" />
+                                                    삭제
+                                                </button>
+                                            </form>
+                                        ) : (
+                                            <button type="button" title="콘티 삭제" onClick={() => removeSetlist(setlist.id)} className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'text-destructive hover:bg-destructive/10')}>
+                                                <Trash2 size={13} aria-hidden="true" />
+                                                삭제
+                                            </button>
+                                        )}
+                                    </div>
+                                </li>
+                            ))}
+                            {!setlists.length && <li className="py-10 text-center text-sm text-muted-foreground">아직 저장된 콘티가 없습니다.</li>}
+                        </ul>
+
+                        <details className="group border-t border-border/70 pt-4">
+                            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+                                <span className="flex size-9 items-center justify-center rounded-xl bg-brand text-brand-foreground" aria-hidden="true">
+                                    <Plus size={18} strokeWidth={2.25} />
                                 </span>
-                                <span className="text-xs text-muted-foreground font-normal">펼치기</span>
+                                <span className="flex-1 text-[15px] font-medium text-foreground">새 콘티 만들기</span>
+                                <ChevronDown size={16} className="text-muted-foreground transition group-open:rotate-180" aria-hidden="true" />
                             </summary>
-                            <div className="mt-4 pt-3 border-t border-border/60">
+                            <div className="pt-4">
                                 <SetlistComposer songs={songs} teamId={teamId} disabled={!ready} saveAction={hasBackend ? undefined : addSetlist} />
                             </div>
                         </details>
-                    </div>
+                    </section>
                 </div>
             )}
         </div>

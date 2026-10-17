@@ -122,7 +122,7 @@ export default function SongFormScoreOverlay({
                 className={`rounded-xl border backdrop-blur-xl px-2.5 py-1.5 shadow-xl transition-all ${
                     isDarkInverted
                         ? 'border-amber-400/40 bg-black/85 text-amber-100'
-                        : 'border-slate-700/30 bg-slate-900/90 text-white'
+                        : 'border-white/10 bg-neutral-900/90 text-white'
                 }`}
             >
                 <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1 border-b border-white/10 text-[11px]">
@@ -250,7 +250,7 @@ export default function SongFormScoreOverlay({
                                     onClick={() => onSelectSection?.(sec.label)}
                                     className={`tap-target group flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs transition-all active:scale-95 ${
                                         isActive
-                                            ? 'bg-amber-400 text-slate-950 font-black shadow-[0_0_14px_rgba(251,191,36,0.9)] ring-2 ring-white scale-105 z-10'
+                                            ? 'bg-amber-400 text-neutral-950 font-black shadow-[0_0_14px_rgba(251,191,36,0.9)] ring-2 ring-white scale-105 z-10'
                                             : isPast
                                             ? 'bg-white/5 text-white/40 border border-white/5 line-through opacity-70'
                                             : 'bg-white/10 hover:bg-white/20 text-white/90 border border-white/10'

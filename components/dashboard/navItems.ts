@@ -5,6 +5,7 @@ import {
     HeartHandshake,
     LayoutGrid,
     ListMusic,
+    Network,
     UsersRound,
     type LucideIcon,
 } from 'lucide-react';
@@ -27,5 +28,11 @@ export const secondaryNavItems: NavItem[] = [
     { icon: HeartHandshake, label: '팀 커뮤니티', href: '/community', description: '예배 후 묵상과 나눔' },
     { icon: HandHeart, label: '케어', href: '/care', description: '기도제목과 돌봄 요청' },
     { icon: BadgeCheck, label: '섬김', href: '/serve', description: '봉사 및 봉사자 연결' },
-    { icon: UsersRound, label: '그룹', href: '/groups', description: '소그룹 및 사역팀' },
+    { icon: Network, label: '그룹', href: '/groups', description: '소그룹 및 사역팀' },
 ];
+
+/** 현재 주소에서 이 메뉴가 선택됐는지 (하위 화면도 포함: /dashboard/songs/library → 콘티·악보) */
+export function isNavActive(pathname: string, href: string): boolean {
+    if (href === '/dashboard') return pathname === '/dashboard';
+    return pathname === href || pathname.startsWith(`${href}/`);
+}

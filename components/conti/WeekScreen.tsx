@@ -22,7 +22,7 @@ import {
 } from './model';
 import { useConti } from './context';
 import { EVENT_KIND } from './planningUi';
-import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, SampleChip, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_DOT, TONE_ICON, body, ink, line, selected, sub, todayText } from './ui';
+import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, SampleChip, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_DOT, TONE_ICON, body, ink, line, selected, sub, todayText, STATUS, dashed, divide, ringCard } from './ui';
 import { NoticeAvatar } from './AlertsScreen';
 
 export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) => void; openOrder: (id: string) => void }) {
@@ -53,7 +53,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                             <RoundIconButton label={`알림 ${unread}개`} onClick={() => go('alerts')}>
                                 <Bell size={18} />
                             </RoundIconButton>
-                            {unread > 0 && <span className="absolute right-2 top-2 size-2 rounded-full bg-orange-500 ring-2 ring-white dark:ring-neutral-900" aria-hidden="true" />}
+                            {unread > 0 && <span className={cn('absolute right-2 top-2 size-2 rounded-full bg-secondary', ringCard)} aria-hidden="true" />}
                         </span>
                         <AddButton label="일정 추가 (일정·요청 화면)" href={manageHref} />
                     </>
@@ -70,7 +70,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                             <button type="button" onClick={() => setDay(date)} aria-pressed={active} className="flex w-full flex-col items-center gap-2 py-1">
                                 <span className={cn('relative text-xs', active ? cn('font-semibold', ink) : sub)}>
                                     {weekday(date)}
-                                    {active && <span className="absolute -bottom-1.5 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-neutral-900 dark:bg-white" aria-hidden="true" />}
+                                    {active && <span className="absolute -bottom-1.5 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-foreground" aria-hidden="true" />}
                                 </span>
                                 <span
                                     className={cn(
@@ -81,7 +81,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                                     {dayOf(date)}
                                 </span>
                                 <span className="flex h-1.5 gap-0.5" aria-hidden="true">
-                                    {hasSetlist && <span className="size-1.5 rounded-full bg-primary" />}
+                                    {hasSetlist && <span className="size-1.5 rounded-full bg-brand" />}
                                     {kinds.map((kind) => (
                                         <span key={kind} className={cn('size-1.5 rounded-full', TONE_DOT[EVENT_KIND[kind].tone])} />
                                     ))}
@@ -145,7 +145,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                         </div>
                     </button>
                 ) : (
-                    <div className={cn('rounded-3xl border border-dashed px-5 py-8 text-center', 'border-neutral-300 dark:border-neutral-700')}>
+                    <div className={cn('rounded-3xl px-5 py-8 text-center', dashed)}>
                         <p className={cn('text-[15px] font-medium', ink)}>이번 주 콘티가 아직 없어요</p>
                         <p className={cn('mt-1 text-xs', sub)}>곡 보관함에서 콘티를 만들면 여기에 바로 보여요</p>
                         <Link
@@ -180,7 +180,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                             <span className={cn('shrink-0 text-[11px]', sub)}>{notice.ago}</span>
                         </li>
                     ))}
-                    {planning.ready && !planning.notices.length && <li className={cn('py-4 text-sm', sub)}>아직 팀 소식이 없어요</li>}
+                    {planning.ready && !planning.notices.length && <li className={cn('py-8 text-center text-sm', sub)}>아직 팀 소식이 없어요</li>}
                 </ul>
             </section>
 
@@ -191,7 +191,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                     meta={`${monthOf(day)}/${dayOf(day)}`}
                     action={<button type="button" onClick={() => go('team')} className={cn('text-xs font-medium underline-offset-2 hover:underline', body)}>팀 배치</button>}
                 />
-                <ul className={cn('divide-y', 'divide-neutral-100 dark:divide-neutral-800')}>
+                <ul className={divide}>
                     {events.map((event) => {
                         const kind = EVENT_KIND[event.kind];
                         const Icon = kind.icon;
@@ -228,9 +228,9 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
             <button
                 type="button"
                 onClick={() => go('requests')}
-                className={cn('flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition active:scale-[0.99]', line)}
+                className={cn('flex w-full items-center gap-3 border-y py-3.5 text-left transition active:opacity-70', line)}
             >
-                <span className={cn('flex size-2 rounded-full', openRequests.length ? TONE_DOT.peach : 'bg-neutral-300 dark:bg-neutral-600')} aria-hidden="true" />
+                <span className={cn('flex size-2 rounded-full', openRequests.length ? TONE_DOT.peach : STATUS.idle.dot)} aria-hidden="true" />
                 <span className={cn('flex-1 text-sm', ink)}>
                     확인할 요청 <span className="font-semibold tabular-nums">{openRequests.length}건</span>
                     {sample && <span className="ml-2">{sample}</span>}

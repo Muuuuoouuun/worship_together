@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { useConti } from './context';
 import type { RequestItem } from './planningBridge';
 import { PlanningError, pill, pillOn, useDispatch } from './planningUi';
-import { AddButton, Avatar, Eyebrow, SampleChip, ScreenTitle, body, chip, ink, line, selected, sub } from './ui';
+import { AddButton, Avatar, Eyebrow, SampleChip, ScreenTitle, body, chip, ink, line, selected, sub, attentionText, tabOn, tabOff } from './ui';
 
 type Filter = 'all' | 'open' | 'done';
 
@@ -17,7 +17,11 @@ const FILTERS: { id: Filter; label: string }[] = [
     { id: 'done', label: '완료' },
 ];
 
-const QUICK_REPLIES = ['확인했어요', '반영할게요', '연습 때 이야기해요'];
+/** 받은 인도자·관리자와 요청을 남긴 사람은 할 말이 달라요 */
+const QUICK_REPLIES = {
+    resolver: ['확인했어요', '반영할게요', '연습 때 이야기해요'],
+    author: ['감사해요', '확인했어요', '연습 때 이야기해요'],
+};
 
 export default function RequestScreen() {
     const { planning } = useConti();
@@ -50,7 +54,7 @@ export default function RequestScreen() {
                             role="tab"
                             aria-selected={active}
                             onClick={() => setFilter(item.id)}
-                            className={cn('relative -mb-px flex h-11 items-center gap-1 border-b-2 text-sm transition', active ? cn('border-neutral-900 font-semibold dark:border-white', ink) : cn('border-transparent', sub))}
+                            className={cn('relative -mb-px flex h-11 items-center gap-1 border-b-2 text-sm transition', active ? tabOn : tabOff)}
                         >
                             {item.label}
                             <span className="text-xs tabular-nums opacity-70">{count}</span>
@@ -117,7 +121,7 @@ function RequestRow({ request, expanded, onToggle }: { request: RequestItem; exp
                 title={request.canResolve ? undefined : '수신 인도자 또는 관리자만 처리할 수 있어요'}
                 className={cn(
                     'mt-5 flex size-5 shrink-0 items-center justify-center rounded-full border-[1.5px] transition disabled:cursor-default',
-                    request.done ? cn(selected, 'border-transparent') : 'border-neutral-300 dark:border-neutral-600',
+                    request.done ? cn(selected, 'border-transparent') : 'border-input',
                     !checkable && !request.done && 'opacity-50',
                 )}
             >
@@ -128,8 +132,8 @@ function RequestRow({ request, expanded, onToggle }: { request: RequestItem; exp
                 <button type="button" onClick={onToggle} aria-expanded={expanded} className="block w-full text-left">
                     <Eyebrow>
                         {request.kindLabel} · {request.context}
-                        {request.status === 'reviewing' && <span className="ml-1 text-orange-600 dark:text-orange-300">· {request.statusLabel}</span>}
-                        {request.mine && <span className="ml-1 text-primary">· 내 요청</span>}
+                        {request.status === 'reviewing' && <span className={cn('ml-1', attentionText)}>· {request.statusLabel}</span>}
+                        {request.mine && <span className="ml-1 text-brand">· 내 요청</span>}
                     </Eyebrow>
                     <p className={cn('mt-0.5 text-[15px] font-medium leading-snug', request.done ? cn('line-through decoration-1', sub) : ink)}>{request.title}</p>
                     <p className={cn('mt-2 flex items-center gap-1.5 text-xs', sub)}>
@@ -184,7 +188,7 @@ function RequestRow({ request, expanded, onToggle }: { request: RequestItem; exp
                         {request.canReply && !request.done && (
                             <>
                                 <div className="flex flex-wrap gap-1.5">
-                                    {QUICK_REPLIES.map((item) => (
+                                    {QUICK_REPLIES[request.canResolve ? 'resolver' : 'author'].map((item) => (
                                         <button key={item} type="button" disabled={busy} onClick={() => void reply(item)} className={pill}>
                                             {item}
                                         </button>
@@ -197,7 +201,7 @@ function RequestRow({ request, expanded, onToggle }: { request: RequestItem; exp
                                         onChange={(event) => setText(event.target.value)}
                                         placeholder="답변 남기기…"
                                         aria-label="답변"
-                                        className={cn('h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-neutral-400', ink)}
+                                        className={cn('h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70', ink)}
                                     />
                                     <button type="submit" disabled={busy || !text.trim()} aria-label="답변 보내기" className={cn('flex size-8 shrink-0 items-center justify-center rounded-full disabled:opacity-30', selected)}>
                                         <ArrowUp size={15} />

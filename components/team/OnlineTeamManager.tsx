@@ -3,10 +3,12 @@
 import { useId, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSheetDismiss } from '@/hooks/useSheetDismiss';
 import {
     AlertTriangle,
     Check,
-    FileText,
+    ChevronDown,
+    ClipboardList,
     Link2,
     LogOut,
     Plus,
@@ -16,7 +18,6 @@ import {
     Shield,
     Sparkles,
     Trash2,
-    UserPlus,
     UsersRound,
     X,
 } from 'lucide-react';
@@ -33,12 +34,22 @@ import {
     setOnlineMemberRole,
 } from '@/actions/teamActions';
 import { worshipRoles, type OnlineTeam, type WorshipRole } from '@/types/team';
-import { Avatar } from '@/components/ui/Avatar';
-import { Badge } from '@/components/ui/Badge';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Input, Select, Textarea, searchFieldClass } from '@/components/ui/input';
+import Notice from '@/components/ui/Notice';
+import { STATUS } from '@/components/ui/status';
+import { Avatar, TONE_BLOCK } from '@/components/conti/ui';
+import { cn } from '@/lib/utils';
 import InviteShareButtons from './InviteShareButtons';
 
-const field = 'mt-1.5 min-h-11 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring';
-const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted active:scale-[0.98] disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted! disabled:text-muted-foreground!';
+/** 입력 칸 위의 작은 이름표 */
+const labelClass = 'block min-w-0 text-xs font-medium text-muted-foreground';
+/** 섹션 제목 (레퍼런스의 '악기 담당' 크기) */
+const sectionTitle = 'text-[17px] font-semibold tracking-tight text-foreground';
+/** 목록 행 앞의 회색 아이콘 칸 */
+const iconTile = 'flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-foreground';
+/** 파트 필터 칩: 선택 = 검정 알약, 나머지 = 회색 알약 */
+const filterChip = 'inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/30';
 
 function parseMemberLines(text: string): Array<{ name: string; role: WorshipRole }> {
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -85,6 +96,7 @@ export default function OnlineTeamManager({
 }) {
     const router = useRouter();
     const batchInputId = useId();
+    const sectionId = useId();
     const [selected, setSelected] = useState(selectedTeamId ?? teams[0]?.id ?? '');
     const team = teams.find((item) => item.id === selected) ?? teams[0];
     const isOwner = team?.ownerId === userId || team?.members.some(m => m.userId === userId && m.permission === 'owner');
@@ -104,6 +116,7 @@ export default function OnlineTeamManager({
     const [batchOpen, setBatchOpen] = useState(false);
     const [batchText, setBatchText] = useState('');
     const parsedBatch = useMemo(() => parseMemberLines(batchText), [batchText]);
+    useSheetDismiss(() => setBatchOpen(false), batchOpen);
 
     // Member list search & filter
     const [memberSearch, setMemberSearch] = useState('');
@@ -316,63 +329,27 @@ export default function OnlineTeamManager({
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                <Check size={16} className="text-secondary" />
+        <div className="min-w-0 space-y-7">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Check size={14} className="shrink-0 text-brand" aria-hidden="true" />
                 <span>로그인한 계정에 소속 팀과 역할이 안전하게 보관됩니다.</span>
             </div>
 
-            {/* 새 팀 만들기 접이식 카드 */}
-            <details open={!teams.length} className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs sm:p-6">
-                <summary className="min-h-11 cursor-pointer font-bold text-foreground hover:text-primary transition-colors flex items-center justify-between">
-                    <span className="text-base sm:text-lg">새 예배팀 만들기</span>
-                    <span className="text-xs text-muted-foreground font-normal">클릭하여 열기/닫기</span>
-                </summary>
-                <form onSubmit={create} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-                    <label className="min-w-0 flex-1 text-xs font-semibold text-foreground">
-                        새 팀 명칭
-                        <input
-                            className={field}
-                            value={name}
-                            onChange={(event) => setName(event.target.value)}
-                            required
-                            maxLength={40}
-                            placeholder="예: 주일 2부 찬양팀"
-                        />
-                    </label>
-                    <button
-                        type="submit"
-                        className={`${button} bg-primary text-primary-foreground hover:bg-primary/90 font-bold`}
-                        disabled={pending || !name.trim()}
-                    >
-                        <Plus size={16} />
-                        <span>팀 만들기</span>
-                    </button>
-                </form>
-            </details>
-
             {/* 상태 메시지 피드백 */}
             {message && (
-                <div
-                    role="status"
-                    className={`rounded-xl border px-4 py-2.5 text-xs font-semibold ${
-                        isError
-                            ? 'border-destructive/30 bg-destructive/10 text-destructive'
-                            : 'border-secondary/20 bg-secondary/10 text-secondary'
-                    }`}
-                >
+                <Notice tone={pending ? 'info' : isError ? 'error' : 'success'} className="break-words">
                     {pending ? '처리 중…' : message}
-                </div>
+                </Notice>
             )}
 
             {team ? (
-                <section className="rounded-3xl border border-border/80 bg-card p-5 shadow-xs sm:p-7 space-y-6">
+                <>
                     {/* 팀 선택 및 콘티 링크 */}
-                    <div className="flex flex-wrap items-end gap-3 pb-6 border-b border-border/60">
-                        <label className="min-w-0 flex-1 text-xs font-semibold text-foreground">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                        <label className={cn(labelClass, 'flex-1 sm:max-w-sm')}>
                             현재 선택된 팀
-                            <select
-                                className={field}
+                            <Select
+                                className="mt-1.5"
                                 value={team.id}
                                 onChange={(event) => {
                                     setSelected(event.target.value);
@@ -384,361 +361,340 @@ export default function OnlineTeamManager({
                                         {item.name} ({item.members.length}명)
                                     </option>
                                 ))}
-                            </select>
+                            </Select>
                         </label>
-                        <Link
-                            className={`${button} bg-primary text-primary-foreground hover:bg-primary/90 font-bold`}
-                            href={`/dashboard/songs/library?team=${team.id}`}
-                        >
-                            <Sparkles size={16} />
+                        <Link className={cn(buttonVariants(), 'sm:ml-auto')} href={`/dashboard/songs/library?team=${team.id}`}>
+                            <Sparkles aria-hidden="true" />
                             <span>이 팀의 콘티 준비</span>
                         </Link>
                     </div>
 
-                    {/* 인원 넣기 섹션 (직접 추가 + 텍스트 일괄 붙여넣기) */}
-                    {isOwner && (
-                        <div className="rounded-2xl border border-border/80 bg-background/50 p-5 sm:p-6 space-y-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                                        <UserPlus size={18} className="text-primary" />
-                                        <span>인원 넣기 (팀원 직접 등록)</span>
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                        초대 링크 가입을 기다리지 않고, 사역자 명단과 역할을 관리자가 바로 추가합니다.
+                    <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_20rem] xl:grid-rows-[auto_auto_1fr] xl:gap-x-12">
+                        {/* 인원 넣기 섹션 (직접 추가 + 텍스트 일괄 붙여넣기) */}
+                        {isOwner && (
+                            <section aria-labelledby={`${sectionId}-add`} className="@container min-w-0 xl:col-start-2 xl:row-start-1">
+                                <h2 id={`${sectionId}-add`} className={sectionTitle}>
+                                    인원 넣기 (팀원 직접 등록)
+                                </h2>
+                                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                                    초대 링크 가입을 기다리지 않고, 사역자 명단과 역할을 관리자가 바로 추가합니다.
+                                </p>
+
+                                <form onSubmit={handleAddDirectMember} className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 @lg:grid-cols-[minmax(0,1fr)_10rem_auto]">
+                                    <label className={cn(labelClass, 'col-span-2 @lg:col-span-1')}>
+                                        팀원 이름
+                                        <Input
+                                            className="mt-1.5"
+                                            value={directName}
+                                            onChange={(e) => setDirectName(e.target.value)}
+                                            placeholder="예: 김철수"
+                                            maxLength={40}
+                                            required
+                                        />
+                                    </label>
+                                    <label className={labelClass}>
+                                        담당 역할 (파트)
+                                        <Select
+                                            className="mt-1.5"
+                                            value={directRole}
+                                            onChange={(e) => setDirectRole(e.target.value as WorshipRole)}
+                                        >
+                                            {Object.entries(worshipRoles).map(([k, label]) => (
+                                                <option key={k} value={k}>
+                                                    {label}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                    </label>
+                                    <Button type="submit" disabled={pending || !directName.trim()}>
+                                        <Plus aria-hidden="true" />
+                                        <span>추가</span>
+                                    </Button>
+                                </form>
+
+                                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setBatchOpen(true)}>
+                                    <ClipboardList aria-hidden="true" />
+                                    <span>명단 텍스트 일괄 붙여넣기</span>
+                                </Button>
+                            </section>
+                        )}
+
+                        {/* 초대 링크 섹션 */}
+                        <section aria-labelledby={`${sectionId}-invite`} className={cn('min-w-0 xl:col-start-2', isOwner ? 'xl:row-start-2' : 'xl:row-start-1')}>
+                            <h2 id={`${sectionId}-invite`} className={sectionTitle}>카카오톡 · 링크로 초대</h2>
+                            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                                초대받은 팀원은 구글이나 네이버로 간편하게 참여할 수 있습니다.
+                            </p>
+
+                            {isOwner ? (
+                                <div className="mt-4 space-y-3">
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button variant={invite ? 'outline' : 'default'} disabled={pending} onClick={createInvitation}>
+                                            <Link2 aria-hidden="true" />
+                                            <span>{invite ? '새 링크로 교체 발급' : '초대 링크 만들기'}</span>
+                                        </Button>
+                                        <Button variant="outline" disabled={pending} onClick={revoke}>
+                                            초대 링크 만료·취소
+                                        </Button>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        새 링크를 만들면 이전 링크는 자동 만료됩니다. (초대 유효 기간: 7일)
+                                    </p>
+                                    {invite && (
+                                        <div className={cn('rounded-3xl p-4 sm:p-5', TONE_BLOCK.mint)}>
+                                            <p className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                                <span className={cn('inline-flex items-center gap-1.5 font-semibold', STATUS.ok.text)}>
+                                                    <span className={cn('size-1.5 rounded-full', STATUS.ok.dot)} aria-hidden="true" />
+                                                    초대 가능
+                                                </span>
+                                                <span className="text-muted-foreground">
+                                                    만료일: {new Date(invite.expiresAt).toLocaleDateString('ko-KR')}
+                                                </span>
+                                            </p>
+                                            <InviteShareButtons key={invite.url} url={invite.url} teamName={team.name} />
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="mt-4 rounded-2xl bg-muted px-4 py-3 text-xs font-medium text-muted-foreground">
+                                    초대 링크 발급은 팀 관리자 권한이 필요합니다.
+                                </p>
+                            )}
+                        </section>
+
+                        {/* 팀원 명단 */}
+                        <section aria-labelledby={`${sectionId}-roster`} className="min-w-0 xl:col-start-1 xl:row-span-3 xl:row-start-1">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <h2 id={`${sectionId}-roster`} className={sectionTitle}>
+                                        팀원 명단 & 역할 배분{' '}
+                                        <span className="font-normal tabular-nums text-muted-foreground">{team.members.length}명</span>
+                                    </h2>
+                                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                                        각 팀원의 예배 담당 역할을 설정하고 관리 권한을 지정할 수 있습니다.
                                     </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setBatchOpen(true)}
-                                    className={`${button} text-xs py-2 h-9`}
-                                >
-                                    <FileText size={14} />
-                                    <span>명단 텍스트 일괄 붙여넣기</span>
-                                </button>
+                                <Button variant="ghost" size="sm" className="-mr-2 shrink-0 text-muted-foreground" disabled={pending} onClick={() => router.refresh()}>
+                                    <RefreshCw className={cn(pending && 'animate-spin')} aria-hidden="true" />
+                                    <span>새로고침</span>
+                                </Button>
                             </div>
 
-                            <form onSubmit={handleAddDirectMember} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                                <label className="sm:col-span-6 text-xs font-semibold text-foreground">
-                                    팀원 이름
-                                    <input
-                                        className={field}
-                                        value={directName}
-                                        onChange={(e) => setDirectName(e.target.value)}
-                                        placeholder="예: 김철수"
-                                        maxLength={40}
-                                        required
-                                    />
-                                </label>
-                                <label className="sm:col-span-4 text-xs font-semibold text-foreground">
-                                    담당 역할 (파트)
-                                    <select
-                                        className={field}
-                                        value={directRole}
-                                        onChange={(e) => setDirectRole(e.target.value as WorshipRole)}
-                                    >
-                                        {Object.entries(worshipRoles).map(([k, label]) => (
-                                            <option key={k} value={k}>
-                                                {label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <div className="sm:col-span-2">
-                                    <button
-                                        type="submit"
-                                        className={`${button} w-full bg-primary text-primary-foreground font-bold hover:bg-primary/90`}
-                                        disabled={pending || !directName.trim()}
-                                    >
-                                        <Plus size={16} />
-                                        <span>추가</span>
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    )}
-
-                    {/* 초대 링크 섹션 */}
-                    <div className="rounded-2xl border border-border/70 bg-muted/40 p-5 sm:p-6">
-                        <div className="flex items-center gap-2">
-                            <div className="flex size-9 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
-                                <Link2 size={18} />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-bold text-foreground">카카오톡 · 링크로 초대</h3>
-                                <p className="text-xs text-muted-foreground">
-                                    초대받은 팀원은 구글이나 네이버로 간편하게 참여할 수 있습니다.
-                                </p>
-                            </div>
-                        </div>
-
-                        {isOwner ? (
+                            {/* 팀원 빠른 검색 & 역할별 필터 */}
                             <div className="mt-4 space-y-3">
-                                <div className="flex flex-wrap gap-2">
-                                    <button className={button} disabled={pending} onClick={createInvitation}>
-                                        <Link2 size={15} />
-                                        <span>{invite ? '새 링크로 교체 발급' : '초대 링크 만들기'}</span>
-                                    </button>
-                                    <button className={button} disabled={pending} onClick={revoke}>
-                                        초대 링크 만료·취소
-                                    </button>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground">
-                                    새 링크를 만들면 이전 링크는 자동 만료됩니다. (초대 유효 기간: 7일)
-                                </p>
-                                {invite && (
-                                    <div className="pt-2">
-                                        <div className="mb-2.5 flex items-center gap-2">
-                                            <Badge variant="success" size="sm" dot>
-                                                초대 가능
-                                            </Badge>
-                                            <span className="text-xs text-muted-foreground">
-                                                만료일: {new Date(invite.expiresAt).toLocaleDateString('ko-KR')}
-                                            </span>
-                                        </div>
-                                        <InviteShareButtons key={invite.url} url={invite.url} teamName={team.name} />
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <p className="mt-4 text-xs font-semibold text-muted-foreground">
-                                초대 링크 발급은 팀 관리자 권한이 필요합니다.
-                            </p>
-                        )}
-                    </div>
-
-                    {/* 팀원 명단 헤더 */}
-                    <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3 pt-2">
-                        <div>
-                            <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                                <span>팀원 명단 & 역할 배분</span>
-                                <Badge variant="secondary" size="sm">
-                                    {team.members.length}명
-                                </Badge>
-                            </h3>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                각 팀원의 예배 담당 역할을 설정하고 관리 권한을 지정할 수 있습니다.
-                            </p>
-                        </div>
-                        <button
-                            className={`${button} text-xs py-2 h-9`}
-                            disabled={pending}
-                            onClick={() => router.refresh()}
-                        >
-                            <RefreshCw size={13} className={pending ? 'animate-spin' : ''} />
-                            <span>새로고침</span>
-                        </button>
-                    </div>
-
-                    {/* 팀원 빠른 검색 & 역할별 필터 */}
-                    <div className="space-y-3 pt-1">
-                        <div className="relative flex items-center">
-                            <Search size={15} className="absolute left-3.5 text-muted-foreground pointer-events-none" />
-                            <input
-                                type="text"
-                                value={memberSearch}
-                                onChange={(e) => setMemberSearch(e.target.value)}
-                                placeholder="팀원 이름 또는 파트 검색..."
-                                className="w-full rounded-xl border border-input/80 bg-background pl-9 pr-24 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                            />
-                            <div className="absolute right-2.5 flex items-center gap-1.5">
-                                {memberSearch ? (
-                                    <>
-                                        <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                                            {filteredMembers.length}명
-                                        </span>
-                                        <button
-                                            type="button"
-                                            onClick={() => setMemberSearch('')}
-                                            className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                            title="검색어 지우기"
-                                        >
-                                            <X size={13} />
-                                        </button>
-                                    </>
-                                ) : null}
-                            </div>
-                        </div>
-
-                        {/* 역할별 필터 칩 */}
-                        <div role="group" aria-label="파트별 필터" className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 text-xs">
-                            <button
-                                type="button"
-                                aria-pressed={memberRoleFilter === 'all'}
-                                onClick={() => setMemberRoleFilter('all')}
-                                className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
-                                    memberRoleFilter === 'all'
-                                        ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                                        : 'bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground'
-                                }`}
-                            >
-                                전체 ({team.members.length})
-                            </button>
-                            {(Object.keys(worshipRoles) as WorshipRole[]).map((r) => {
-                                const count = roleCounts[r] ?? 0;
-                                if (count === 0 && memberRoleFilter !== r) return null;
-                                return (
-                                    <button
-                                        key={r}
-                                        type="button"
-                                        aria-pressed={memberRoleFilter === r}
-                                        onClick={() => setMemberRoleFilter(memberRoleFilter === r ? 'all' : r)}
-                                        className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
-                                            memberRoleFilter === r
-                                                ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                                                : 'bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground'
-                                        }`}
-                                    >
-                                        <span>{worshipRoles[r]}</span>
-                                        <span className="text-[10px] opacity-75">{count}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* 팀원 목록 */}
-                    {filteredMembers.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-border/80 p-8 text-center space-y-2">
-                            <p className="text-sm font-semibold text-foreground">조건에 일치하는 팀원이 없습니다.</p>
-                            <p className="text-xs text-muted-foreground">검색어를 변경하거나 파트 필터를 초기화해 보세요.</p>
-                            {(memberSearch || memberRoleFilter !== 'all') && (
-                                <button
-                                    type="button"
-                                    onClick={() => { setMemberSearch(''); setMemberRoleFilter('all'); }}
-                                    className={`${button} text-xs py-1.5 px-3 min-h-8 font-semibold inline-flex items-center gap-1.5 mt-2`}
-                                >
-                                    <RotateCcw size={13} />
-                                    <span>검색 및 필터 초기화</span>
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        <ul className="divide-y divide-border/60">
-                            {filteredMembers.map((member) => (
-                                <li key={member.userId} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <Avatar
-                                            name={member.name}
-                                            size="default"
-                                            roleVariant={member.role === 'leader' ? 'leader' : 'default'}
-                                        />
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-bold text-foreground truncate">{member.name}</span>
-                                                {member.userId === userId && (
-                                                    <Badge variant="subtle" size="sm">
-                                                        나
-                                                    </Badge>
-                                                )}
-                                                {member.permission === 'owner' ? (
-                                                    <Badge variant="secondary" size="sm">
-                                                        관리자
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge variant="outline" size="sm">
-                                                        팀원
-                                                    </Badge>
-                                                )}
-                                                {member.userId.startsWith('direct-') && (
-                                                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground font-normal">
-                                                        직접 등록
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="text-xs text-muted-foreground mt-0.5">
-                                                주 역할: {worshipRoles[member.role] ?? member.role}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 sm:shrink-0 flex-wrap">
-                                        <div className="w-36">
-                                            <span className="sr-only">{member.name} 담당 역할</span>
-                                            <select
-                                                className={field}
-                                                value={member.role}
-                                                disabled={!isOwner || pending}
-                                                onChange={(event) => assign(member.userId, event.target.value as WorshipRole)}
+                                <div className="relative">
+                                    <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                                    <input
+                                        type="text"
+                                        value={memberSearch}
+                                        onChange={(e) => setMemberSearch(e.target.value)}
+                                        placeholder="팀원 이름 또는 파트 검색..."
+                                        className={cn(searchFieldClass, 'h-11 pl-11', memberSearch && 'pr-24')}
+                                    />
+                                    {memberSearch ? (
+                                        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+                                            <span className="text-xs tabular-nums text-muted-foreground">{filteredMembers.length}명</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setMemberSearch('')}
+                                                className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+                                                title="검색어 지우기"
                                             >
-                                                {Object.entries(worshipRoles).map(([key, label]) => (
-                                                    <option key={key} value={key}>
-                                                        {label}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                <X size={14} aria-hidden="true" />
+                                            </button>
                                         </div>
+                                    ) : null}
+                                </div>
 
-                                        {isOwner && (
-                                            <div className="flex items-center gap-1.5 pt-1.5 sm:pt-0">
-                                                <button
-                                                    type="button"
-                                                    title={member.permission === 'owner' ? '관리자 권한 해제' : '관리자 권한 부여'}
-                                                    className={`${button} text-xs py-2 h-11 px-2.5 ${
-                                                        member.permission === 'owner' ? 'text-primary border-primary/30' : 'text-muted-foreground'
-                                                    }`}
-                                                    disabled={pending}
-                                                    onClick={() => handleTogglePermission(member.userId, member.permission)}
-                                                >
-                                                    <Shield size={15} />
-                                                    <span className="hidden md:inline">{member.permission === 'owner' ? '관리자 해제' : '관리자 지정'}</span>
-                                                </button>
+                                {/* 역할별 필터 칩 */}
+                                <div role="group" aria-label="파트별 필터" className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 py-0.5">
+                                    <button
+                                        type="button"
+                                        aria-pressed={memberRoleFilter === 'all'}
+                                        onClick={() => setMemberRoleFilter('all')}
+                                        className={cn(filterChip, memberRoleFilter === 'all' ? 'bg-primary font-semibold text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+                                    >
+                                        전체 ({team.members.length})
+                                    </button>
+                                    {(Object.keys(worshipRoles) as WorshipRole[]).map((r) => {
+                                        const count = roleCounts[r] ?? 0;
+                                        if (count === 0 && memberRoleFilter !== r) return null;
+                                        return (
+                                            <button
+                                                key={r}
+                                                type="button"
+                                                aria-pressed={memberRoleFilter === r}
+                                                onClick={() => setMemberRoleFilter(memberRoleFilter === r ? 'all' : r)}
+                                                className={cn(filterChip, memberRoleFilter === r ? 'bg-primary font-semibold text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+                                            >
+                                                <span>{worshipRoles[r]}</span>
+                                                <span className="tabular-nums opacity-60">{count}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
 
-                                                {member.userId !== userId && (
-                                                    <button
-                                                        type="button"
-                                                        title="팀에서 제외"
-                                                        className={`${button} text-xs py-2 h-11 px-2.5 text-destructive hover:bg-destructive/10 hover:border-destructive/30`}
-                                                        disabled={pending}
-                                                        onClick={() => handleRemoveMember(member.userId, member.name)}
-                                                    >
-                                                        <Trash2 size={15} />
-                                                        <span className="hidden md:inline">제외</span>
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-
-                    {/* 위험 구역: 팀 탈퇴 / 팀 삭제 */}
-                    <div className="mt-8 pt-6 border-t border-border/60 flex flex-wrap items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <AlertTriangle size={15} className="text-amber-500" />
-                            <span>팀 탈퇴 및 삭제 관리</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {isOwner ? (
-                                <button
-                                    type="button"
-                                    onClick={handleDeleteTeam}
-                                    disabled={pending}
-                                    className="px-3 py-2 text-xs font-semibold text-destructive hover:underline rounded-lg hover:bg-destructive/10 transition-colors"
-                                >
-                                    팀 영구 삭제
-                                </button>
+                            {/* 팀원 목록 */}
+                            {filteredMembers.length === 0 ? (
+                                <div className="mt-4 rounded-3xl border border-dashed border-input px-5 py-8 text-center">
+                                    <p className="text-[15px] font-medium text-foreground">조건에 일치하는 팀원이 없습니다.</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">검색어를 변경하거나 파트 필터를 초기화해 보세요.</p>
+                                    {(memberSearch || memberRoleFilter !== 'all') && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="xs"
+                                            className="mt-4"
+                                            onClick={() => { setMemberSearch(''); setMemberRoleFilter('all'); }}
+                                        >
+                                            <RotateCcw aria-hidden="true" />
+                                            <span>검색 및 필터 초기화</span>
+                                        </Button>
+                                    )}
+                                </div>
                             ) : (
-                                <button
-                                    type="button"
-                                    onClick={handleLeaveTeam}
-                                    disabled={pending}
-                                    className="px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-destructive hover:underline rounded-lg hover:bg-muted transition-colors flex items-center gap-1.5"
-                                >
-                                    <LogOut size={14} />
-                                    <span>팀 나가기</span>
-                                </button>
+                                <ul className="mt-2 divide-y divide-border/70">
+                                    {filteredMembers.map((member) => {
+                                        const isMe = member.userId === userId;
+                                        const isManager = member.permission === 'owner';
+                                        return (
+                                            <li key={member.userId} className="flex flex-wrap items-center gap-x-3 gap-y-2.5 py-3.5">
+                                                <Avatar name={member.name} size="md" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="flex min-w-0 items-center gap-1.5">
+                                                        <span className="truncate text-[15px] font-medium text-foreground">{member.name}</span>
+                                                        {isMe && <span className="shrink-0 text-[11px] font-semibold text-brand">나</span>}
+                                                    </p>
+                                                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                                        주 역할: {worshipRoles[member.role] ?? member.role}
+                                                        <span aria-hidden="true"> · </span>
+                                                        <span className={cn(isManager && 'font-medium text-foreground')}>{isManager ? '관리자' : '팀원'}</span>
+                                                        {member.userId.startsWith('direct-') && (
+                                                            <>
+                                                                <span aria-hidden="true"> · </span>
+                                                                직접 등록
+                                                            </>
+                                                        )}
+                                                    </p>
+                                                </div>
+
+                                                <div className={cn('flex items-center gap-1.5', isOwner ? 'w-full pl-12 sm:w-auto sm:pl-0' : 'shrink-0')}>
+                                                    <label className={cn('min-w-0', isOwner ? 'flex-1 sm:w-36 sm:flex-none' : 'w-32')}>
+                                                        <span className="sr-only">{member.name} 담당 역할</span>
+                                                        <Select
+                                                            // 관리자가 아니면 바꿀 수 없으므로 회색 칩처럼 보여줍니다.
+                                                            className={cn('h-10', !isOwner && 'disabled:border-transparent disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100')}
+                                                            value={member.role}
+                                                            disabled={!isOwner || pending}
+                                                            onChange={(event) => assign(member.userId, event.target.value as WorshipRole)}
+                                                        >
+                                                            {Object.entries(worshipRoles).map(([key, label]) => (
+                                                                <option key={key} value={key}>
+                                                                    {label}
+                                                                </option>
+                                                            ))}
+                                                        </Select>
+                                                    </label>
+
+                                                    {isOwner && (
+                                                        <>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                title={isManager ? '관리자 권한 해제' : '관리자 권한 부여'}
+                                                                className={cn('h-10 w-10 shrink-0 px-0 md:w-28', isManager ? 'text-foreground' : 'text-muted-foreground')}
+                                                                disabled={pending}
+                                                                onClick={() => handleTogglePermission(member.userId, member.permission)}
+                                                            >
+                                                                <Shield aria-hidden="true" />
+                                                                <span className="hidden md:inline">{isManager ? '관리자 해제' : '관리자 지정'}</span>
+                                                            </Button>
+
+                                                            {isMe ? (
+                                                                // 줄마다 버튼 위치가 맞도록 자기 자신 줄에는 빈 자리를 둡니다.
+                                                                <span className="h-10 w-10 shrink-0 md:w-[4.5rem]" aria-hidden="true" />
+                                                            ) : (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="destructive-outline"
+                                                                    size="sm"
+                                                                    title="팀에서 제외"
+                                                                    className="h-10 w-10 shrink-0 px-0 md:w-[4.5rem]"
+                                                                    disabled={pending}
+                                                                    onClick={() => handleRemoveMember(member.userId, member.name)}
+                                                                >
+                                                                    <Trash2 aria-hidden="true" />
+                                                                    <span className="hidden md:inline">제외</span>
+                                                                </Button>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
                             )}
-                        </div>
+                        </section>
                     </div>
-                </section>
+                </>
             ) : (
-                <div className="rounded-3xl border border-dashed border-border/80 bg-card p-12 text-center text-muted-foreground">
-                    <UsersRound className="mx-auto mb-3 size-10 text-muted-foreground/60" />
-                    <p className="font-bold text-foreground">아직 참여 중인 팀이 없습니다.</p>
-                    <p className="mt-1 text-xs">새 팀을 만들거나 전달받은 초대 링크를 열어 참여하세요.</p>
+                <div className="rounded-3xl border border-dashed border-input px-5 py-10 text-center">
+                    <span className="mx-auto flex size-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground" aria-hidden="true">
+                        <UsersRound size={18} />
+                    </span>
+                    <p className="mt-3 text-[15px] font-semibold text-foreground">아직 참여 중인 팀이 없습니다.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">새 팀을 만들거나 전달받은 초대 링크를 열어 참여하세요.</p>
+                </div>
+            )}
+
+            {/* 새 팀 만들기: 레퍼런스의 '+' 펼침 줄 */}
+            <details open={!teams.length} className="group/create border-y border-border/70 py-1.5">
+                <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring/30 [&::-webkit-details-marker]:hidden">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground" aria-hidden="true">
+                        <Plus size={18} strokeWidth={2.25} />
+                    </span>
+                    <span className="flex-1 text-[15px] font-medium text-foreground">새 예배팀 만들기</span>
+                    <ChevronDown size={16} className="text-muted-foreground transition group-open/create:rotate-180" aria-hidden="true" />
+                </summary>
+                <form onSubmit={create} className="flex flex-col gap-3 pb-4 pt-2 sm:flex-row sm:items-end">
+                    <label className={cn(labelClass, 'flex-1 sm:max-w-sm')}>
+                        새 팀 명칭
+                        <Input
+                            className="mt-1.5"
+                            value={name}
+                            onChange={(event) => setName(event.target.value)}
+                            required
+                            maxLength={40}
+                            placeholder="예: 주일 2부 찬양팀"
+                        />
+                    </label>
+                    <Button type="submit" disabled={pending || !name.trim()}>
+                        <Plus aria-hidden="true" />
+                        <span>팀 만들기</span>
+                    </Button>
+                </form>
+            </details>
+
+            {/* 위험 구역: 팀 탈퇴 / 팀 삭제 */}
+            {team && (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <AlertTriangle size={14} className={STATUS.warn.text} aria-hidden="true" />
+                        <span>팀 탈퇴 및 삭제 관리</span>
+                    </p>
+                    {isOwner ? (
+                        <Button type="button" variant="destructive-outline" size="sm" onClick={handleDeleteTeam} disabled={pending}>
+                            팀 영구 삭제
+                        </Button>
+                    ) : (
+                        <Button type="button" variant="outline" size="sm" className="text-muted-foreground hover:text-destructive" onClick={handleLeaveTeam} disabled={pending}>
+                            <LogOut aria-hidden="true" />
+                            <span>팀 나가기</span>
+                        </Button>
+                    )}
                 </div>
             )}
 
@@ -748,57 +704,55 @@ export default function OnlineTeamManager({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby={batchInputId}
-                    className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs animate-in fade-in sm:p-4"
+                    className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 animate-in fade-in sm:items-center sm:p-4"
                     onClick={(e) => {
                         if (e.target === e.currentTarget) setBatchOpen(false);
                     }}
                 >
-                    <div className="flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-3xl sm:rounded-3xl border border-border bg-card shadow-2xl overflow-hidden pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-0 animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
+                    <div className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border/70 bg-card pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-xl animate-in slide-in-from-bottom duration-200 sm:rounded-3xl sm:pb-0 sm:slide-in-from-bottom-0 sm:zoom-in-95">
                         {/* 모바일 바텀시트 핸들 바 */}
-                        <div className="mx-auto my-2.5 h-1.5 w-12 rounded-full bg-border sm:hidden shrink-0" />
+                        <div className="mx-auto mt-2.5 h-1.5 w-12 shrink-0 rounded-full bg-border sm:hidden" />
 
-                        <div className="flex items-center justify-between border-b border-border/60 p-4 sm:p-5 bg-muted/30 shrink-0">
-                            <div className="flex items-center gap-2">
-                                <FileText className="text-primary" size={20} />
-                                <h3 id={batchInputId} className="text-base sm:text-lg font-bold text-foreground">
+                        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pt-4 sm:px-6 sm:pt-6">
+                            <div className="flex min-w-0 items-center gap-3">
+                                <span className={iconTile} aria-hidden="true">
+                                    <ClipboardList size={18} />
+                                </span>
+                                <h2 id={batchInputId} className={sectionTitle}>
                                     명단 텍스트 일괄 붙여넣기
-                                </h3>
+                                </h2>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setBatchOpen(false)}
-                                className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            >
-                                <X size={18} />
-                            </button>
+                            <Button type="button" variant="ghost" size="icon-sm" aria-label="닫기" className="-mr-2 shrink-0 text-muted-foreground" onClick={() => setBatchOpen(false)}>
+                                <X size={18} aria-hidden="true" />
+                            </Button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-                            <p className="text-xs text-muted-foreground leading-relaxed">
+                        <div className="flex-1 space-y-4 overflow-y-auto px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+                            <p className="text-xs leading-relaxed text-muted-foreground">
                                 카카오톡이나 명단 텍스트를 줄 단위로 붙여넣으세요. 이름과 파트를 자동으로 인식합니다.
                                 <br />
-                                예: <code className="rounded bg-muted px-1">김철수 보컬</code>, <code className="rounded bg-muted px-1">이영희 (건반)</code>, <code className="rounded bg-muted px-1">박민수 드럼</code>
+                                예: <code className="rounded-md bg-muted px-1.5 py-0.5 font-sans text-foreground">김철수 보컬</code>, <code className="rounded-md bg-muted px-1.5 py-0.5 font-sans text-foreground">이영희 (건반)</code>, <code className="rounded-md bg-muted px-1.5 py-0.5 font-sans text-foreground">박민수 드럼</code>
                             </p>
 
-                            <textarea
-                                className={`${field} h-36 py-2.5 resize-none font-mono text-xs`}
+                            <Textarea
+                                className="h-36 resize-none"
                                 placeholder="김철수 보컬&#10;이영희 건반&#10;박민수 드럼&#10;최기타 기타&#10;정베이스 베이스"
                                 value={batchText}
                                 onChange={(e) => setBatchText(e.target.value)}
                             />
 
                             {parsedBatch.length > 0 && (
-                                <div className="rounded-xl border border-border/80 bg-muted/40 p-3 max-h-36 overflow-y-auto space-y-1.5 text-xs">
-                                    <p className="font-semibold text-foreground">
+                                <div className="max-h-36 overflow-y-auto">
+                                    <p className="text-xs font-medium text-foreground">
                                         인식된 팀원 ({parsedBatch.length}명):
                                     </p>
-                                    <div className="flex flex-wrap gap-1.5">
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
                                         {parsedBatch.map((item, idx) => (
                                             <span
                                                 key={idx}
-                                                className="inline-flex items-center gap-1 rounded-md bg-card border border-border px-2 py-1 text-[11px] font-medium"
+                                                className="inline-flex h-7 items-center gap-1 rounded-full bg-muted px-2.5 text-xs"
                                             >
-                                                <span className="font-bold">{item.name}</span>
+                                                <span className="font-semibold text-foreground">{item.name}</span>
                                                 <span className="text-muted-foreground">({worshipRoles[item.role]})</span>
                                             </span>
                                         ))}
@@ -806,22 +760,17 @@ export default function OnlineTeamManager({
                                 </div>
                             )}
 
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
-                                <button
-                                    type="button"
-                                    onClick={() => setBatchOpen(false)}
-                                    className={`${button} text-xs py-2`}
-                                >
+                            <div className="flex items-center justify-end gap-2 border-t border-border/70 pt-4">
+                                <Button type="button" variant="outline" onClick={() => setBatchOpen(false)}>
                                     취소
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                     type="button"
                                     onClick={handleAddBatchMembers}
                                     disabled={pending || parsedBatch.length === 0}
-                                    className={`${button} bg-primary text-primary-foreground font-bold hover:bg-primary/90 text-xs py-2`}
                                 >
                                     {pending ? '등록 중…' : `${parsedBatch.length}명 일괄 등록하기`}
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </div>
