@@ -8,6 +8,7 @@ import type { ScreenId } from './model';
 import { useConti } from './context';
 import type { Notice, NoticeCategory, NoticeGroup, NoticeKind } from './planningBridge';
 import { PlanningError, useDispatch } from './planningUi';
+import { AskCards } from './substituteUi';
 import { Avatar, Eyebrow, RoundIconButton, SampleChip, TONE_BLOCK, TONE_ICON, body, chip, ink, line, sub } from './ui';
 import type { Tone } from './model';
 
@@ -91,6 +92,7 @@ export default function AlertsScreen({ onBack, openOrder, go }: { onBack: () => 
                 </button>
             </header>
             <PlanningError />
+            {planning.ready && <AskCards />}
 
             <div role="tablist" aria-label="알림 종류" className={cn('flex gap-6 border-b', line)}>
                 {FILTERS.map((item) => {

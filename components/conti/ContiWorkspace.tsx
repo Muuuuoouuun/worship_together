@@ -159,7 +159,8 @@ export default function ContiWorkspace({
     }
 
     return (
-        <div className={cn('relative isolate flex flex-col break-keep bg-white dark:bg-neutral-900', framed ? 'h-full overflow-hidden' : 'min-h-dvh')}>
+        // 휴대폰 프레임 안에서는 transform 으로 fixed 시트가 화면 전체가 아니라 프레임에 붙게 합니다.
+        <div className={cn('relative isolate flex flex-col break-keep bg-white dark:bg-neutral-900', framed ? 'h-full overflow-hidden [transform:translateZ(0)]' : 'min-h-dvh')}>
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72" style={TOP_GLOW} />
 
             <div ref={scrollRef} className={cn('flex-1', framed && 'no-scrollbar overflow-y-auto overscroll-contain')}>

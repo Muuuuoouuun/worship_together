@@ -14,6 +14,10 @@ export type ScheduleSlot = {
     invitedAt?: string;
     respondedAt?: string;
     declineReason?: string;
+    /** 대체 부탁을 받은 팀원 (결석·대체 요청 때 같은 악기·파트로 등록된 팀원, 팀 전체 요청이면 그 대상까지) */
+    asked?: string[];
+    /** 부탁을 받고 '이번엔 어려워요'라고 답한 팀원 */
+    passed?: string[];
 };
 export type TeamSchedule = {
     id: string; title: string; kind: 'rehearsal' | 'worship'; startsAt: string; endsAt: string;
@@ -27,6 +31,8 @@ export type UrgentAlert = {
 export type PlanningNotification = {
     id: string; title: string; body: string; urgent: boolean; target: 'requests' | 'schedule' | 'rotation';
     entityId: string; recipientIds: string[]; readBy: string[]; createdAt: string;
+    /** 특정 자리에 관한 알림이면 그 자리 (대체 부탁 카드에서 바로 지원·거절) */
+    slotId?: string;
 };
 export type RotationTeam = { id: string; name: string; memberIds: string[] };
 export type RotationGroup = {
@@ -98,6 +104,8 @@ export type PlanningCommand =
     | { type: 'slot.volunteer'; eventId: string; slotId: string }
     | { type: 'slot.unvolunteer'; eventId: string; slotId: string }
     | { type: 'slot.accept'; eventId: string; slotId: string; memberId: string }
+    | { type: 'slot.pass'; eventId: string; slotId: string }
+    | { type: 'slot.askAll'; eventId: string; slotId: string }
     | { type: 'rotation.save'; rotationId?: string; group: { name: string; targetRole: WorshipRole | 'all'; cycleType: 'team' | 'individual'; teams?: RotationTeam[]; members?: string[]; currentStep?: number; notes?: string } }
     | { type: 'rotation.remove'; rotationId: string }
     | { type: 'rotation.step'; rotationId: string; direction: 'next' | 'prev' }

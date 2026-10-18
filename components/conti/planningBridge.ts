@@ -6,6 +6,7 @@
 import { requestKinds, requestStatuses, type PlanningCommand, type PlanningNotification, type PlanningState, type SetlistRequest, type TeamSchedule, type UrgentAlert } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { canHandleSlot, canManagePlanning, leadParts, type LeadPart } from '@/types/planning';
+import { slotKeepers, substituteOptions, type SlotKeeper, type SubstituteOption } from '@/lib/planning';
 import { diffDays, relativeTime, seoulDateTime, type ContiSetlist } from './model';
 
 export const ROLE_ORDER: WorshipRole[] = ['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member'];
@@ -35,6 +36,29 @@ export interface PartAssignment {
     volunteered: boolean;
     /** 보는 사람이 이 자리의 대체 요청·지원자 확정을 할 수 있는지 (관리자 또는 이 파트 담당) */
     canHandle: boolean;
+    /** 결석·대체 알림을 받는 사람 (그 예배 인도자·파트 담당, 없으면 관리자). 대체가 필요한 자리만 채웁니다 */
+    keepers: { id: string; name: string; label: string }[];
+    /** 대체 부탁 현황: 부탁한 수, '이번엔 어려워요' 답한 사람 */
+    asks: { asked: number; passedNames: string[] };
+    /** 같은 역할의 다른 팀원. 설 수 있는 사람 먼저, 적게 선 순서. blocker 가 있으면 못 서는 이유 */
+    options: { id: string; name: string; load: number; blocker: string | null }[];
+}
+
+export const KEEPER_LABEL: Record<SlotKeeper['as'], string> = { leader: '인도자', band: leadParts.band, vocal: leadParts.vocal, manager: '관리자' };
+export const BLOCKER_LABEL: Record<NonNullable<SubstituteOption['blocker']>, string> = { assigned: '이 예배에 배치됨', blocked: '불가일', clash: '겹치는 일정' };
+
+/** 팀 소식의 대체 부탁 카드에서 바로 응답하기 위한 자리 상태 */
+export interface NoticeAsk {
+    eventId: string;
+    slotId: string;
+    roleLabel: string;
+    /** 아직 대체를 찾는 중인지 */
+    open: boolean;
+    canVolunteer: boolean;
+    volunteered: boolean;
+    passed: boolean;
+    /** 다른 사람으로 채워졌으면 그 이름 */
+    filledBy: string | null;
 }
 
 export interface PartLeadGroup {
@@ -129,6 +153,8 @@ export interface Notice {
     group: NoticeGroup;
     ago: string;
     unread: boolean;
+    /** 보는 사람에게 온 대체 부탁이면 그 자리 */
+    ask?: NoticeAsk;
 }
 
 export interface PlanningViewer {
@@ -218,6 +244,17 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
     const canVolunteerFor = (event: TeamSchedule, slot: TeamSchedule['slots'][number]) =>
         Boolean(me) && slot.memberId !== userId && (!slot.memberId || slot.attendance === 'absent' || openAlert(event.id, slot.id)) && !placedElsewhere(event, slot);
 
+    /** 대체가 필요한 자리(빈자리·불참·대체 모집 중)만 알림 대상과 대체 후보를 계산합니다. */
+    const substituteView = (event: TeamSchedule, slot: TeamSchedule['slots'][number]): Pick<PartAssignment, 'keepers' | 'asks' | 'options'> => {
+        const needs = !slot.memberId || slot.attendance === 'absent' || openAlert(event.id, slot.id);
+        if (!needs) return { keepers: [], asks: { asked: 0, passedNames: [] }, options: [] };
+        return {
+            keepers: slotKeepers(state, members, event, slot).map((keeper) => ({ id: keeper.memberId, name: nameOf(keeper.memberId) ?? '팀원', label: KEEPER_LABEL[keeper.as] })),
+            asks: { asked: (slot.asked ?? []).length, passedNames: (slot.passed ?? []).map((id) => nameOf(id)).filter((name): name is string => name !== null) },
+            options: substituteOptions(state, members, event, slot).map((option) => ({ id: option.memberId, name: nameOf(option.memberId) ?? '팀원', load: option.load, blocker: option.blocker ? BLOCKER_LABEL[option.blocker] : null })),
+        };
+    };
+
     const services: ServiceDay[] = live
         .filter((event) => event.kind === 'worship')
         .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
@@ -240,6 +277,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                     canVolunteer: canVolunteerFor(event, slot),
                     volunteered: slot.volunteers.includes(userId),
                     canHandle: Boolean(me) && canHandleSlot(state, members, userId, slot.role),
+                    ...substituteView(event, slot),
                 }));
             return {
                 eventId: event.id,
@@ -343,6 +381,25 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
     const allRequests = [...requests, ...alertItems].sort((a, b) => Number(a.done) - Number(b.done) || b.createdAt.localeCompare(a.createdAt));
 
     const memberNames = members.map((member) => member.name);
+    /** 나에게 온 대체 부탁 알림이면, 지금 그 자리 상태 */
+    const askOf = (item: PlanningNotification): NoticeAsk | undefined => {
+        if (!item.slotId) return undefined;
+        const event = state.events.find((candidate) => candidate.id === item.entityId);
+        const slot = event?.slots.find((candidate) => candidate.id === item.slotId);
+        if (!event || event.cancelled || !slot || !slot.asked?.includes(userId)) return undefined;
+        const open = !slot.memberId || slot.attendance === 'absent' || openAlert(event.id, slot.id);
+        return {
+            eventId: event.id,
+            slotId: slot.id,
+            roleLabel: worshipRoles[slot.role],
+            open,
+            canVolunteer: canVolunteerFor(event, slot),
+            volunteered: slot.volunteers.includes(userId),
+            passed: Boolean(slot.passed?.includes(userId)),
+            filledBy: open ? null : nameOf(slot.memberId),
+        };
+    };
+
     const notices: Notice[] = state.notifications
         .filter((item) => item.recipientIds.includes(userId))
         .map((item): Notice => {
@@ -363,6 +420,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                 group: groupOf(item.createdAt, today),
                 ago: ago(item.createdAt),
                 unread: !item.readBy.includes(userId),
+                ask: askOf(item),
             };
         });
 

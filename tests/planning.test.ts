@@ -283,7 +283,9 @@ test('slot saves preserve absent and vacant substitution state until the assigne
         assert.deepEqual(f.read().alerts, beforeAlerts, 'role-only edits keep the existing urgent request open');
 
         f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId: other.id, role: 'keyboard' });
-        assert.deepEqual(readSlot(), { ...beforeSlot, role: 'keyboard', memberId: other.id, attendance: 'pending', volunteers: [] });
+        const kept = { ...beforeSlot };
+        delete kept.asked; delete kept.passed;
+        assert.deepEqual(readSlot(), { ...kept, role: 'keyboard', memberId: other.id, attendance: 'pending', volunteers: [] }, 'reassignment also clears the substitute asks');
         assert.ok(f.read().alerts.find(alert => alert.id === beforeAlerts[0].id)!.resolvedAt, 'assigning a replacement closes the old request');
     }
 });
@@ -309,7 +311,9 @@ test('saving or changing the role of a confirmed assignee preserves confirmation
     assert.deepEqual(f.read().alerts, beforeAlerts);
 
     f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId: other.id, role: 'guitar' });
-    assert.deepEqual(f.read().events[0].slots[0], { ...beforeSlot, role: 'guitar', memberId: other.id, attendance: 'pending', volunteers: [] });
+    const kept = { ...beforeSlot };
+    delete kept.asked; delete kept.passed;
+    assert.deepEqual(f.read().events[0].slots[0], { ...kept, role: 'guitar', memberId: other.id, attendance: 'pending', volunteers: [] });
     assert.ok(f.read().alerts.find(alert => alert.id === beforeAlerts[0].id)!.resolvedAt);
 });
 
