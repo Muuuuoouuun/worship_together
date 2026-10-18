@@ -59,6 +59,13 @@ export default async function WorshipDraftsPage({ searchParams }: WorshipDraftsP
                     </div>
                     <div className="flex items-center gap-2">
                         <Link
+                            href="/session/drafts/compare"
+                            className="inline-flex h-8 items-center gap-1 rounded-full bg-brand px-3.5 text-xs font-medium text-brand-foreground transition-opacity hover:opacity-90"
+                        >
+                            최종 후보 비교
+                            <ArrowUpRight size={14} />
+                        </Link>
+                        <Link
                             href="/session/drafts/pulse"
                             className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
                         >

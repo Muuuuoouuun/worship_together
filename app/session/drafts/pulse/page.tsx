@@ -43,9 +43,18 @@ export default async function PulseDraftsPage({ searchParams }: PulseDraftsPageP
                             박자를 보여 주는 펄스 화면과, 큐 · 연결 상태 · 저장 · 팀 소식을 알리는 토스트를 한 세트로 세 가지 방향으로 그렸습니다. 박자는 실제 BPM 으로 움직이고, 틀 아래 버튼으로 알림을 직접 띄워 볼 수 있습니다.
                         </p>
                     </div>
-                    <span className="rounded-full bg-card px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border">
-                        목업 데이터 · 믿음으로 서리라 D · 72 BPM · 4/4
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <Link
+                            href="/session/drafts/compare"
+                            className="inline-flex h-8 items-center gap-1 rounded-full bg-brand px-3.5 text-xs font-medium text-brand-foreground transition-opacity hover:opacity-90"
+                        >
+                            최종 후보 비교
+                            <ArrowUpRight size={14} />
+                        </Link>
+                        <span className="rounded-full bg-card px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border">
+                            목업 데이터 · 믿음으로 서리라 D · 72 BPM · 4/4
+                        </span>
+                    </div>
                 </header>
 
                 <div className="mx-auto mt-14 max-w-[1280px] space-y-28">
