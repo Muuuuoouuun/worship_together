@@ -50,12 +50,21 @@ export type ScheduleTemplateKey = keyof typeof scheduleTemplates;
 
 export type BlockedDate = { memberId: string; date: string; reason?: string };
 
+/** 파트 담당. 펑크(결석)가 나면 그 예배 인도자와 함께 이 사람들에게 알림이 갑니다. */
+export const leadParts = { band: '악기장', vocal: '싱어 담당' } as const;
+export type LeadPart = keyof typeof leadParts;
+export type PartLead = { part: LeadPart; memberId: string };
+/** 건반·기타·베이스·드럼은 악기장, 보컬은 싱어 담당 소관. 인도자·음향·영상은 해당 없음 */
+export const partOfRole = (role: WorshipRole): LeadPart | null =>
+    role === 'keyboard' || role === 'guitar' || role === 'bass' || role === 'drums' ? 'band' : role === 'vocal' ? 'vocal' : null;
+
 export type PlanningState = {
     version: 1; requests: SetlistRequest[]; events: TeamSchedule[]; alerts: UrgentAlert[]; notifications: PlanningNotification[];
     rotations?: RotationGroup[];
     blockedDates?: BlockedDate[];
+    partLeads?: PartLead[];
 };
-export const emptyPlanningState = (): PlanningState => ({ version: 1, requests: [], events: [], alerts: [], notifications: [], rotations: [], blockedDates: [] });
+export const emptyPlanningState = (): PlanningState => ({ version: 1, requests: [], events: [], alerts: [], notifications: [], rotations: [], blockedDates: [], partLeads: [] });
 export type ScheduleInput = {
     title: string; kind: TeamSchedule['kind']; startsAt: string; endsAt: string; location: string; notes: string;
     setlistTitle?: string | null; setlistSongs?: string[] | null; setlistId?: string | null;
@@ -96,6 +105,7 @@ export type PlanningCommand =
     | { type: 'rotation.batchApply'; rotationId: string; eventIds: string[] }
     | { type: 'member.blockDate'; date: string; reason?: string }
     | { type: 'member.unblockDate'; date: string }
+    | { type: 'partLead.set'; part: LeadPart; memberIds: string[] }
     | { type: 'notification.read'; notificationId: string }
     | { type: 'notification.readAll' };
 export type PlanningPanelProps = {
@@ -103,4 +113,10 @@ export type PlanningPanelProps = {
     onCommand: (command: PlanningCommand) => Promise<boolean>;
 };
 export const canManagePlanning = (members: TeamMember[], userId: string) => members.some(member => member.userId === userId && (member.permission === 'owner' || member.role === 'leader'));
+/** 관리자이거나 이 역할 파트의 담당이면 대체 요청·지원자 확정을 할 수 있습니다. */
+export const canHandleSlot = (state: Pick<PlanningState, 'partLeads'>, members: TeamMember[], userId: string, role: WorshipRole) => {
+    if (canManagePlanning(members, userId)) return true;
+    const part = partOfRole(role);
+    return Boolean(part) && (state.partLeads ?? []).some(lead => lead.part === part && lead.memberId === userId);
+};
 export const planningDate = (iso: string) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });

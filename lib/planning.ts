@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createClientId } from './clientId';
 import { worshipRoles, type TeamMember } from '../types/team';
-import { canManagePlanning, emptyPlanningState, planningDate, requestKinds, scheduleTemplates, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
+import { canHandleSlot, canManagePlanning, emptyPlanningState, leadParts, partOfRole, planningDate, requestKinds, scheduleTemplates, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
 
 const id = z.string().min(1).max(200);
 const body = z.string().trim().min(1, '내용을 입력해주세요.').max(1500);
@@ -103,6 +103,7 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('notification.readAll') }),
     z.object({ type: z.literal('member.blockDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(200).optional() }),
     z.object({ type: z.literal('member.unblockDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+    z.object({ type: z.literal('partLead.set'), part: z.enum(['band', 'vocal']), memberIds: z.array(id).max(10) }),
 ]);
 const stamp = z.string();
 const stateSchema = z.object({
@@ -113,12 +114,13 @@ const stateSchema = z.object({
     notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp })),
     rotations: z.array(rotationGroupSchema).optional().default([]),
     blockedDates: z.array(z.object({ memberId: id, date: z.string(), reason: z.string().optional() })).optional().default([]),
+    partLeads: z.array(z.object({ part: z.enum(['band', 'vocal']), memberId: id })).optional().default([]),
 });
 export function parsePlanningState(value: unknown): PlanningState {
     if (value == null) return emptyPlanningState();
     const result = stateSchema.safeParse(value);
     if (!result.success) throw new Error('저장된 일정 자료를 읽지 못했습니다. 새로고침 후 다시 확인해주세요.');
-    return { ...result.data, rotations: result.data.rotations ?? [], blockedDates: result.data.blockedDates ?? [] };
+    return { ...result.data, rotations: result.data.rotations ?? [], blockedDates: result.data.blockedDates ?? [], partLeads: result.data.partLeads ?? [] };
 }
 export function planningForViewer(state: PlanningState, members: TeamMember[], userId: string): PlanningState {
     if (!members.some(member => member.userId === userId)) throw new Error('이 팀에 접근할 수 없습니다.');
@@ -135,6 +137,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
     const command = parsed.data;
     const state = structuredClone(previous);
     state.rotations = state.rotations ?? [];
+    state.partLeads = state.partLeads ?? [];
     const now = new Date().toISOString();
     const managers = members.filter(member => member.permission === 'owner' || member.role === 'leader').map(member => member.userId);
     const manage = () => { if (!canManagePlanning(members, userId)) throw new Error('인도자 또는 팀 관리자만 변경할 수 있습니다.'); };
@@ -158,6 +161,26 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         state.alerts.unshift({ id: alertId, eventId: event.id, slotId, kind, body: text, authorId: userId, createdAt: now, resolvedAt: null });
         const recipients = targetRecipients ?? everyone;
         notify(recipients, kind === 'absence' ? '결석 · 대체 인원이 필요해요' : kind === 'substitute' ? '대체 인원을 구해요' : '긴급 안내', `${event.title} · ${text}`, 'schedule', event.id, true);
+    };
+    /** 결석·대체를 챙길 사람: 그 예배의 인도자 + 파트 담당(악기장·싱어 담당). 아무도 없으면 인도자·관리자 전체 */
+    const slotKeepers = (event: TeamSchedule, slot: ScheduleSlot) => {
+        const part = partOfRole(slot.role);
+        const eventLeaders = event.slots.filter(item => item.role === 'leader' && item.memberId && item.attendance !== 'absent').map(item => item.memberId!);
+        const partLeads = part ? state.partLeads!.filter(lead => lead.part === part).map(lead => lead.memberId) : [];
+        const keepers = [...eventLeaders, ...partLeads].filter(memberId => members.some(member => member.userId === memberId));
+        return keepers.length ? keepers : managers;
+    };
+    /** 같은 역할로 등록된 팀원 중 이 예배에 설 수 있는 사람 (이 예배에 이미 있거나, 불가일이거나, 시간이 겹치면 제외). 적게 선 사람부터 */
+    const substituteCandidates = (event: TeamSchedule, slot: ScheduleSlot) => {
+        const load = new Map<string, number>();
+        for (const ev of state.events) { if (ev.cancelled) continue; for (const sl of ev.slots) if (sl.memberId) load.set(sl.memberId, (load.get(sl.memberId) ?? 0) + 1); }
+        const eventDate = event.startsAt.slice(0, 10);
+        const blocked = new Set((state.blockedDates ?? []).filter(item => item.date === eventDate).map(item => item.memberId));
+        const assignedInEvent = new Set(event.slots.map(item => item.memberId).filter((memberId): memberId is string => Boolean(memberId)));
+        return members
+            .filter(member => member.userId !== slot.memberId && !assignedInEvent.has(member.userId) && !blocked.has(member.userId) && (member.role === slot.role || slot.role === 'member'))
+            .filter(member => { try { available(event, member.userId); return true; } catch { return false; } })
+            .sort((a, b) => (load.get(a.userId) ?? 0) - (load.get(b.userId) ?? 0));
     };
     switch (command.type) {
         case 'request.create': {
@@ -297,22 +320,14 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             else {
                 slot.declineReason = command.reason || undefined;
                 closeSlotAlerts(event.id, slot.id);
-                urgent(event, slot.id, 'absence', `${actor.name} · ${worshipRoles[slot.role]} 결석${command.reason ? `: ${command.reason}` : ''}`);
+                // 펑크 알림은 팀 전체가 아니라 그 예배 인도자·파트 담당에게, 대체 부탁은 같은 악기·파트 팀원에게
+                const keepers = slotKeepers(event, slot);
+                urgent(event, slot.id, 'absence', `${actor.name} · ${worshipRoles[slot.role]} 결석${command.reason ? `: ${command.reason}` : ''}`, keepers);
                 if (command.autoRequestSubstitute !== false) {
-                    // Auto-suggest substitute: find candidates matching this role, sorted by workload
-                    const wMap = new Map<string, number>();
-                    for (const m of members) wMap.set(m.userId, 0);
-                    for (const ev of state.events) { if (ev.cancelled) continue; for (const sl of ev.slots) { if (sl.memberId && wMap.has(sl.memberId)) wMap.set(sl.memberId, wMap.get(sl.memberId)! + 1); } }
-                    const eventDate = event.startsAt.slice(0, 10);
-                    const blocked = new Set((state.blockedDates ?? []).filter(b => b.date === eventDate).map(b => b.memberId));
-                    const assignedInEvent = new Set(event.slots.map(s => s.memberId).filter((mid): mid is string => Boolean(mid)));
-                    const subs = members
-                        .filter(m => m.userId !== userId && !assignedInEvent.has(m.userId) && !blocked.has(m.userId) && (m.role === slot.role || slot.role === 'member'))
-                        .filter(m => { try { available(event, m.userId); return true; } catch { return false; } })
-                        .sort((a, b) => (wMap.get(a.userId) ?? 0) - (wMap.get(b.userId) ?? 0));
+                    const subs = substituteCandidates(event, slot);
                     if (subs.length > 0) {
-                        const topNames = subs.slice(0, 3).map(m => m.name).join(', ');
-                        notify(managers, '대체 인원 후보가 있어요', `${event.title} · ${worshipRoles[slot.role]} · 추천: ${topNames}`, 'schedule', event.id);
+                        notify(subs.map(member => member.userId), `${worshipRoles[slot.role]} 대체 가능하신가요?`, `${event.title} · ${planningDate(event.startsAt)} · ${actor.name}${command.reason ? ` · 사유: ${command.reason}` : ''}`, 'schedule', event.id, true);
+                        notify(keepers, '대체 인원 후보가 있어요', `${event.title} · ${worshipRoles[slot.role]} · 추천: ${subs.slice(0, 3).map(member => member.name).join(', ')}`, 'schedule', event.id);
                     }
                 }
             }
@@ -350,8 +365,10 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             } else {
                 if (!command.slotId) throw new Error('대체할 배치를 선택해주세요.');
                 const slot = slotById(event, command.slotId);
-                if (slot.memberId !== userId) manage();
-                urgent(event, slot.id, 'substitute', command.body);
+                if (slot.memberId !== userId && !canHandleSlot(state, members, userId, slot.role)) manage();
+                // 같은 악기·파트 팀원과 담당자에게. 설 수 있는 사람이 없으면 팀 전체에 알립니다.
+                const subs = substituteCandidates(event, slot).map(member => member.userId);
+                urgent(event, slot.id, 'substitute', command.body, subs.length ? [...slotKeepers(event, slot), ...subs] : everyone);
             }
             break;
         }
@@ -368,7 +385,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (!open && slot.memberId && slot.attendance !== 'absent') throw new Error('대체 요청이 없는 배치입니다.');
             if (slot.memberId === userId) throw new Error('본인 배치에는 대체 지원할 수 없습니다.');
             available(event, userId);
-            if (!slot.volunteers.includes(userId)) { slot.volunteers.push(userId); notify(managers, '대체 지원자가 있어요', `${event.title} · ${actor.name}`, 'schedule', event.id, true); }
+            if (!slot.volunteers.includes(userId)) { slot.volunteers.push(userId); notify(slotKeepers(event, slot), '대체 지원자가 있어요', `${event.title} · ${actor.name}`, 'schedule', event.id, true); }
             break;
         }
         case 'slot.unvolunteer': {
@@ -378,7 +395,8 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             break;
         }
         case 'slot.accept': {
-            manage(); const event = eventById(command.eventId); const slot = slotById(event, command.slotId);
+            const event = eventById(command.eventId); const slot = slotById(event, command.slotId);
+            if (!canHandleSlot(state, members, userId, slot.role)) manage();
             if (!slot.volunteers.includes(command.memberId)) throw new Error('지원한 팀원만 확정할 수 있습니다.');
             available(event, command.memberId, slot.id);
             const oldMember = slot.memberId;
@@ -834,6 +852,15 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (state.blockedDates.filter(b => b.memberId === userId).length >= 60) throw new Error('불가일은 최대 60일까지 등록할 수 있습니다.');
             state.blockedDates.push({ memberId: userId, date: command.date, reason: command.reason });
             notify(managers, '불가일 등록', `${actor.name} · ${command.date}${command.reason ? ` (${command.reason})` : ''}`, 'schedule', userId);
+            break;
+        }
+        case 'partLead.set': {
+            manage();
+            const ids = [...new Set(command.memberIds)];
+            if (ids.some(memberId => !members.some(member => member.userId === memberId))) throw new Error('이 팀의 팀원만 파트 담당으로 등록할 수 있습니다.');
+            const before = state.partLeads!.filter(lead => lead.part === command.part).map(lead => lead.memberId);
+            state.partLeads = [...state.partLeads!.filter(lead => lead.part !== command.part), ...ids.map(memberId => ({ part: command.part, memberId }))];
+            notify(ids.filter(memberId => !before.includes(memberId)), `${leadParts[command.part]}으로 등록되었어요`, '파트에 결석이 생기면 알림을 받고, 대체 지원자를 확정할 수 있어요', 'schedule', userId);
             break;
         }
         case 'member.unblockDate': {

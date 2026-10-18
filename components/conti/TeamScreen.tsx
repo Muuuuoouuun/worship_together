@@ -187,7 +187,7 @@ export function AssignmentRow({ service, item }: { service: ServiceDay; item: Pa
                 </div>
             </div>
 
-            {(item.volunteers.length > 0 || item.mine || manager || canVolunteer) && (
+            {(item.volunteers.length > 0 || item.mine || manager || item.canHandle || canVolunteer) && (
                 <div className="mt-2.5 space-y-2 pl-[3.375rem]">
                     {item.volunteers.length > 0 && (
                         <div className="flex flex-wrap items-center gap-2">
@@ -196,7 +196,7 @@ export function AssignmentRow({ service, item }: { service: ServiceDay; item: Pa
                                 <span key={person.id} className="inline-flex items-center gap-1.5">
                                     <Avatar name={person.name} size="xs" />
                                     <span className={cn('text-xs', ink)}>{person.name}</span>
-                                    {manager && (
+                                    {item.canHandle && (
                                         <button
                                             type="button"
                                             disabled={busy || !person.member}
@@ -266,7 +266,7 @@ export function AssignmentRow({ service, item }: { service: ServiceDay; item: Pa
                                     {item.invitedAt ? '초대 재발송' : '초대 알림'}
                                 </button>
                             )}
-                            {manager && item.status === 'declined' && !item.substituteOpen && (
+                            {item.canHandle && item.status === 'declined' && !item.substituteOpen && (
                                 <button
                                     type="button"
                                     disabled={busy}

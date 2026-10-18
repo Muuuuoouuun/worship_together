@@ -344,7 +344,8 @@ test('only an assignee can respond; repeated absence creates exactly one urgent 
     assert.equal(urgent.length, 1);
     assert.equal(urgent[0].target, 'schedule');
     assert.equal(urgent[0].entityId, event.id);
-    assert.deepEqual([...urgent[0].recipientIds].sort(), people.filter(person => person.id !== author.id).map(person => person.id).sort());
+    // 예배 인도자도 파트 담당도 없으면 인도자·관리자에게 (팀 전체가 아니라)
+    assert.deepEqual([...urgent[0].recipientIds].sort(), [owner.id, leader.id, otherLeader.id].sort());
     const snapshot = allViews(f);
     f.send(author.id, command);
     assert.deepEqual(allViews(f), snapshot);

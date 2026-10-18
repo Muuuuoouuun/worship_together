@@ -5,7 +5,7 @@
 
 import { requestKinds, requestStatuses, type PlanningCommand, type PlanningNotification, type PlanningState, type SetlistRequest, type TeamSchedule, type UrgentAlert } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
-import { canManagePlanning } from '@/types/planning';
+import { canHandleSlot, canManagePlanning, leadParts, type LeadPart } from '@/types/planning';
 import { diffDays, relativeTime, seoulDateTime, type ContiSetlist } from './model';
 
 export const ROLE_ORDER: WorshipRole[] = ['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member'];
@@ -33,6 +33,17 @@ export interface PartAssignment {
     /** 보는 사람이 이 자리에 대체 지원할 수 있는지 (빈자리·불참·대체 모집 중이고, 같은 일정에 이미 배치되지 않음) */
     canVolunteer: boolean;
     volunteered: boolean;
+    /** 보는 사람이 이 자리의 대체 요청·지원자 확정을 할 수 있는지 (관리자 또는 이 파트 담당) */
+    canHandle: boolean;
+}
+
+export interface PartLeadGroup {
+    part: LeadPart;
+    /** 악기장 · 싱어 담당 */
+    label: string;
+    /** 이 파트에 해당하는 역할 이름 */
+    roles: string;
+    members: { id: string; name: string }[];
 }
 
 export interface ServiceDay {
@@ -142,6 +153,8 @@ export interface PlanningView {
     error: string;
     viewer: PlanningViewer | null;
     roster: { id: string; name: string; role: WorshipRole }[];
+    /** 파트 담당 (결석 알림을 받고 대체 지원자를 확정) */
+    partLeads: PartLeadGroup[];
     services: ServiceDay[];
     events: TeamEvent[];
     requests: RequestItem[];
@@ -160,6 +173,7 @@ export const EMPTY_PLANNING_VIEW: PlanningView = {
     error: '',
     viewer: null,
     roster: [],
+    partLeads: [],
     services: [],
     events: [],
     requests: [],
@@ -182,7 +196,7 @@ export interface BuildInput {
     feedSeenAt?: string | null;
 }
 
-export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount'>;
+export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'partLeads' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount'>;
 
 /** 일정·요청 화면(SchedulePanel)과 같은 이름을 씁니다. */
 const ALERT_KIND_LABEL: Record<UrgentAlert['kind'], string> = { absence: '불참 알림', substitute: '대체 인원 요청', notice: '긴급 공지' };
@@ -225,6 +239,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                     invitedAt: slot.invitedAt,
                     canVolunteer: canVolunteerFor(event, slot),
                     volunteered: slot.volunteers.includes(userId),
+                    canHandle: Boolean(me) && canHandleSlot(state, members, userId, slot.role),
                 }));
             return {
                 eventId: event.id,
@@ -384,6 +399,15 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
     return {
         viewer: me ? { id: me.userId, name: me.name, role: me.role, canManage } : null,
         roster: members.map((member) => ({ id: member.userId, name: member.name, role: member.role })),
+        partLeads: (Object.keys(leadParts) as LeadPart[]).map((part) => ({
+            part,
+            label: leadParts[part],
+            roles: part === 'band' ? '건반·기타·베이스·드럼' : '보컬',
+            members: (state.partLeads ?? [])
+                .filter((lead) => lead.part === part)
+                .map((lead) => ({ id: lead.memberId, name: nameOf(lead.memberId) }))
+                .filter((lead): lead is { id: string; name: string } => lead.name !== null),
+        })),
         services,
         events,
         requests: allRequests,

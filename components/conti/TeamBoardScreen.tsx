@@ -4,10 +4,11 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { Check, Clock3, ListMusic, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { partOfRole, type LeadPart } from '@/types/planning';
 import { dDay, displayTitle, frequentSongs, md, SETLIST_STATUS, songsOf, weekday, type ContiSetlist, type FrequentSong } from './model';
 import { useConti } from './context';
 import { buildRoleMatrix, pickServices, type AssignStatus, type PartAssignment, type RoleRow, type ServiceDay } from './planningBridge';
-import { PlanningError } from './planningUi';
+import { PlanningError, pill, pillOn, useDispatch } from './planningUi';
 import TeamScreen, { AssignmentRow, WeekEvents } from './TeamScreen';
 import { AddButton, Avatar, Eyebrow, SampleChip, ScreenTitle, body, ink, line, selected, sub } from './ui';
 
@@ -180,6 +181,7 @@ function WideBoard({ board }: { board: Board }) {
             <aside aria-label="선택한 자리" className="min-w-0 flex-[1_1_18rem] space-y-4">
                 <FocusCard board={board} />
                 <TodoCard board={board} />
+                <PartLeadsCard />
                 <FrequentCard songs={board.frequent} />
             </aside>
         </div>
@@ -267,6 +269,7 @@ function CompactBoard({ board }: { board: Board }) {
             <div ref={detailRef} className="scroll-mt-28 space-y-3">
                 <FocusCard board={board} />
                 <TodoCard board={board} />
+                <PartLeadsCard />
             </div>
 
             <section aria-label="콘티 보드">
@@ -399,6 +402,96 @@ function TodoCard({ board }: { board: Board }) {
                     모든 자리가 확정됐어요
                 </p>
             )}
+        </section>
+    );
+}
+
+/** 악기장·싱어 담당 등록. 결석이 생기면 그 예배 인도자와 함께 이 사람들에게 알림이 갑니다. */
+function PartLeadsCard() {
+    const { planning } = useConti();
+    const { send, busy } = useDispatch();
+    const [editing, setEditing] = useState<LeadPart | null>(null);
+    const [draft, setDraft] = useState<string[]>([]);
+    const manager = Boolean(planning.viewer?.canManage);
+    if (!planning.partLeads.length) return null;
+
+    async function save(part: LeadPart) {
+        if (await send({ type: 'partLead.set', part, memberIds: draft })) setEditing(null);
+    }
+
+    return (
+        <section aria-label="파트 담당" className={cn('rounded-3xl border p-5', line)}>
+            <h2 className={cn('text-[15px] font-semibold tracking-tight', ink)}>파트 담당</h2>
+            <p className={cn('mt-1 text-xs leading-relaxed', sub)}>결석이 생기면 그 예배 인도자와 파트 담당에게 알림이 가고, 같은 악기·파트 팀원에게 대체를 부탁해요</p>
+            <ul className="mt-2">
+                {planning.partLeads.map((group) => {
+                    const open = editing === group.part;
+                    // 이 파트를 맡는 역할의 팀원부터
+                    const roster = [...planning.roster].sort((a, b) => Number(partOfRole(b.role) === group.part) - Number(partOfRole(a.role) === group.part));
+                    return (
+                        <li key={group.part} className={cn('border-b py-3 last:border-b-0 last:pb-0', line)}>
+                            <div className="flex items-center justify-between gap-2">
+                                <p className={cn('text-[13px] font-semibold', ink)}>
+                                    {group.label} <span className={cn('text-[11px] font-normal', sub)}>{group.roles}</span>
+                                </p>
+                                {manager && !open && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditing(group.part);
+                                            setDraft(group.members.map((member) => member.id));
+                                        }}
+                                        className={pill}
+                                    >
+                                        {group.members.length ? '변경' : '등록'}
+                                    </button>
+                                )}
+                            </div>
+                            {open ? (
+                                <div className="mt-2.5 space-y-2.5">
+                                    <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${group.label} 고르기`}>
+                                        {roster.map((member) => {
+                                            const on = draft.includes(member.id);
+                                            return (
+                                                <button
+                                                    key={member.id}
+                                                    type="button"
+                                                    aria-pressed={on}
+                                                    onClick={() => setDraft((ids) => (on ? ids.filter((id) => id !== member.id) : [...ids, member.id]))}
+                                                    className={cn(on ? pillOn : pill, 'gap-1.5 pl-1')}
+                                                >
+                                                    <Avatar name={member.name} size="xs" />
+                                                    {member.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="flex gap-1.5">
+                                        <button type="button" disabled={busy} onClick={() => save(group.part)} className={pillOn}>
+                                            <Check size={13} aria-hidden="true" />
+                                            저장
+                                        </button>
+                                        <button type="button" onClick={() => setEditing(null)} className={cn('h-8 px-2 text-xs', sub)}>
+                                            취소
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : group.members.length ? (
+                                <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
+                                    {group.members.map((member) => (
+                                        <span key={member.id} className={cn('inline-flex items-center gap-1.5 text-[13px]', ink)}>
+                                            <Avatar name={member.name} size="xs" />
+                                            {member.name}
+                                        </span>
+                                    ))}
+                                </p>
+                            ) : (
+                                <p className={cn('mt-1.5 text-xs', sub)}>아직 없어요 · 그 예배 인도자에게만 알림이 가요</p>
+                            )}
+                        </li>
+                    );
+                })}
+            </ul>
         </section>
     );
 }
