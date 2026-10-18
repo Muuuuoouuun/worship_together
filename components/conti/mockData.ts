@@ -167,7 +167,7 @@ export function buildMockPlanningState(): PlanningState {
             {
                 id: 'ev-1018', title: '주일 2부 예배', kind: 'worship', startsAt: kst('2026-10-18', '11:00'), endsAt: kst('2026-10-18', '12:10'), location: '본당 3층', notes: '', cancelled: false,
                 setlistTitle: '신실하신 하나님', setlistSongs: ['감사함으로 그 문에 들어가며', '예수 열방의 소망', '믿음으로 서리라', '주님의 은혜', '내 영혼이 은총 입어', '보내소서'], setlistId: 's1018',
-                slots: [slot('s1018-lead', 'leader', 'm1', 'confirmed'), slot('s1018-v1', 'vocal', 'm2', 'confirmed'), slot('s1018-v2', 'vocal', 'm3', 'confirmed'), slot('s1018-key', 'keyboard', 'm4', 'confirmed'), slot('s1018-g1', 'guitar', 'm5', 'pending', { invitedAt: seoul('2026-10-11', '18:00') }), slot('s1018-g2', 'guitar', 'm6', 'absent', { declineReason: '시험 기간', volunteers: ['m10'] }), slot('s1018-bass', 'bass', 'm7', 'confirmed'), slot('s1018-drum', 'drums', 'm8', 'confirmed'), slot('s1018-sound', 'sound', 'm9', 'confirmed'), slot('s1018-media', 'media', null)],
+                slots: [slot('s1018-lead', 'leader', 'm1', 'confirmed'), slot('s1018-v1', 'vocal', 'm2', 'confirmed'), slot('s1018-v2', 'vocal', 'm3', 'confirmed'), slot('s1018-key', 'keyboard', 'm4', 'confirmed'), slot('s1018-g1', 'guitar', 'm5', 'pending', { invitedAt: seoul('2026-10-11', '18:00') }), { ...slot('s1018-g2', 'guitar', 'm6', 'absent', { declineReason: '시험 기간', volunteers: ['m10'] }), asked: ['m10'] }, slot('s1018-bass', 'bass', 'm7', 'confirmed'), slot('s1018-drum', 'drums', 'm8', 'confirmed'), slot('s1018-sound', 'sound', 'm9', 'confirmed'), slot('s1018-media', 'media', null)],
             },
             {
                 id: 'ev-1016', title: '금요 기도회 찬양', kind: 'worship', startsAt: kst('2026-10-16', '20:30'), endsAt: kst('2026-10-16', '22:00'), location: '본당', notes: '', cancelled: false,
@@ -194,7 +194,7 @@ export function buildMockPlanningState(): PlanningState {
         ],
         notifications: [
             { id: 'n1', title: '콘티 수정 요청', body: '신실하신 하나님 · 보내소서 Key를 G로 내려도 될까요?', urgent: false, target: 'requests', entityId: 'r1', recipientIds: ['m1'], readBy: [], createdAt: seoul('2026-10-12', '10:00') },
-            { id: 'n2', title: '결석 · 대체 인원이 필요해요', body: '주일 2부 예배 · 한믿음 · 기타 결석: 시험 기간', urgent: true, target: 'schedule', entityId: 'ev-1018', recipientIds: MEMBERS.map((item) => item.id).filter((id) => id !== 'm6'), readBy: [], createdAt: seoul('2026-10-11', '21:40') },
+            { id: 'n2', title: '결석 · 대체 인원이 필요해요', body: '주일 2부 예배 · 한믿음 · 기타 결석: 시험 기간', urgent: true, target: 'schedule', entityId: 'ev-1018', recipientIds: ['m1', 'm4'], readBy: [], createdAt: seoul('2026-10-11', '21:40') },
             { id: 'n3', title: '대체 인원 후보가 있어요', body: '주일 2부 예배 · 기타 · 추천: 장평강', urgent: false, target: 'schedule', entityId: 'ev-1018', recipientIds: ['m1'], readBy: ['m1'], createdAt: seoul('2026-10-11', '21:40') },
             { id: 'n4', title: '대체 지원자가 있어요', body: '주일 2부 예배 · 장평강', urgent: true, target: 'schedule', entityId: 'ev-1018', recipientIds: ['m1'], readBy: [], createdAt: seoul('2026-10-11', '22:05') },
             { id: 'n5', title: '콘티 질문', body: '신실하신 하나님 · 믿음으로 서리라 브릿지 몇 번 반복하나요?', urgent: false, target: 'requests', entityId: 'r3', recipientIds: ['m1'], readBy: ['m1'], createdAt: seoul('2026-10-11', '18:00') },
@@ -204,5 +204,6 @@ export function buildMockPlanningState(): PlanningState {
         ],
         rotations: [],
         blockedDates: [{ memberId: 'm6', date: '2026-10-18', reason: '시험 기간' }],
+        partLeads: [{ part: 'band', memberId: 'm4' }, { part: 'vocal', memberId: 'm2' }],
     };
 }

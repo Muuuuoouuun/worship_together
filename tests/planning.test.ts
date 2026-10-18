@@ -283,9 +283,9 @@ test('slot saves preserve absent and vacant substitution state until the assigne
         assert.deepEqual(f.read().alerts, beforeAlerts, 'role-only edits keep the existing urgent request open');
 
         f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId: other.id, role: 'keyboard' });
-        const { respondedAt: _respondedAt, declineReason: _declineReason, ...unrelated } = beforeSlot;
-        void _respondedAt; void _declineReason;
-        assert.deepEqual(readSlot(), { ...unrelated, role: 'keyboard', memberId: other.id, attendance: 'pending', volunteers: [] }, 'the replacement does not inherit the previous assignee\'s response');
+        const { respondedAt: _respondedAt, declineReason: _declineReason, asked: _asked, passed: _passed, ...unrelated } = beforeSlot;
+        void _respondedAt; void _declineReason; void _asked; void _passed;
+        assert.deepEqual(readSlot(), { ...unrelated, role: 'keyboard', memberId: other.id, attendance: 'pending', volunteers: [] }, 'the replacement does not inherit the previous assignee\'s response, and reassignment also clears the substitute asks');
         assert.ok(f.read().alerts.find(alert => alert.id === beforeAlerts[0].id)!.resolvedAt, 'assigning a replacement closes the old request');
     }
 });
@@ -311,9 +311,9 @@ test('saving or changing the role of a confirmed assignee preserves confirmation
     assert.deepEqual(f.read().alerts, beforeAlerts);
 
     f.send(owner.id, { type: 'slot.save', eventId: event.id, slotId: slot.id, memberId: other.id, role: 'guitar' });
-    const { respondedAt: _respondedAt, ...unrelated } = beforeSlot;
-    void _respondedAt;
-    assert.deepEqual(f.read().events[0].slots[0], { ...unrelated, role: 'guitar', memberId: other.id, attendance: 'pending', volunteers: [] }, 'the replacement does not inherit the previous assignee\'s response time');
+    const { respondedAt: _respondedAt, asked: _asked, passed: _passed, ...unrelated } = beforeSlot;
+    void _respondedAt; void _asked; void _passed;
+    assert.deepEqual(f.read().events[0].slots[0], { ...unrelated, role: 'guitar', memberId: other.id, attendance: 'pending', volunteers: [] }, 'the replacement does not inherit the previous assignee\'s response time or substitute asks');
     assert.ok(f.read().alerts.find(alert => alert.id === beforeAlerts[0].id)!.resolvedAt);
 });
 
@@ -348,7 +348,8 @@ test('only an assignee can respond; repeated absence creates exactly one urgent 
     assert.equal(urgent.length, 1);
     assert.equal(urgent[0].target, 'schedule');
     assert.equal(urgent[0].entityId, event.id);
-    assert.deepEqual([...urgent[0].recipientIds].sort(), people.filter(person => person.id !== author.id).map(person => person.id).sort());
+    // 예배 인도자도 파트 담당도 없으면 인도자·관리자에게 (팀 전체가 아니라)
+    assert.deepEqual([...urgent[0].recipientIds].sort(), [owner.id, leader.id, otherLeader.id].sort());
     const snapshot = allViews(f);
     f.send(author.id, command);
     assert.deepEqual(allViews(f), snapshot);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
     avatarLabel,
     formCodeFromLabel,
+    frequentSongs,
     labelFromFormCode,
     nextSunday,
     relativeTime,
@@ -237,4 +238,20 @@ test('곡 링크는 http(s) 주소만 저장한다', () => {
         sanitizeSongLinks({ s1: [{ kind: 'sheet', url: 'https://example.com/s.pdf' }, { kind: 'video', url: 'https://youtu.be/x' }, { kind: 'mr', url: 'nope' }], s2: 'x' }),
         { s1: [{ kind: 'sheet', url: 'https://example.com/s.pdf' }] },
     );
+});
+
+test('자주 부른 곡은 최근 8주 콘티에서 콘티 수로 세고 가장 최근 Key를 보여준다', () => {
+    const song = (songId: string, title: string, key: string) => ({ kind: 'song' as const, id: `${songId}-${key}`, songId, title, artist: null, originalKey: key, key, bpm: null, lead: null, form: [], links: [], notes: [], comments: [] });
+    const setlist = (id: string, date: string, items: ContiSetlist['items']): ContiSetlist => ({ id, date, time: '11:00', service: '주일 예배', theme: '', owner: null, status: 'done', items });
+    const setlists = [
+        setlist('a', '2026-08-02', [song('s1', '보내소서', 'A')]),
+        setlist('b', '2026-10-04', [song('s1', '보내소서', 'A'), song('s2', '은혜', 'D'), song('s2', '은혜', 'E')]),
+        setlist('c', '2026-10-11', [song('s1', '보내소서', 'G'), song('s3', '시선', 'A')]),
+        setlist('d', '2026-10-18', [song('s3', '시선', 'A')]),
+    ];
+    assert.deepEqual(frequentSongs(setlists, '2026-10-12').map((item) => [item.title, item.count, item.key]), [
+        ['보내소서', 2, 'G'],
+        ['시선', 1, 'A'],
+        ['은혜', 1, 'D'],
+    ], '8주 전보다 오래된 콘티와 다가오는 콘티는 빼고, 한 콘티에 두 번 들어가도 한 번으로 센다');
 });

@@ -9,7 +9,7 @@ import { ink, line, selected, sub } from './ui';
 import WeekScreen from './WeekScreen';
 import ContiScreen from './ContiScreen';
 import OrderScreen from './OrderScreen';
-import TeamScreen from './TeamScreen';
+import TeamBoardScreen from './TeamBoardScreen';
 import RequestScreen from './RequestScreen';
 import AlertsScreen from './AlertsScreen';
 
@@ -112,7 +112,7 @@ export default function ContiWorkspace({
             {screen === 'week' && <WeekScreen go={go} openOrder={openOrder} />}
             {screen === 'conti' && <ContiScreen openOrder={openOrder} />}
             {screen === 'order' && <OrderScreen setlistId={setlistId} onBack={() => go('conti')} onSelect={selectSetlist} />}
-            {screen === 'team' && <TeamScreen openOrder={openOrder} />}
+            {screen === 'team' && <TeamBoardScreen openOrder={openOrder} layout={embedded ? 'responsive' : 'compact'} />}
             {screen === 'requests' && <RequestScreen />}
             {screen === 'alerts' && <AlertsScreen onBack={embedded ? undefined : () => go('week')} openOrder={openOrder} go={go} />}
         </ContiProvider>
@@ -158,7 +158,8 @@ export default function ContiWorkspace({
     }
 
     return (
-        <div className={cn('relative isolate flex flex-col break-keep bg-card', framed ? 'h-full overflow-hidden' : 'min-h-dvh')}>
+        // 휴대폰 프레임 안에서는 transform 으로 fixed 시트가 화면 전체가 아니라 프레임에 붙게 합니다.
+        <div className={cn('relative isolate flex flex-col break-keep bg-card', framed ? 'h-full overflow-hidden [transform:translateZ(0)]' : 'min-h-dvh')}>
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72" style={TOP_GLOW} />
 
             <div ref={scrollRef} className={cn('flex-1', framed && 'no-scrollbar overflow-y-auto overscroll-contain')}>
