@@ -57,9 +57,18 @@ export default async function WorshipDraftsPage({ searchParams }: WorshipDraftsP
                             예배가 진행되는 동안 팀이 보는 화면. 데스크톱과 모바일을 각각 두 가지 방향으로 그렸습니다. 섹션 넘김, 큐 보내기, 박자 표시는 직접 눌러 볼 수 있습니다.
                         </p>
                     </div>
-                    <span className="rounded-full bg-card px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border">
-                        목업 데이터 · 주일 2부 예배 10월 18일 (일)
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <Link
+                            href="/session/drafts/pulse"
+                            className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                        >
+                            펄스 · 알림 시안
+                            <ArrowUpRight size={14} />
+                        </Link>
+                        <span className="rounded-full bg-card px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border">
+                            목업 데이터 · 주일 2부 예배 10월 18일 (일)
+                        </span>
+                    </div>
                 </header>
 
                 <section aria-labelledby="desktop-drafts" className="mx-auto mt-14 max-w-[1280px]">
