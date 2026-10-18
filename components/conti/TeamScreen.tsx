@@ -301,7 +301,7 @@ export function AssignmentRow({ service, item }: { service: ServiceDay; item: Pa
     );
 }
 
-function WeekEvents({ date }: { date: string }) {
+export function WeekEvents({ date }: { date: string }) {
     const { planning } = useConti();
     const dates = weekDates(date);
     const events = planning.events.filter((event) => dates.includes(event.date));

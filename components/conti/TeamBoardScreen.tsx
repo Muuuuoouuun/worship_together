@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import { Check, ListMusic, Plus } from 'lucide-react';
+import { Check, Clock3, ListMusic, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { dDay, displayTitle, frequentSongs, md, SETLIST_STATUS, songsOf, weekday, type ContiSetlist } from './model';
+import { dDay, displayTitle, frequentSongs, md, SETLIST_STATUS, songsOf, weekday, type ContiSetlist, type FrequentSong } from './model';
 import { useConti } from './context';
-import { buildRoleMatrix, pickServices, type AssignStatus, type PartAssignment, type ServiceDay } from './planningBridge';
+import { buildRoleMatrix, pickServices, type AssignStatus, type PartAssignment, type RoleRow, type ServiceDay } from './planningBridge';
 import { PlanningError } from './planningUi';
-import TeamScreen, { AssignmentRow } from './TeamScreen';
+import TeamScreen, { AssignmentRow, WeekEvents } from './TeamScreen';
 import { AddButton, Avatar, Eyebrow, SampleChip, ScreenTitle, body, ink, line, selected, sub } from './ui';
 
 const RANGES = [4, 8] as const;
@@ -26,11 +26,35 @@ function attentionOf(service: ServiceDay | undefined): PartAssignment[] {
     return service.assignments.filter((item) => item.status !== 'confirmed').sort((a, b) => rank(a) - rank(b));
 }
 
+function statusText(item: PartAssignment): string {
+    return item.status === 'confirmed' ? '확정' : item.status === 'pending' ? '응답 대기' : item.status === 'declined' ? '불참' : '빈자리';
+}
+
+/** 두 배치 화면(넓은 화면·휴대폰)이 함께 쓰는 값 */
+interface Board {
+    today: string;
+    services: ServiceDay[];
+    /** 다가오는 첫 예배 (없으면 마지막 예배) */
+    current: ServiceDay;
+    rows: RoleRow[];
+    todo: PartAssignment[];
+    focus: { service: ServiceDay; item: PartAssignment } | null;
+    frequent: FrequentSong[];
+    createHref: string;
+    setlistFor: (service: ServiceDay) => ContiSetlist | null;
+    labelOf: (item: PartAssignment) => string;
+    isFocus: (service: ServiceDay, item: PartAssignment) => boolean;
+    select: (service: ServiceDay, item: PartAssignment) => void;
+    openOrder: (id: string) => void;
+}
+
 /**
- * 넓은 화면의 팀 배치: 역할 × 주일 배치표 아래에 같은 열 순서로 콘티 보드를 둡니다.
- * 자리를 고르면 오른쪽에서 모바일 화면과 같은 배치 조작(배정·초대·대체 요청·지원)을 합니다.
+ * 팀 배치: 역할 × 주일 배치표 아래에 같은 열 순서로 콘티 보드를 둡니다.
+ * 자리를 고르면 모바일 목록과 같은 배치 조작(배정·초대·대체 요청·지원)을 합니다.
+ * - responsive: 대시보드. xl 이상은 넓은 배치표, 그보다 좁으면 휴대폰 배치표
+ * - compact: 휴대폰 화면(시안 페이지)
  */
-export default function TeamBoardScreen({ openOrder }: { openOrder: (id: string) => void }) {
+export default function TeamBoardScreen({ openOrder, layout = 'responsive' }: { openOrder: (id: string) => void; layout?: 'responsive' | 'compact' }) {
     const { today, planning, setlists, editor } = useConti();
     const [range, setRange] = useState<(typeof RANGES)[number]>(4);
     const [picked, setPicked] = useState<{ eventId: string; slotId: string } | null>(null);
@@ -44,13 +68,22 @@ export default function TeamBoardScreen({ openOrder }: { openOrder: (id: string)
     const pickedService = picked ? services.find((service) => service.eventId === picked.eventId) : undefined;
     const pickedItem = pickedService?.assignments.find((item) => item.slotId === picked?.slotId);
     const focus = pickedService && pickedItem ? { service: pickedService, item: pickedItem } : todo[0] ? { service: current, item: todo[0] } : null;
-    const grid: CSSProperties = { gridTemplateColumns: `8rem repeat(${services.length}, minmax(9.5rem, 1fr))`, minWidth: `${8 + services.length * 9.5}rem` };
     const manageHref = planning.planningHref.includes('?') ? `${planning.planningHref}&tab=schedule` : `${planning.planningHref}?tab=schedule`;
-    const createHref = editor?.createHref ?? '/dashboard/songs/library';
-    const setlistFor = (service: ServiceDay) => setlists.find((item) => item.id === service.setlistId) ?? setlists.find((item) => item.date === service.date) ?? null;
-    const frequent = frequentSongs(setlists, today);
-    const select = (service: ServiceDay, item: PartAssignment) => setPicked({ eventId: service.eventId, slotId: item.slotId });
-    const columnTint = (service: ServiceDay) => (service.eventId === current.eventId ? 'bg-primary/[0.04]' : service.date < today ? 'bg-neutral-50/70 dark:bg-white/[0.02]' : '');
+    const board: Board = {
+        today,
+        services,
+        current,
+        rows,
+        todo,
+        focus,
+        frequent: frequentSongs(setlists, today),
+        createHref: editor?.createHref ?? '/dashboard/songs/library',
+        setlistFor: (service) => setlists.find((item) => item.id === service.setlistId) ?? setlists.find((item) => item.date === service.date) ?? null,
+        labelOf: (item) => rows.find((row) => row.cells.some((cell) => cell?.slotId === item.slotId))?.label ?? item.roleLabel,
+        isFocus: (service, item) => focus?.service.eventId === service.eventId && focus.item.slotId === item.slotId,
+        select: (service, item) => setPicked({ eventId: service.eventId, slotId: item.slotId }),
+        openOrder,
+    };
 
     return (
         <div className="space-y-6">
@@ -67,7 +100,7 @@ export default function TeamBoardScreen({ openOrder }: { openOrder: (id: string)
                                     type="button"
                                     aria-pressed={range === value}
                                     onClick={() => setRange(value)}
-                                    className={cn('h-8 rounded-full px-3.5 text-xs transition', range === value ? cn(selected, 'font-semibold') : body)}
+                                    className={cn('h-8 rounded-full px-3 text-xs transition', range === value ? cn(selected, 'font-semibold') : body)}
                                 >
                                     {value}주
                                 </button>
@@ -79,141 +112,314 @@ export default function TeamBoardScreen({ openOrder }: { openOrder: (id: string)
             />
             <PlanningError />
 
-            <div className="flex flex-wrap items-start gap-6">
-                <div className="min-w-0 flex-[999_1_40rem] space-y-3">
-                    <p className={cn('flex flex-wrap gap-x-4 gap-y-1 text-xs', sub)}>
-                        <Legend className="bg-emerald-500" label="확정" />
-                        <Legend className="bg-amber-400" label="응답 대기" />
-                        <Legend className="bg-rose-400" label="불참" />
-                        <Legend className="border-[1.5px] border-dashed border-neutral-400" label="빈자리" />
-                    </p>
-
-                    <div className="no-scrollbar overflow-x-auto">
-                        <section aria-label="주일별 배치" className={cn('overflow-hidden rounded-3xl border', line)} style={{ minWidth: grid.minWidth }}>
-                            <div className={cn('grid border-b bg-neutral-50/80 dark:bg-white/[0.03]', line)} style={grid}>
-                                <div className={cn('p-4 text-xs font-medium', sub)}>역할</div>
-                                {services.map((service) => (
-                                    <ColumnHead key={service.eventId} service={service} current={service.eventId === current.eventId} today={today} />
-                                ))}
-                            </div>
-                            {rows.map((row) => (
-                                <div key={row.key} className={cn('grid border-b last:border-b-0', line)} style={grid}>
-                                    <div className={cn('flex items-center px-4 text-[13px] font-medium', ink)}>{row.label}</div>
-                                    {row.cells.map((item, index) => {
-                                        const service = services[index];
-                                        return (
-                                            <div key={service.eventId} className={cn('flex min-h-14 items-center border-l px-2 py-1.5', line, columnTint(service))}>
-                                                {item ? (
-                                                    <SlotCell
-                                                        service={service}
-                                                        item={item}
-                                                        rowLabel={row.label}
-                                                        active={focus?.item.slotId === item.slotId && focus.service.eventId === service.eventId}
-                                                        onSelect={() => select(service, item)}
-                                                    />
-                                                ) : (
-                                                    <span className={cn('px-2 text-xs', sub)}>자리 없음</span>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ))}
-                        </section>
-
-                        <section aria-label="콘티 보드" className="mt-7" style={{ minWidth: grid.minWidth }}>
-                            <h2 className={cn('mb-3 flex items-baseline gap-2 text-[17px] font-semibold tracking-tight', ink)}>
-                                <ListMusic size={17} className="self-center" aria-hidden="true" />
-                                콘티 보드
-                                <span className={cn('text-xs font-normal', sub)}>위 배치표와 같은 주일 순서</span>
-                            </h2>
-                            <div className="grid gap-x-2.5" style={grid}>
-                                <div aria-hidden="true" />
-                                {services.map((service) => (
-                                    <BoardColumn
-                                        key={service.eventId}
-                                        service={service}
-                                        setlist={setlistFor(service)}
-                                        current={service.eventId === current.eventId}
-                                        past={service.date < today}
-                                        openOrder={openOrder}
-                                        createHref={createHref}
-                                    />
-                                ))}
-                            </div>
-                        </section>
+            {layout === 'responsive' ? (
+                <>
+                    <div className="hidden xl:block">
+                        <WideBoard board={board} />
                     </div>
-                </div>
-
-                <aside aria-label="선택한 자리" className="min-w-0 flex-[1_1_18rem] space-y-4">
-                    <section className={cn('rounded-3xl border p-5', line)}>
-                        {focus ? (
-                            <>
-                                <Eyebrow>선택한 자리</Eyebrow>
-                                <h2 className={cn('mt-0.5 text-[17px] font-semibold tracking-tight', ink)}>
-                                    {md(focus.service.date)} {weekday(focus.service.date)} · {rows.find((row) => row.cells.some((cell) => cell?.slotId === focus.item.slotId))?.label ?? focus.item.roleLabel}
-                                </h2>
-                                <p className={cn('mt-0.5 text-xs', sub)}>
-                                    {focus.service.title} · {focus.service.time}
-                                    {focus.service.place ? ` · ${focus.service.place}` : ''}
-                                </p>
-                                <ul className="mt-2">
-                                    <AssignmentRow key={`${focus.service.eventId}:${focus.item.slotId}`} service={focus.service} item={focus.item} />
-                                </ul>
-                            </>
-                        ) : (
-                            <p className={cn('py-4 text-center text-sm', sub)}>배치표에서 자리를 고르면 여기서 배정·초대·대체 요청을 할 수 있어요</p>
-                        )}
-                    </section>
-
-                    <section className={cn('rounded-3xl border p-5', line)}>
-                        <h2 className={cn('text-[15px] font-semibold tracking-tight', ink)}>
-                            {md(current.date)} 남은 일 <span className={cn('font-normal', sub)}>{todo.length}</span>
-                        </h2>
-                        {todo.length ? (
-                            <ul className="mt-2">
-                                {todo.map((item) => (
-                                    <li key={item.slotId} className={cn('border-b last:border-b-0', line)}>
-                                        <button type="button" onClick={() => select(current, item)} className="flex min-h-11 w-full items-center gap-2.5 text-left">
-                                            <span
-                                                aria-hidden="true"
-                                                className={cn('size-2 shrink-0 rounded-full', item.status ? BAR[item.status] : 'border-[1.5px] border-dashed border-neutral-400')}
-                                            />
-                                            <span className={cn('min-w-0 flex-1 truncate text-[13px]', ink)}>
-                                                {item.roleLabel} {item.memberName ?? ''} {item.status === 'declined' ? '불참' : item.status === 'pending' ? '응답 대기' : '빈자리'}
-                                            </span>
-                                            {item.volunteers.length > 0 && <span className="text-[11px] font-semibold text-orange-700 dark:text-orange-300">지원 {item.volunteers.length}</span>}
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className={cn('mt-2 flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-300')}>
-                                <Check size={14} aria-hidden="true" />
-                                모든 자리가 확정됐어요
-                            </p>
-                        )}
-                    </section>
-
-                    {frequent.length > 0 && (
-                        <section className={cn('rounded-3xl border p-5', line)}>
-                            <h2 className={cn('text-[15px] font-semibold tracking-tight', ink)}>
-                                자주 부른 곡 <span className={cn('text-xs font-normal', sub)}>최근 8주</span>
-                            </h2>
-                            <ol className="mt-2">
-                                {frequent.map((song) => (
-                                    <li key={song.songId} className={cn('flex min-h-10 items-center gap-2 border-b text-[13px] last:border-b-0', line)}>
-                                        <span className={cn('min-w-0 flex-1 truncate', ink)}>{song.title}</span>
-                                        <span className={cn('text-[11px] tabular-nums', sub)}>{song.count}회</span>
-                                        <span className={cn('w-6 text-right text-xs font-semibold', ink)}>{song.key}</span>
-                                    </li>
-                                ))}
-                            </ol>
-                        </section>
-                    )}
-                </aside>
-            </div>
+                    <div className="xl:hidden">
+                        <CompactBoard board={board} />
+                    </div>
+                </>
+            ) : (
+                <CompactBoard board={board} />
+            )}
         </div>
+    );
+}
+
+function WideBoard({ board }: { board: Board }) {
+    const { services, current, rows, today } = board;
+    const grid: CSSProperties = { gridTemplateColumns: `8rem repeat(${services.length}, minmax(9.5rem, 1fr))`, minWidth: `${8 + services.length * 9.5}rem` };
+    const columnTint = (service: ServiceDay) => (service.eventId === current.eventId ? 'bg-primary/[0.04]' : service.date < today ? 'bg-neutral-50/70 dark:bg-white/[0.02]' : '');
+
+    return (
+        <div className="flex flex-wrap items-start gap-6">
+            <div className="min-w-0 flex-[999_1_40rem] space-y-3">
+                <LegendRow />
+
+                <div className="no-scrollbar overflow-x-auto">
+                    <section aria-label="주일별 배치" className={cn('overflow-hidden rounded-3xl border', line)} style={{ minWidth: grid.minWidth }}>
+                        <div className={cn('grid border-b bg-neutral-50/80 dark:bg-white/[0.03]', line)} style={grid}>
+                            <div className={cn('p-4 text-xs font-medium', sub)}>역할</div>
+                            {services.map((service) => (
+                                <ColumnHead key={service.eventId} service={service} current={service.eventId === current.eventId} today={today} />
+                            ))}
+                        </div>
+                        {rows.map((row) => (
+                            <div key={row.key} className={cn('grid border-b last:border-b-0', line)} style={grid}>
+                                <div className={cn('flex items-center px-4 text-[13px] font-medium', ink)}>{row.label}</div>
+                                {row.cells.map((item, index) => {
+                                    const service = services[index];
+                                    return (
+                                        <div key={service.eventId} className={cn('flex min-h-14 items-center border-l px-2 py-1.5', line, columnTint(service))}>
+                                            {item ? (
+                                                <SlotCell service={service} item={item} rowLabel={row.label} active={board.isFocus(service, item)} onSelect={() => board.select(service, item)} />
+                                            ) : (
+                                                <span className={cn('px-2 text-xs', sub)}>자리 없음</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </section>
+
+                    <section aria-label="콘티 보드" className="mt-7" style={{ minWidth: grid.minWidth }}>
+                        <BoardTitle />
+                        <div className="grid gap-x-2.5" style={grid}>
+                            <div aria-hidden="true" />
+                            {services.map((service) => (
+                                <BoardColumn key={service.eventId} board={board} service={service} />
+                            ))}
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <aside aria-label="선택한 자리" className="min-w-0 flex-[1_1_18rem] space-y-4">
+                <FocusCard board={board} />
+                <TodoCard board={board} />
+                <FrequentCard songs={board.frequent} />
+            </aside>
+        </div>
+    );
+}
+
+/** 휴대폰 폭: 칸에는 아바타와 상태 배지만, 고른 자리는 표 바로 아래 카드에서 다룹니다. 콘티 보드는 옆으로 넘깁니다. */
+function CompactBoard({ board }: { board: Board }) {
+    const { services, current, rows, today } = board;
+    const detailRef = useRef<HTMLDivElement>(null);
+    const stripRef = useRef<HTMLDivElement>(null);
+    const currentRef = useRef<HTMLDivElement>(null);
+    const grid: CSSProperties = {
+        gridTemplateColumns: `4.25rem repeat(${services.length}, minmax(3.5rem, 1fr))`,
+        minWidth: `${4.25 + services.length * 3.5}rem`,
+    };
+
+    /** 콘티 보드는 다가오는 예배부터 보이게 */
+    useEffect(() => {
+        const strip = stripRef.current;
+        const column = currentRef.current;
+        if (strip && column) strip.scrollLeft = column.offsetLeft - strip.offsetLeft;
+    }, [current.eventId, services.length]);
+
+    function select(service: ServiceDay, item: PartAssignment) {
+        board.select(service, item);
+        requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="space-y-3">
+                <LegendRow />
+                <div className="no-scrollbar overflow-x-auto">
+                    <section aria-label="주일별 배치" className={cn('overflow-hidden rounded-2xl border', line)} style={{ minWidth: grid.minWidth }}>
+                        <div className={cn('grid border-b bg-neutral-50/80 dark:bg-white/[0.03]', line)} style={grid}>
+                            <div className={cn('flex items-end px-3 pb-2 text-[11px] font-medium', sub)}>역할</div>
+                            {services.map((service) => {
+                                const isCurrent = service.eventId === current.eventId;
+                                return (
+                                    <div key={service.eventId} className={cn('min-w-0 border-l px-1 pb-2 pt-2.5 text-center', line, isCurrent && 'bg-primary/[0.07]')}>
+                                        <p className={cn('text-[13px] font-semibold tabular-nums', isCurrent ? 'text-primary' : ink)}>{md(service.date)}</p>
+                                        <p className={cn('mt-0.5 truncate text-[10px]', sub)}>
+                                            {weekday(service.date)} · {service.date < today ? '지난' : dDay(service.date, today)}
+                                        </p>
+                                        <p className={cn('mt-0.5 text-[10px] font-medium tabular-nums', body)}>
+                                            {service.counts.confirmed}/{service.counts.total}
+                                        </p>
+                                        <div className="mx-1 mt-1 flex h-1 gap-px overflow-hidden rounded-full" aria-hidden="true">
+                                            {service.assignments.map((item) => (
+                                                <span key={item.slotId} className={cn('flex-1', item.status ? BAR[item.status] : 'bg-neutral-200 dark:bg-neutral-700')} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {rows.map((row) => (
+                            <div key={row.key} className={cn('grid border-b last:border-b-0', line)} style={grid}>
+                                <div className={cn('flex min-w-0 items-center break-keep px-3 text-xs font-medium leading-tight', ink)}>{row.label}</div>
+                                {row.cells.map((item, index) => {
+                                    const service = services[index];
+                                    return (
+                                        <div
+                                            key={service.eventId}
+                                            className={cn('flex items-center justify-center border-l py-1', line, service.eventId === current.eventId && 'bg-primary/[0.04]', service.date < today && 'opacity-60')}
+                                        >
+                                            {item ? (
+                                                <CompactCell service={service} item={item} rowLabel={row.label} active={board.isFocus(service, item)} onSelect={() => select(service, item)} />
+                                            ) : (
+                                                <span className={cn('text-xs', sub)}>
+                                                    <span aria-hidden="true">–</span>
+                                                    <span className="sr-only">자리 없음</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </section>
+                </div>
+            </div>
+
+            <div ref={detailRef} className="scroll-mt-28 space-y-3">
+                <FocusCard board={board} />
+                <TodoCard board={board} />
+            </div>
+
+            <section aria-label="콘티 보드">
+                <BoardTitle />
+                <div ref={stripRef} className="no-scrollbar relative -mx-1 flex snap-x snap-mandatory items-start gap-2.5 overflow-x-auto px-1 pb-1">
+                    {services.map((service) => (
+                        <div key={service.eventId} ref={service.eventId === current.eventId ? currentRef : undefined} className="flex w-[72%] max-w-64 shrink-0 snap-start">
+                            <BoardColumn board={board} service={service} />
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            <FrequentCard songs={board.frequent} />
+            <WeekEvents date={current.date} />
+        </div>
+    );
+}
+
+function CompactCell({ service, item, rowLabel, active, onSelect }: { service: ServiceDay; item: PartAssignment; rowLabel: string; active: boolean; onSelect: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onSelect}
+            aria-pressed={active}
+            aria-label={`${md(service.date)} ${rowLabel} · ${item.memberName ?? '미정'}${item.mine ? '(나)' : ''} · ${statusText(item)}`}
+            className={cn('relative flex size-11 items-center justify-center rounded-xl transition active:scale-95', active && 'bg-white ring-2 ring-neutral-900 dark:bg-neutral-900 dark:ring-white')}
+        >
+            {item.memberName ? (
+                <>
+                    <Avatar name={item.memberName} size="md" className={cn(item.status === 'declined' && 'opacity-40', item.mine && 'ring-2 ring-primary ring-offset-1 ring-offset-white dark:ring-offset-neutral-900')} />
+                    {item.status && (
+                        <span
+                            aria-hidden="true"
+                            className={cn(
+                                'absolute bottom-0 right-0 flex size-4 items-center justify-center rounded-full text-white ring-2 ring-white dark:ring-neutral-900',
+                                item.status === 'confirmed' && 'bg-emerald-600',
+                                item.status === 'pending' && 'bg-amber-500',
+                                item.status === 'declined' && 'bg-rose-600',
+                            )}
+                        >
+                            {item.status === 'confirmed' ? <Check size={10} strokeWidth={3.5} /> : item.status === 'pending' ? <Clock3 size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3.5} />}
+                        </span>
+                    )}
+                </>
+            ) : (
+                <span className={cn('flex size-9 items-center justify-center rounded-full border-[1.5px] border-dashed border-neutral-300 dark:border-neutral-600', body)}>
+                    <Plus size={14} aria-hidden="true" />
+                </span>
+            )}
+            {item.volunteers.length > 0 && (
+                <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-600 px-1 text-[9px] font-bold text-white ring-2 ring-white dark:ring-neutral-900">
+                    {item.volunteers.length}
+                </span>
+            )}
+        </button>
+    );
+}
+
+function LegendRow() {
+    return (
+        <p className={cn('flex flex-wrap gap-x-4 gap-y-1 text-xs', sub)}>
+            <Legend className="bg-emerald-500" label="확정" />
+            <Legend className="bg-amber-400" label="응답 대기" />
+            <Legend className="bg-rose-400" label="불참" />
+            <Legend className="border-[1.5px] border-dashed border-neutral-400" label="빈자리" />
+        </p>
+    );
+}
+
+function BoardTitle() {
+    return (
+        <h2 className={cn('mb-3 flex flex-wrap items-baseline gap-x-2 text-[17px] font-semibold tracking-tight', ink)}>
+            <ListMusic size={17} className="self-center" aria-hidden="true" />
+            콘티 보드
+            <span className={cn('text-xs font-normal', sub)}>위 배치표와 같은 주일 순서</span>
+        </h2>
+    );
+}
+
+function FocusCard({ board }: { board: Board }) {
+    const { focus } = board;
+    return (
+        <section aria-label="선택한 자리" className={cn('rounded-3xl border p-5', line)}>
+            {focus ? (
+                <>
+                    <Eyebrow>선택한 자리</Eyebrow>
+                    <h2 className={cn('mt-0.5 text-[17px] font-semibold tracking-tight', ink)}>
+                        {md(focus.service.date)} {weekday(focus.service.date)} · {board.labelOf(focus.item)}
+                    </h2>
+                    <p className={cn('mt-0.5 text-xs', sub)}>
+                        {focus.service.title} · {focus.service.time}
+                        {focus.service.place ? ` · ${focus.service.place}` : ''}
+                    </p>
+                    <ul className="mt-2">
+                        <AssignmentRow key={`${focus.service.eventId}:${focus.item.slotId}`} service={focus.service} item={focus.item} />
+                    </ul>
+                </>
+            ) : (
+                <p className={cn('py-4 text-center text-sm', sub)}>배치표에서 자리를 고르면 여기서 배정·초대·대체 요청을 할 수 있어요</p>
+            )}
+        </section>
+    );
+}
+
+function TodoCard({ board }: { board: Board }) {
+    const { current, todo } = board;
+    return (
+        <section className={cn('rounded-3xl border p-5', line)}>
+            <h2 className={cn('text-[15px] font-semibold tracking-tight', ink)}>
+                {md(current.date)} 남은 일 <span className={cn('font-normal', sub)}>{todo.length}</span>
+            </h2>
+            {todo.length ? (
+                <ul className="mt-2">
+                    {todo.map((item) => (
+                        <li key={item.slotId} className={cn('border-b last:border-b-0', line)}>
+                            <button type="button" onClick={() => board.select(current, item)} className="flex min-h-11 w-full items-center gap-2.5 text-left">
+                                <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', item.status ? BAR[item.status] : 'border-[1.5px] border-dashed border-neutral-400')} />
+                                <span className={cn('min-w-0 flex-1 truncate text-[13px]', ink)}>
+                                    {board.labelOf(item)} {item.memberName ?? ''} {statusText(item)}
+                                </span>
+                                {item.volunteers.length > 0 && <span className="text-[11px] font-semibold text-orange-700 dark:text-orange-300">지원 {item.volunteers.length}</span>}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="mt-2 flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-300">
+                    <Check size={14} aria-hidden="true" />
+                    모든 자리가 확정됐어요
+                </p>
+            )}
+        </section>
+    );
+}
+
+function FrequentCard({ songs }: { songs: FrequentSong[] }) {
+    if (!songs.length) return null;
+    return (
+        <section className={cn('rounded-3xl border p-5', line)}>
+            <h2 className={cn('text-[15px] font-semibold tracking-tight', ink)}>
+                자주 부른 곡 <span className={cn('text-xs font-normal', sub)}>최근 8주</span>
+            </h2>
+            <ol className="mt-2">
+                {songs.map((song) => (
+                    <li key={song.songId} className={cn('flex min-h-10 items-center gap-2 border-b text-[13px] last:border-b-0', line)}>
+                        <span className={cn('min-w-0 flex-1 truncate', ink)}>{song.title}</span>
+                        <span className={cn('text-[11px] tabular-nums', sub)}>{song.count}회</span>
+                        <span className={cn('w-6 text-right text-xs font-semibold', ink)}>{song.key}</span>
+                    </li>
+                ))}
+            </ol>
+        </section>
     );
 }
 
@@ -256,7 +462,7 @@ function ColumnHead({ service, current, today }: { service: ServiceDay; current:
 }
 
 function SlotCell({ service, item, rowLabel, active, onSelect }: { service: ServiceDay; item: PartAssignment; rowLabel: string; active: boolean; onSelect: () => void }) {
-    const status = item.status === 'confirmed' ? '확정' : item.status === 'pending' ? '응답 대기' : item.status === 'declined' ? '불참' : '빈자리';
+    const status = statusText(item);
     return (
         <button
             type="button"
@@ -295,26 +501,16 @@ function SlotCell({ service, item, rowLabel, active, onSelect }: { service: Serv
     );
 }
 
-function BoardColumn({
-    service,
-    setlist,
-    current,
-    past,
-    openOrder,
-    createHref,
-}: {
-    service: ServiceDay;
-    setlist: ContiSetlist | null;
-    current: boolean;
-    past: boolean;
-    openOrder: (id: string) => void;
-    createHref: string;
-}) {
+function BoardColumn({ board, service }: { board: Board; service: ServiceDay }) {
+    const { openOrder, createHref } = board;
+    const setlist = board.setlistFor(service);
+    const current = service.eventId === board.current.eventId;
+    const past = service.date < board.today;
     const status = setlist ? SETLIST_STATUS[setlist.status] : null;
     const songs = setlist ? songsOf(setlist.items) : [];
     const numbers = new Map(songs.map((song, index) => [song.id, index + 1]));
     return (
-        <div className={cn('flex min-w-0 flex-col gap-2 rounded-3xl p-3', current ? 'bg-primary/[0.05] ring-2 ring-primary/70' : 'bg-neutral-50 dark:bg-white/[0.03]', past && 'opacity-70')}>
+        <div className={cn('flex w-full min-w-0 flex-col gap-2 rounded-3xl p-3', current ? 'bg-primary/[0.05] ring-2 ring-primary/70' : 'bg-neutral-50 dark:bg-white/[0.03]', past && 'opacity-70')}>
             <div className="flex items-center justify-between gap-1.5">
                 <span className={cn('text-xs font-medium tabular-nums', body)}>
                     {md(service.date)} {weekday(service.date)}
