@@ -104,6 +104,40 @@ export function commentsOf(items: OrderItem[]): SongComment[] {
     return songsOf(items).flatMap((item) => item.comments);
 }
 
+export interface FrequentSong {
+    songId: string;
+    title: string;
+    /** 가장 최근에 부른 Key */
+    key: string;
+    /** 부른 콘티 수 (한 콘티에 두 번 들어가도 1) */
+    count: number;
+    lastDate: string;
+}
+
+/** 오늘까지 최근 weeks 주 동안 콘티에 자주 들어간 곡 */
+export function frequentSongs(setlists: ContiSetlist[], today: string, weeks = 8, limit = 5): FrequentSong[] {
+    const found = new Map<string, FrequentSong>();
+    for (const setlist of setlists) {
+        const age = diffDays(today, setlist.date);
+        if (age < 0 || age > weeks * 7) continue;
+        const seen = new Set<string>();
+        for (const song of songsOf(setlist.items)) {
+            if (seen.has(song.songId)) continue;
+            seen.add(song.songId);
+            const prev = found.get(song.songId);
+            const newer = !prev || setlist.date > prev.lastDate;
+            found.set(song.songId, {
+                songId: song.songId,
+                title: newer ? song.title : prev.title,
+                key: newer ? song.key : prev.key,
+                count: (prev?.count ?? 0) + 1,
+                lastDate: newer ? setlist.date : prev.lastDate,
+            });
+        }
+    }
+    return [...found.values()].sort((a, b) => b.count - a.count || b.lastDate.localeCompare(a.lastDate) || a.title.localeCompare(b.title)).slice(0, limit);
+}
+
 /** 화면 제목: 주제가 있으면 주제, 없으면 예배 이름 */
 export function displayTitle(setlist: Pick<ContiSetlist, 'theme' | 'service'>): string {
     return setlist.theme.trim() || setlist.service;

@@ -10,6 +10,7 @@ import WeekScreen from './WeekScreen';
 import ContiScreen from './ContiScreen';
 import OrderScreen from './OrderScreen';
 import TeamScreen from './TeamScreen';
+import TeamBoardScreen from './TeamBoardScreen';
 import RequestScreen from './RequestScreen';
 import AlertsScreen from './AlertsScreen';
 
@@ -112,7 +113,20 @@ export default function ContiWorkspace({
             {screen === 'week' && <WeekScreen go={go} openOrder={openOrder} />}
             {screen === 'conti' && <ContiScreen openOrder={openOrder} />}
             {screen === 'order' && <OrderScreen setlistId={setlistId} onBack={() => go('conti')} onSelect={selectSetlist} />}
-            {screen === 'team' && <TeamScreen openOrder={openOrder} />}
+            {screen === 'team' &&
+                (embedded ? (
+                    <>
+                        {/* 대시보드의 넓은 화면은 배치표 + 콘티 보드, 좁은 화면은 휴대폰과 같은 목록 */}
+                        <div className="hidden xl:block">
+                            <TeamBoardScreen openOrder={openOrder} />
+                        </div>
+                        <div className="xl:hidden">
+                            <TeamScreen openOrder={openOrder} />
+                        </div>
+                    </>
+                ) : (
+                    <TeamScreen openOrder={openOrder} />
+                ))}
             {screen === 'requests' && <RequestScreen />}
             {screen === 'alerts' && <AlertsScreen onBack={() => go('week')} openOrder={openOrder} go={go} />}
         </ContiProvider>

@@ -139,7 +139,7 @@ function ServiceSection({ service, openOrder }: { service: ServiceDay; openOrder
     );
 }
 
-function AssignmentRow({ service, item }: { service: ServiceDay; item: PartAssignment }) {
+export function AssignmentRow({ service, item }: { service: ServiceDay; item: PartAssignment }) {
     const { planning } = useConti();
     const { send, busy } = useDispatch();
     const [mode, setMode] = useState<'idle' | 'decline' | 'assign'>('idle');

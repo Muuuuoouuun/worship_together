@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyPlanningCommand, planningForViewer } from '../lib/planning';
 import { emptyPlanningState, type PlanningCommand, type PlanningState } from '../types/planning';
 import type { TeamMember } from '../types/team';
-import { actorFromBody, buildPlanningView, classifyNotice, groupOf, pickServices } from '../components/conti/planningBridge';
+import { actorFromBody, buildPlanningView, buildRoleMatrix, classifyNotice, groupOf, pickServices } from '../components/conti/planningBridge';
 import type { ContiSetlist } from '../components/conti/model';
 
 const members: TeamMember[] = [
@@ -227,4 +227,28 @@ test('겹치는 시간의 다른 일정에 배치된 사람에게는 지원 버�
     assert.equal(vocal('u-vocal').canVolunteer, true, '어디에도 배치되지 않은 이소망은 지원할 수 있다');
     assert.throws(() => send(state, 'u-guitar2', { type: 'slot.volunteer', eventId, slotId: slots.vocal }), /겹치는 일정/);
     assert.doesNotThrow(() => send(state, 'u-vocal', { type: 'slot.volunteer', eventId, slotId: slots.vocal }));
+});
+
+test('여러 주일의 자리를 역할·순번으로 맞춰 한 장의 배치표로 만든다', () => {
+    const { state: base, eventId } = seed();
+    let state = send(base, 'u-lead', {
+        type: 'event.save',
+        input: { title: '주일 2부 예배', kind: 'worship', startsAt: '2026-10-25T11:00:00+09:00', endsAt: '2026-10-25T12:10:00+09:00', location: '본당 3층', notes: '' },
+    });
+    const nextId = state.events.find((event) => event.startsAt.startsWith('2026-10-25'))!.id;
+    for (const [role, memberId] of [['guitar', 'u-guitar2'], ['guitar', 'u-guitar'], ['vocal', 'u-vocal']] as const) {
+        state = send(state, 'u-lead', { type: 'slot.save', eventId: nextId, role, memberId });
+    }
+
+    const services = view(state, 'u-lead').services;
+    assert.deepEqual(services.map((service) => service.eventId), [eventId, nextId]);
+    const rows = buildRoleMatrix(services);
+    assert.deepEqual(rows.map((row) => row.label), ['인도자', '보컬', '건반', '기타 1', '기타 2'], '역할 순서대로, 두 자리인 역할은 번호를 붙인다');
+    assert.deepEqual(rows.map((row) => row.cells.map((cell) => cell?.memberName ?? (cell ? '빈자리' : null))), [
+        ['김찬양', null],
+        ['빈자리', '이소망'],
+        ['정다윗', null],
+        ['한믿음', '최요셉'],
+        [null, '한믿음'],
+    ], '그 예배에 없는 자리는 null');
 });

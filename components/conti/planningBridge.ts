@@ -446,6 +446,34 @@ function collapse(text: string): string {
 }
 
 /** 팀 배치 탭에 보여줄 주일들: 오늘 기준 지난 1개 + 다가오는 3개 */
+export interface RoleRow {
+    key: string;
+    role: WorshipRole;
+    /** 같은 역할이 두 자리 이상인 예배가 있으면 '기타 1', '기타 2' */
+    label: string;
+    /** 예배 순서대로. 그 예배에 이 자리가 없으면 null */
+    cells: (PartAssignment | null)[];
+}
+
+/** 여러 예배의 자리를 역할·순번으로 맞춰 한 장의 배치표로 만듭니다. */
+export function buildRoleMatrix(services: ServiceDay[]): RoleRow[] {
+    const most = new Map<WorshipRole, number>();
+    for (const service of services) {
+        const counts = new Map<WorshipRole, number>();
+        for (const item of service.assignments) counts.set(item.role, (counts.get(item.role) ?? 0) + 1);
+        for (const [role, count] of counts) most.set(role, Math.max(most.get(role) ?? 0, count));
+    }
+    return ROLE_ORDER.flatMap((role) => {
+        const size = most.get(role) ?? 0;
+        return Array.from({ length: size }, (_, index) => ({
+            key: `${role}:${index}`,
+            role,
+            label: size > 1 ? `${worshipRoles[role]} ${index + 1}` : worshipRoles[role],
+            cells: services.map((service) => service.assignments.filter((item) => item.role === role)[index] ?? null),
+        }));
+    });
+}
+
 export function pickServices(services: ServiceDay[], today: string, count = 4): ServiceDay[] {
     const index = services.findIndex((service) => service.date >= today);
     if (index === -1) return services.slice(-count);
