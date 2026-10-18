@@ -55,7 +55,7 @@ interface QuickCue {
 }
 
 /** 엄지 자리에 둘 빠른 큐 (모바일은 앞의 3개) */
-const QUICK_CUES: QuickCue[] = [
+export const QUICK_CUES: QuickCue[] = [
     { label: '한 번 더', target: '전체' },
     { label: '엔딩 컷', target: '전체' },
     { label: '보컬 UP', target: '음향' },
@@ -123,7 +123,7 @@ function barSpans(bars: number): Span[] {
  * 박 칸: 지금 박 = 흰색, 지난 박 = 옅은 흰색, 남은 박 = 아주 옅게 (센박·중간 센박은 굵게).
  * 바깥 링: 섹션의 마디. 지난 마디는 옅은 흰색, 지금 마디는 박마다 초록(진행 중)으로 차오름.
  */
-function BeatRing({
+export function BeatRing({
     bpm,
     meter,
     resetKey,
@@ -253,7 +253,7 @@ function LiveEyebrow({ live, as: Tag = 'p', className }: { live: MockLive; as?: 
     );
 }
 
-function KeyChip({ children, className }: { children: ReactNode; className?: string }) {
+export function KeyChip({ children, className }: { children: ReactNode; className?: string }) {
     return <span className={cn('inline-flex h-6 shrink-0 items-center rounded-full bg-muted px-2.5 text-xs font-semibold text-foreground', className)}>{children}</span>;
 }
 
@@ -272,7 +272,7 @@ function DeviceToggle({ label, pressed, onClick, children }: { label: string; pr
     );
 }
 
-interface DeviceActions {
+export interface DeviceActions {
     awake: boolean;
     fullscreen: boolean;
     toggleAwake: () => void;
@@ -280,7 +280,7 @@ interface DeviceActions {
 }
 
 /** 전체화면 · 화면 꺼짐 방지. 갤러리 틀 안(framed)에서는 켜짐 모양만 바꿉니다 */
-function useDeviceActions(framed: boolean): DeviceActions {
+export function useDeviceActions(framed: boolean): DeviceActions {
     const [awake, setAwake] = useState(false);
     const [fullscreen, setFullscreen] = useState(false);
     const wakeRef = useRef<WakeLockSentinel | null>(null);
@@ -351,7 +351,7 @@ function DeviceToggles({ actions }: { actions: DeviceActions }) {
 }
 
 /** 지금 섹션 이후로 갈 곳 — 섹션 · 다음 곡 · 끝 */
-function nextStep(live: MockLive) {
+export function nextStep(live: MockLive) {
     if (live.nextSection) {
         const bars = live.song.chords[live.nextSection]?.length ?? 4;
         return { kind: 'section' as const, eyebrow: `다음 섹션 · ${live.sectionIndex + 2}/${live.song.form.length}`, name: live.nextSection, meta: `${bars}마디 · ${live.song.lyrics[live.nextSection] ?? ''}` };
@@ -430,18 +430,27 @@ function ringFloor(name: string) {
     return Math.round(Math.min(300, Math.max(230, (em * 40) / 0.92 / 0.73)));
 }
 
-function MobileScreen({
+export function MobileScreen({
     live,
     actions,
     onSendCue,
     stack,
     footprint,
+    header,
+    footer,
+    tallMin = 700,
 }: {
     live: MockLive;
     actions: DeviceActions;
     onSendCue: (label: string, target: string) => void;
     stack: ReactNode;
     footprint: number;
+    /** 위 막대를 바꿔 끼웁니다 (null 이면 위 막대 없이). 주지 않으면 곡 메뉴 + 기기 버튼 */
+    header?: ReactNode;
+    /** 아래 버튼 칸을 바꿔 끼웁니다 (null 이면 없이). 주지 않으면 빠른 큐 + 섹션 넘김 */
+    footer?: ReactNode;
+    /** 이 높이 이상이면 송폼 알약 줄을 둡니다 */
+    tallMin?: number;
 }) {
     const rootRef = useRef<HTMLDivElement>(null);
     const middleRef = useRef<HTMLDivElement>(null);
@@ -468,21 +477,25 @@ function MobileScreen({
         const row = rowRef.current;
         if (!element || !middle || !row) return;
         const observer = new ResizeObserver(() => {
-            const measured = { tall: element.offsetHeight >= 700, width: middle.offsetWidth, height: middle.offsetHeight, row: row.offsetHeight };
+            const measured = { tall: element.offsetHeight >= tallMin, width: middle.offsetWidth, height: middle.offsetHeight, row: row.offsetHeight };
             setBox((current) => ((Object.keys(measured) as (keyof typeof measured)[]).every((key) => current[key] === measured[key]) ? current : measured));
         });
         observer.observe(element);
         observer.observe(middle);
         observer.observe(row);
         return () => observer.disconnect();
-    }, []);
+    }, [tallMin]);
 
     return (
         <div ref={rootRef} className="flex h-full flex-col">
-            <header className="relative z-30 flex shrink-0 items-center gap-2 pb-1 pl-4 pr-3 pt-4">
-                <SongMenu live={live} />
-                <DeviceToggles actions={actions} />
-            </header>
+            {header === undefined ? (
+                <header className="relative z-30 flex shrink-0 items-center gap-2 pb-1 pl-4 pr-3 pt-4">
+                    <SongMenu live={live} />
+                    <DeviceToggles actions={actions} />
+                </header>
+            ) : (
+                header
+            )}
 
             <div ref={middleRef} className="relative flex min-h-0 flex-1 flex-col">
                 <section
@@ -541,25 +554,29 @@ function MobileScreen({
                 {stack}
             </div>
 
-            <div className="relative z-20 shrink-0 bg-background px-4 pb-5 pt-2">
-                <div role="group" aria-label="빠른 큐 보내기" className="grid grid-cols-3 gap-2">
-                    {QUICK_CUES.slice(0, 3).map((cue) => (
-                        <button
-                            key={cue.label}
-                            type="button"
-                            onClick={() => onSendCue(cue.label, cue.target)}
-                            aria-label={`${cue.label} 큐 보내기 · 받는 사람 ${cue.target}`}
-                            className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'h-11 gap-1.5 px-2 text-[13px]')}
-                        >
-                            {cue.label}
-                            <span aria-hidden="true" className="text-[11px] font-medium text-muted-foreground">
-                                {cue.target}
-                            </span>
-                        </button>
-                    ))}
+            {footer === undefined ? (
+                <div className="relative z-20 shrink-0 bg-background px-4 pb-5 pt-2">
+                    <div role="group" aria-label="빠른 큐 보내기" className="grid grid-cols-3 gap-2">
+                        {QUICK_CUES.slice(0, 3).map((cue) => (
+                            <button
+                                key={cue.label}
+                                type="button"
+                                onClick={() => onSendCue(cue.label, cue.target)}
+                                aria-label={`${cue.label} 큐 보내기 · 받는 사람 ${cue.target}`}
+                                className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'h-11 gap-1.5 px-2 text-[13px]')}
+                            >
+                                {cue.label}
+                                <span aria-hidden="true" className="text-[11px] font-medium text-muted-foreground">
+                                    {cue.target}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                    <SectionNav live={live} size="mobile" className="mt-2.5" />
                 </div>
-                <SectionNav live={live} size="mobile" className="mt-2.5" />
-            </div>
+            ) : (
+                footer
+            )}
         </div>
     );
 }
@@ -916,7 +933,7 @@ function announcement(toast: DraftToast) {
  * 화면 읽기용 알림 — 보통·낮은 알림은 polite, 급한 큐와 오류는 alert(assertive).
  * 새로 들어온 알림만 읽고, 앞 알림이 닫혀 뒤 알림이 앞으로 와도 다시 읽지 않습니다.
  */
-function ToastAnnouncer({ toasts }: { toasts: DraftToast[] }) {
+export function ToastAnnouncer({ toasts }: { toasts: DraftToast[] }) {
     const [previous, setPrevious] = useState(toasts);
     const [spoken, setSpoken] = useState<{ polite: { id: string; text: string } | null; assertive: { id: string; text: string } | null }>({ polite: null, assertive: null });
 
@@ -949,7 +966,7 @@ const GAP = 8;
  * 카드 더미. 0번(가장 새 알림)이 맨 앞 — 단, 아직 떠 있는 전체 큐(급함)는 늘 맨 앞에 둡니다.
  * 접힘: 뒤 카드는 위로 조금씩 겹쳐 보임 / 펼침: 위로 한 줄씩 (모바일은 눌러서, 데스크톱은 마우스를 올려서).
  */
-function ToastStack({
+export function ToastStack({
     device,
     toasts,
     onDismiss,

@@ -93,8 +93,51 @@ function ackOf(entry: CueLogEntry): { done: boolean; text: string } {
     return { done: false, text: `확인 ${acked}/${recipients.length}` };
 }
 
-export default function DesktopConsole({ framed = false }: DraftScreenProps) {
-    const live = useMockLive();
+/** 가운데 칸을 바꿔 그릴 때 넘겨 주는 상태 */
+export interface DesktopConsoleCenter {
+    live: MockLive;
+    locked: boolean;
+    beatOn: boolean;
+    /** 원래 가운데 칸 (지금 진행) */
+    stage: ReactNode;
+}
+
+/** 모두 선택 사항 — 주지 않으면 시안 그대로 그립니다 */
+export interface DesktopConsoleSlots {
+    /** 바깥에서 만든 진행 상태를 함께 씁니다 (주지 않으면 이 화면의 목업 상태) */
+    live?: MockLive;
+    /** 가운데 맨 위 받은 큐 줄과 큐 버튼의 보냄 표시를 그리지 않습니다 (알림을 바깥에서 한 가지로 그릴 때) */
+    hideOwnCues?: boolean;
+    /** 머리줄 가운데에 끼울 내용 */
+    headerSlot?: ReactNode | ((state: { locked: boolean }) => ReactNode);
+    /** 가운데 칸을 바꿔 그립니다 */
+    renderCenter?: (center: DesktopConsoleCenter) => ReactNode;
+    /** 가운데 칸의 박자 칸(1 2 3 4)을 바꿔 그립니다 */
+    renderBeat?: (state: { live: MockLive; beatOn: boolean }) => ReactNode;
+    /** 오른쪽 칸 맨 아래에 붙는 자리. 주면 큐 버튼 칸은 남는 높이 안에서 스크롤됩니다 */
+    cueDock?: ReactNode;
+    /** cueDock 이 무언가 보여 주는 동안 최근 큐 목록을 접습니다 */
+    cueDockOpen?: boolean;
+    /** 큐 버튼을 조금 낮게 (cueDock 자리를 넉넉히) */
+    denseCues?: boolean;
+    /** 왼쪽 칸(콘티 순서 · 팀 접속)에 더할 클래스 */
+    orderClassName?: string;
+}
+
+export default function DesktopConsole({
+    framed = false,
+    live: liveProp,
+    hideOwnCues = false,
+    headerSlot,
+    renderCenter,
+    renderBeat,
+    cueDock,
+    cueDockOpen = false,
+    denseCues = false,
+    orderClassName,
+}: DraftScreenProps & DesktopConsoleSlots) {
+    const ownLive = useMockLive();
+    const live = liveProp ?? ownLive;
     const rootRef = useRef<HTMLDivElement>(null);
     const [locked, setLocked] = useState(false);
     const [awake, setAwake] = useState(true);
@@ -163,6 +206,18 @@ export default function DesktopConsole({ framed = false }: DraftScreenProps) {
 
     const latest = live.log[0] ?? null;
     const incoming = latest && latest.from !== '나' && latest.id !== seenCueId ? latest : null;
+    const stage = (
+        <StageColumn
+            live={live}
+            locked={locked}
+            beatOn={beatOn}
+            latest={latest}
+            incoming={incoming}
+            onSeen={setSeenCueId}
+            hideSignal={hideOwnCues}
+            beat={renderBeat ? renderBeat({ live, beatOn }) : undefined}
+        />
+    );
 
     return (
         <div ref={rootRef} className="dark flex h-full w-full flex-col overflow-hidden bg-background text-foreground [color-scheme:dark]">
@@ -176,13 +231,14 @@ export default function DesktopConsole({ framed = false }: DraftScreenProps) {
                 onLock={() => setLocked((value) => !value)}
                 onMore={setMoreOpen}
                 more={<MoreSheet myRole={myRole} onRole={setMyRole} beatOn={beatOn} onBeat={setBeatOn} />}
+                slot={typeof headerSlot === 'function' ? headerSlot({ locked }) : headerSlot}
             />
 
             <div className="@container/console min-h-0 flex-1">
                 <div className="grid h-full grid-cols-[232px_minmax(0,1fr)_300px] @min-[1200px]/console:grid-cols-[280px_minmax(0,1fr)_352px] @min-[1400px]/console:grid-cols-[300px_minmax(0,1fr)_380px]">
-                    <OrderColumn live={live} locked={locked} />
-                    <StageColumn live={live} locked={locked} beatOn={beatOn} latest={latest} incoming={incoming} onSeen={setSeenCueId} />
-                    <CueColumn live={live} locked={locked} />
+                    <OrderColumn live={live} locked={locked} className={orderClassName} />
+                    {renderCenter ? renderCenter({ live, locked, beatOn, stage }) : stage}
+                    <CueColumn live={live} locked={locked} hideFlash={hideOwnCues} dense={denseCues} dock={cueDock} dockOpen={cueDockOpen} />
                 </div>
             </div>
         </div>
@@ -201,6 +257,7 @@ function ConsoleHeader({
     onLock,
     onMore,
     more,
+    slot,
 }: {
     fullscreen: boolean;
     awake: boolean;
@@ -211,6 +268,8 @@ function ConsoleHeader({
     onLock: () => void;
     onMore: (open: boolean) => void;
     more: ReactNode;
+    /** 진행 중 표시와 오른쪽 버튼 사이 가운데 자리 */
+    slot?: ReactNode;
 }) {
     const moreRef = useRef<HTMLDivElement>(null);
 
@@ -247,6 +306,8 @@ function ConsoleHeader({
                 <span aria-hidden="true" className="h-3.5 w-px bg-border" />
                 <Elapsed />
             </span>
+
+            {slot === undefined ? null : <div className="flex flex-1 justify-center">{slot}</div>}
 
             <div className="ml-auto flex shrink-0 items-center gap-1">
                 <span className="inline-flex items-center gap-1.5 px-2 text-sm text-muted-foreground">
@@ -378,9 +439,9 @@ function MoreSheet({ myRole, onRole, beatOn, onBeat }: { myRole: DraftRole; onRo
 
 /* ───────────── 왼쪽: 콘티 순서 · 팀 접속 ───────────── */
 
-function OrderColumn({ live, locked }: { live: MockLive; locked: boolean }) {
+function OrderColumn({ live, locked, className }: { live: MockLive; locked: boolean; className?: string }) {
     return (
-        <aside aria-label="콘티 순서와 팀 접속" className="flex min-h-0 flex-col overflow-y-auto border-r border-border px-4 pb-4 pt-4 [scrollbar-width:thin]">
+        <aside aria-label="콘티 순서와 팀 접속" className={cn('flex min-h-0 flex-col overflow-y-auto border-r border-border px-4 pb-4 pt-4 [scrollbar-width:thin]', className)}>
             {/* 세 칸의 머리줄은 모두 같은 48px 띠(가운데의 큐 줄과 같은 높이)에 맞춥니다. */}
             <div className="flex h-12 shrink-0 items-center justify-between px-2">
                 <h2 className="text-[17px] font-semibold tracking-tight">콘티 순서</h2>
@@ -478,6 +539,8 @@ function StageColumn({
     latest,
     incoming,
     onSeen,
+    hideSignal = false,
+    beat,
 }: {
     live: MockLive;
     locked: boolean;
@@ -485,6 +548,10 @@ function StageColumn({
     latest: CueLogEntry | null;
     incoming: CueLogEntry | null;
     onSeen: (id: string) => void;
+    /** 맨 위 신호 줄을 그리지 않습니다 */
+    hideSignal?: boolean;
+    /** 박자 칸 대신 그릴 내용 */
+    beat?: ReactNode;
 }) {
     const { song, sectionIndex, section, nextSection, nextSong } = live;
     const lastOfSong = nextSection === null;
@@ -496,7 +563,7 @@ function StageColumn({
         <main aria-label="지금 진행" className="@container/stage flex min-h-0 min-w-0 flex-col justify-between gap-4 overflow-y-auto px-8 pb-5 pt-4 [scrollbar-width:none] @min-[1200px]/console:px-10 @min-[1200px]/console:pb-6">
             {/* 받은 큐 + 곡 + 지금 섹션 */}
             <div className="shrink-0">
-                <SignalLine latest={latest} incoming={incoming} onSeen={onSeen} />
+                {hideSignal ? null : <SignalLine latest={latest} incoming={incoming} onSeen={onSeen} />}
 
                 <p className="mt-4 text-xs font-medium text-muted-foreground @min-[1200px]/console:mt-5">
                     지금 부르는 곡 · {live.songIndex + 1}/{live.songs.length}
@@ -518,23 +585,25 @@ function StageColumn({
 
             {/* 박자 · BPM */}
             <div className="flex shrink-0 items-center gap-4">
-                <BeatIndicator bpm={live.bpm} enabled={beatOn}>
-                    {(activeBeat) => (
-                        <div aria-hidden="true" className="flex flex-1 gap-2">
-                            {[1, 2, 3, 4].map((beat) => (
-                                <span
-                                    key={beat}
-                                    className={cn(
-                                        'flex h-14 flex-1 items-center justify-center rounded-2xl text-sm font-semibold tabular-nums transition-colors duration-75',
-                                        activeBeat === beat ? (beat === 1 ? 'bg-brand text-brand-foreground' : 'bg-primary text-primary-foreground') : 'bg-muted text-muted-foreground',
-                                    )}
-                                >
-                                    {beat}
-                                </span>
-                            ))}
-                        </div>
-                    )}
-                </BeatIndicator>
+                {beat ?? (
+                    <BeatIndicator bpm={live.bpm} enabled={beatOn}>
+                        {(activeBeat) => (
+                            <div aria-hidden="true" className="flex flex-1 gap-2">
+                                {[1, 2, 3, 4].map((beat) => (
+                                    <span
+                                        key={beat}
+                                        className={cn(
+                                            'flex h-14 flex-1 items-center justify-center rounded-2xl text-sm font-semibold tabular-nums transition-colors duration-75',
+                                            activeBeat === beat ? (beat === 1 ? 'bg-brand text-brand-foreground' : 'bg-primary text-primary-foreground') : 'bg-muted text-muted-foreground',
+                                        )}
+                                    >
+                                        {beat}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </BeatIndicator>
+                )}
                 <div className="flex shrink-0 items-center gap-1" role="group" aria-label="BPM 조절">
                     <button type="button" aria-label="BPM 1 내리기" disabled={locked} onClick={() => live.nudgeBpm(-1)} className={cn(buttonVariants({ variant: 'outline', size: 'icon-sm' }), 'size-10 bg-transparent text-muted-foreground')}>
                         <Minus />
@@ -697,72 +766,109 @@ function SignalLine({ latest, incoming, onSeen }: { latest: CueLogEntry | null; 
     );
 }
 
-function MetaChip({ children }: { children: ReactNode }) {
+export function MetaChip({ children }: { children: ReactNode }) {
     return <span className="inline-flex h-7 items-center rounded-full bg-muted px-3 text-[13px] font-semibold tabular-nums">{children}</span>;
 }
 
 /* ───────────── 오른쪽: 큐 보내기 · 최근 큐 ───────────── */
 
-function CueColumn({ live, locked }: { live: MockLive; locked: boolean }) {
-    const { flash } = live;
+function CueColumn({
+    live,
+    locked,
+    hideFlash = false,
+    dense = false,
+    dock,
+    dockOpen = false,
+}: {
+    live: MockLive;
+    locked: boolean;
+    /** 보낸 큐 확인 알약과 버튼의 보냄 표시를 그리지 않습니다 */
+    hideFlash?: boolean;
+    /** 큐 버튼을 조금 낮게 */
+    dense?: boolean;
+    /** 칸 맨 아래 자리. 주면 위 내용(큐 버튼 · 최근 큐)이 남는 높이 안에서 스크롤됩니다 */
+    dock?: ReactNode;
+    /** dock 이 무언가 보여 주는 동안 최근 큐 목록을 접습니다 */
+    dockOpen?: boolean;
+}) {
+    const flash = hideFlash ? null : live.flash;
+    const keyboard = (
+        <div className="shrink-0 px-4 pt-4">
+            <div className="flex h-12 items-center justify-between gap-2 px-1">
+                <h2 className="shrink-0 text-[17px] font-semibold tracking-tight">큐 보내기</h2>
+                <div aria-live="polite" aria-atomic="true" className="min-w-0">
+                    {flash ? (
+                        <span key={flash.id} className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full bg-muted pl-2.5 pr-3 text-xs font-semibold animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
+                            <Check className="size-3.5 shrink-0 text-brand" aria-hidden="true" />
+                            <span className="truncate">
+                                {flash.label} → {targetLabel(flash.target)}에게 보냄
+                            </span>
+                        </span>
+                    ) : null}
+                </div>
+                {flash ? null : <span className="text-xs text-muted-foreground">{locked ? '잠금 중' : '누르면 바로 보내요'}</span>}
+            </div>
+
+            <div className={cn('mt-1 space-y-4', dense && 'space-y-3')}>
+                {CUE_ROWS.map((pair) => (
+                    <div key={pair.flat().join()} className="grid grid-cols-2 items-start gap-x-2">
+                        {pair.map((groups) => (
+                            <div key={groups.join()} className="space-y-3">
+                                {groups.map((group) => (
+                                    <CueGroupBlock key={group} group={group} cues={DRAFT_CUES.filter((cue) => cue.group === group)} flash={flash} locked={locked} onSend={live.sendCue} dense={dense} />
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+
+    const recent = (
+        <div className="mt-5 flex min-h-0 flex-1 flex-col border-t border-border px-5 pt-3.5">
+            <div className="flex shrink-0 items-baseline justify-between">
+                <h2 className="text-[17px] font-semibold tracking-tight">최근 큐</h2>
+                <span className="text-xs text-muted-foreground">받은 사람 확인</span>
+            </div>
+            <ul className="mt-1 min-h-0 flex-1 divide-y divide-border overflow-y-auto pb-2 [scrollbar-width:thin]">
+                {live.log.map((entry) => {
+                    const ack = ackOf(entry);
+                    return (
+                        <li key={entry.id} className="flex h-10 items-center gap-2">
+                            <p className="flex min-w-0 flex-1 items-baseline gap-2">
+                                <span className="truncate text-sm font-semibold">{entry.label}</span>
+                                <span className="shrink-0 text-xs text-muted-foreground">
+                                    {entry.from} → {targetLabel(entry.target)} · {entry.at}
+                                </span>
+                            </p>
+                            <span className={cn('inline-flex shrink-0 items-center gap-1 text-xs', ack.done ? 'font-medium text-brand' : 'text-muted-foreground')}>
+                                {ack.done ? <Check className="size-3.5" aria-hidden="true" /> : null}
+                                {ack.text}
+                            </span>
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+
+    if (dock === undefined) {
+        return (
+            <aside aria-label="큐 보내기와 최근 큐" className="flex min-h-0 flex-col overflow-hidden border-l border-border">
+                {keyboard}
+                {recent}
+            </aside>
+        );
+    }
+
     return (
         <aside aria-label="큐 보내기와 최근 큐" className="flex min-h-0 flex-col overflow-hidden border-l border-border">
-            <div className="shrink-0 px-4 pt-4">
-                <div className="flex h-12 items-center justify-between gap-2 px-1">
-                    <h2 className="shrink-0 text-[17px] font-semibold tracking-tight">큐 보내기</h2>
-                    <div aria-live="polite" aria-atomic="true" className="min-w-0">
-                        {flash ? (
-                            <span key={flash.id} className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full bg-muted pl-2.5 pr-3 text-xs font-semibold animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
-                                <Check className="size-3.5 shrink-0 text-brand" aria-hidden="true" />
-                                <span className="truncate">
-                                    {flash.label} → {targetLabel(flash.target)}에게 보냄
-                                </span>
-                            </span>
-                        ) : null}
-                    </div>
-                    {flash ? null : <span className="text-xs text-muted-foreground">{locked ? '잠금 중' : '누르면 바로 보내요'}</span>}
-                </div>
-
-                <div className="mt-1 space-y-4">
-                    {CUE_ROWS.map((pair) => (
-                        <div key={pair.flat().join()} className="grid grid-cols-2 items-start gap-x-2">
-                            {pair.map((groups) => (
-                                <div key={groups.join()} className="space-y-3">
-                                    {groups.map((group) => (
-                                        <CueGroupBlock key={group} group={group} cues={DRAFT_CUES.filter((cue) => cue.group === group)} flash={flash} locked={locked} onSend={live.sendCue} />
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    ))}
-                </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-width:none]">
+                {keyboard}
+                {dockOpen ? null : recent}
             </div>
-
-            <div className="mt-5 flex min-h-0 flex-1 flex-col border-t border-border px-5 pt-3.5">
-                <div className="flex shrink-0 items-baseline justify-between">
-                    <h2 className="text-[17px] font-semibold tracking-tight">최근 큐</h2>
-                    <span className="text-xs text-muted-foreground">받은 사람 확인</span>
-                </div>
-                <ul className="mt-1 min-h-0 flex-1 divide-y divide-border overflow-y-auto pb-2 [scrollbar-width:thin]">
-                    {live.log.map((entry) => {
-                        const ack = ackOf(entry);
-                        return (
-                            <li key={entry.id} className="flex h-10 items-center gap-2">
-                                <p className="flex min-w-0 flex-1 items-baseline gap-2">
-                                    <span className="truncate text-sm font-semibold">{entry.label}</span>
-                                    <span className="shrink-0 text-xs text-muted-foreground">
-                                        {entry.from} → {targetLabel(entry.target)} · {entry.at}
-                                    </span>
-                                </p>
-                                <span className={cn('inline-flex shrink-0 items-center gap-1 text-xs', ack.done ? 'font-medium text-brand' : 'text-muted-foreground')}>
-                                    {ack.done ? <Check className="size-3.5" aria-hidden="true" /> : null}
-                                    {ack.text}
-                                </span>
-                            </li>
-                        );
-                    })}
-                </ul>
-            </div>
+            {dock}
         </aside>
     );
 }
@@ -773,12 +879,14 @@ function CueGroupBlock({
     flash,
     locked,
     onSend,
+    dense = false,
 }: {
     group: CueGroup;
     cues: DraftCue[];
     flash: CueLogEntry | null;
     locked: boolean;
     onSend: MockLive['sendCue'];
+    dense?: boolean;
 }) {
     const target = cues[0]?.target ?? 'all';
     const headingId = `cue-group-${group}`;
@@ -790,7 +898,7 @@ function CueGroupBlock({
                 </h3>
                 <span className="text-[11px] text-muted-foreground">→ {targetLabel(target)}</span>
             </div>
-            <div className="mt-1.5 space-y-2">
+            <div className={cn('mt-1.5 space-y-2', dense && 'space-y-1.5')}>
                 {cues.map((cue) => {
                     const sent = flash !== null && flash.label === cue.label && flash.target === cue.target;
                     return (
@@ -804,6 +912,7 @@ function CueGroupBlock({
                                 'flex h-11 w-full items-center justify-between gap-2 rounded-2xl border px-3.5 text-left text-[15px] font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transform-none @min-[1400px]/console:h-12',
                                 focusRing,
                                 sent ? 'border-transparent bg-primary text-primary-foreground' : 'border-border bg-card hover:bg-muted',
+                                dense && 'h-10 @min-[1400px]/console:h-11',
                             )}
                         >
                             <span className="truncate">{cue.label}</span>

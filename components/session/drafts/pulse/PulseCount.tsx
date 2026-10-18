@@ -45,7 +45,7 @@ import type { PulseDraftProps } from './types';
  *   · 앱 알림(저장·오류·팀 소식·연결)은 아래 가운데 흰 카드 — 넘김 버튼 위 비워 둔 자리에 겹쳐 쌓임.
  */
 
-const CUE_KINDS = new Set<ToastKind>(['cue-all', 'cue-role', 'cue-sent']);
+export const CUE_KINDS = new Set<ToastKind>(['cue-all', 'cue-role', 'cue-sent']);
 
 /** 펼친 아일랜드가 다시 작은 알약으로 접히기까지 */
 const EXPAND_MS: Record<ToastUrgency, number> = { high: 3200, normal: 2400, low: 2000 };
@@ -192,7 +192,7 @@ function MobileLayout({ live, screen, framed, island, dock, onSendCue }: LayoutP
     );
 }
 
-function SectionNow({ live }: { live: MockLive }) {
+export function SectionNow({ live }: { live: MockLive }) {
     const next = live.nextSection ?? live.nextSong?.title ?? null;
     return (
         // 두 줄 격자: 눈썹(지금 · 다음)끼리, 이름(Chorus · Verse 2)끼리 같은 기준선에 섭니다
@@ -319,14 +319,14 @@ function DesktopLayout({ live, screen, island, dock, onSendCue }: LayoutProps) {
     );
 }
 
-function barsOf(live: MockLive) {
+export function barsOf(live: MockLive) {
     return Math.max(1, live.song.chords[live.section]?.length ?? 8);
 }
 
 /* ───────────── 펄스: 큰 박 숫자 · 박 막대 · 마디 ───────────── */
 
 /** 박마다 두 번 다시 그려지는 유일한 부분 — 숫자·막대·마디만 여기서 그립니다 */
-function BeatHero({ bpm, meter, resetKey, bars, desktop = false }: { bpm: number; meter: string; resetKey: string; bars: number; desktop?: boolean }) {
+export function BeatHero({ bpm, meter, resetKey, bars, desktop = false }: { bpm: number; meter: string; resetKey: string; bars: number; desktop?: boolean }) {
     const pulse = useMockPulse({ bpm, meter, resetKey });
     const count = pulse.count || 1;
     const started = pulse.count > 0;
@@ -624,9 +624,24 @@ function ScreenMenu({ screen }: { screen: ScreenToggles }) {
 
 /* ───────────── 알림 ①: 위 가운데 큐 아일랜드 ───────────── */
 
-type IslandMode = 'idle' | 'compact' | 'medium' | 'large' | 'list';
+export type IslandMode = 'idle' | 'compact' | 'medium' | 'large' | 'list';
 
-function CueIsland({ cues, desktop, offline, onAck, onDismiss }: { cues: DraftToast[]; desktop: boolean; offline: boolean; onAck: (id: string) => void; onDismiss: (id: string) => void }) {
+/** @param modeClassName 모드별 자리·너비를 바꿀 때 (예: 위 막대가 아닌 좁은 열 위에 둘 때). 없으면 이 시안의 자리 그대로 */
+export function CueIsland({
+    cues,
+    desktop,
+    offline,
+    onAck,
+    onDismiss,
+    modeClassName,
+}: {
+    cues: DraftToast[];
+    desktop: boolean;
+    offline: boolean;
+    onAck: (id: string) => void;
+    onDismiss: (id: string) => void;
+    modeClassName?: Partial<Record<IslandMode, string>>;
+}) {
     const [known, setKnown] = useState('');
     const [focusId, setFocusId] = useState<string | null>(null);
     const [listOpen, setListOpen] = useState(false);
@@ -713,6 +728,7 @@ function CueIsland({ cues, desktop, offline, onAck, onDismiss }: { cues: DraftTo
                 mode === 'compact' && (desktop ? 'top-3 max-w-[min(480px,calc(100%-720px))]' : 'max-w-[calc(100%-112px)]'),
                 (mode === 'medium' || mode === 'list') && (desktop ? 'top-3 w-[440px]' : 'w-[calc(100%-8px)] max-w-[400px]'),
                 mode === 'large' && (desktop ? 'top-3 w-[480px]' : 'w-[calc(100%-8px)] max-w-[400px]'),
+                modeClassName?.[mode],
             )}
         >
             {mode === 'idle' ? <IdleStatus offline={offline} /> : null}
@@ -933,7 +949,7 @@ function IdleStatus({ offline }: { offline: boolean }) {
 
 /* ───────────── 알림 ②: 아래 가운데 앱 알림 카드 ───────────── */
 
-function NoticeDock({ notices, desktop, onAction, onDismiss }: { notices: DraftToast[]; desktop: boolean; onAction: (id: string) => void; onDismiss: (id: string) => void }) {
+export function NoticeDock({ notices, desktop, onAction, onDismiss }: { notices: DraftToast[]; desktop: boolean; onAction: (id: string) => void; onDismiss: (id: string) => void }) {
     const [open, setOpen] = useState(false);
     const many = notices.length > 1;
     const expanded = open && many;
@@ -1085,7 +1101,7 @@ function NoticeCard({
 }
 
 /** 앱 알림 줄. 알림이 있을 때만 열리고(높이 0 → 내용), 그동안 위의 박 숫자가 조금 작아집니다. */
-function DockZone({ open, desktop, children }: { open: boolean; desktop: boolean; children: ReactNode }) {
+export function DockZone({ open, desktop, children }: { open: boolean; desktop: boolean; children: ReactNode }) {
     return (
         <div className={cn('relative z-20 grid shrink-0 transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
             <div className="flex min-h-0 flex-col justify-end">
@@ -1191,7 +1207,7 @@ function useOutsideClose(active: boolean, onClose: () => void) {
  * 스크린리더 알림: 급한 큐와 오류는 role="alert", 나머지는 polite.
  * 새로 들어온 알림만 한 번 읽습니다 (닫혀서 다음 알림이 앞으로 올 때는 다시 읽지 않음).
  */
-function Announcer({ toasts }: { toasts: DraftToast[] }) {
+export function Announcer({ toasts }: { toasts: DraftToast[] }) {
     const [known, setKnown] = useState<string>('');
     const [message, setMessage] = useState({ alert: '', polite: '' });
     const key = toasts.map((toast) => `${toast.id}${toast.acked ? '+' : ''}`).join(' ');

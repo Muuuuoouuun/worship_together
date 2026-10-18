@@ -44,10 +44,10 @@ import type { DraftScreenProps } from './types';
  * 역할·동기화 같은 설정은 더보기 시트 뒤로 숨깁니다.
  */
 
-type SheetKind = 'cue' | 'order' | 'more';
-type Recipient = 'all' | 'instrument' | 'sound' | 'media';
+export type SheetKind = 'cue' | 'order' | 'more';
+export type Recipient = 'all' | 'instrument' | 'sound' | 'media';
 
-const ME = { name: '이은혜', part: '건반' };
+export const ME = { name: '이은혜', part: '건반' };
 
 const RECIPIENTS: { id: Recipient; label: string }[] = [
     { id: 'all', label: '전체' },
@@ -320,7 +320,8 @@ function Elapsed() {
     );
 }
 
-function SongStrip({ live, onOrder }: { live: MockLive; onOrder: () => void }) {
+/** @param beat 박자 점 · BPM · 박자표 자리를 통째로 바꿉니다 (없으면 4박 점 · BPM · 박자표) */
+export function SongStrip({ live, onOrder, beat }: { live: MockLive; onOrder: () => void; beat?: ReactNode }) {
     const { song } = live;
     return (
         <section aria-label="지금 곡" className="shrink-0 px-5 pb-3 pt-1.5">
@@ -344,7 +345,7 @@ function SongStrip({ live, onOrder }: { live: MockLive; onOrder: () => void }) {
                     <span className="mr-1 text-xs font-medium text-muted-foreground">Key</span>
                     {song.key}
                 </span>
-                <BeatIndicator bpm={live.bpm} enabled>
+                {beat ?? <BeatIndicator bpm={live.bpm} enabled>
                     {(activeBeat, blink) => (
                         <span className="inline-flex items-center gap-2.5">
                             <span aria-hidden="true" className="flex items-center gap-1.5">
@@ -365,8 +366,8 @@ function SongStrip({ live, onOrder }: { live: MockLive; onOrder: () => void }) {
                             </span>
                         </span>
                     )}
-                </BeatIndicator>
-                <span className="text-muted-foreground">{song.meter}</span>
+                </BeatIndicator>}
+                {beat ? null : <span className="text-muted-foreground">{song.meter}</span>}
             </div>
         </section>
     );
@@ -393,7 +394,7 @@ function ReceivedBanner({ entry, onAck }: { entry: CueLogEntry; onAck: () => voi
     );
 }
 
-function NowCard({ live }: { live: MockLive }) {
+export function NowCard({ live }: { live: MockLive }) {
     const { song, section } = live;
     const chords = song.chords[section] ?? [];
 
@@ -434,7 +435,7 @@ function NowCard({ live }: { live: MockLive }) {
 }
 
 /** 다음 섹션 (곡의 끝이면 다음 곡) — 넘김 버튼 바로 위에 둡니다 */
-function NextUp({ live }: { live: MockLive }) {
+export function NextUp({ live }: { live: MockLive }) {
     const { song, nextSection, nextSong } = live;
     const nextLyric = nextSection ? song.lyrics[nextSection] : null;
     const name = nextSection ?? nextSong?.title ?? '예배 마무리';
@@ -451,7 +452,7 @@ function NextUp({ live }: { live: MockLive }) {
     );
 }
 
-function ScoreView({ live }: { live: MockLive }) {
+export function ScoreView({ live }: { live: MockLive }) {
     const { song } = live;
     const sections = song.form.map((name, index) => ({ name, index })).filter(({ index }) => pageOf(song, index) === live.page);
     const articleRef = useRef<HTMLElement | null>(null);
@@ -544,7 +545,7 @@ function SentToast({ entry }: { entry: CueLogEntry }) {
 
 /* ───────────── 아래: 송폼 · 잠금 ───────────── */
 
-function FormRow({ live }: { live: MockLive }) {
+export function FormRow({ live }: { live: MockLive }) {
     const scroller = useRef<HTMLOListElement | null>(null);
     const first = useRef(true);
 
@@ -588,7 +589,7 @@ function FormRow({ live }: { live: MockLive }) {
     );
 }
 
-function HoldToUnlock({ onUnlock }: { onUnlock: () => void }) {
+export function HoldToUnlock({ onUnlock }: { onUnlock: () => void }) {
     const [holding, setHolding] = useState(false);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -635,7 +636,7 @@ function HoldToUnlock({ onUnlock }: { onUnlock: () => void }) {
 
 /* ───────────── 시트 ───────────── */
 
-function Sheet({
+export function Sheet({
     eyebrow,
     title,
     tall = false,
@@ -731,7 +732,7 @@ function Sheet({
     );
 }
 
-function CueSheetBody({ log, recipient, onRecipient, onSend }: { log: CueLogEntry[]; recipient: Recipient; onRecipient: (value: Recipient) => void; onSend: (cue: DraftCue) => void }) {
+export function CueSheetBody({ log, recipient, onRecipient, onSend }: { log: CueLogEntry[]; recipient: Recipient; onRecipient: (value: Recipient) => void; onSend: (cue: DraftCue) => void }) {
     const cues = recipient === 'all' ? DRAFT_CUES : DRAFT_CUES.filter((cue) => cue.target === recipient);
     const groups = CUE_GROUPS.map((group) => ({ group, cues: cues.filter((cue) => cue.group === group) })).filter((entry) => entry.cues.length > 0);
 
@@ -801,7 +802,7 @@ function CueSheetBody({ log, recipient, onRecipient, onSend }: { log: CueLogEntr
     );
 }
 
-function OrderSheetBody({ live, onPick }: { live: MockLive; onPick: (index: number) => void }) {
+export function OrderSheetBody({ live, onPick }: { live: MockLive; onPick: (index: number) => void }) {
     return (
         <ol className="divide-y divide-border">
             {live.songs.map((song, index) => {
@@ -840,7 +841,7 @@ function OrderSheetBody({ live, onPick }: { live: MockLive; onPick: (index: numb
     );
 }
 
-function MoreSheetBody({
+export function MoreSheetBody({
     device,
     framed,
     myRole,
@@ -975,7 +976,7 @@ function ToggleRow({ icon, label, hint, on, onToggle }: { icon: LucideIcon; labe
 
 /* ───────────── 기기 동작 (시안 틀 안에서는 표시만) ───────────── */
 
-interface DeviceToggles {
+export interface DeviceToggles {
     awake: boolean;
     fullscreen: boolean;
     locked: boolean;
@@ -984,7 +985,7 @@ interface DeviceToggles {
     setLocked: (locked: boolean) => void;
 }
 
-function useDeviceToggles(framed: boolean): DeviceToggles {
+export function useDeviceToggles(framed: boolean): DeviceToggles {
     const [awake, setAwake] = useState(false);
     const [fullscreen, setFullscreen] = useState(false);
     const [locked, setLocked] = useState(false);

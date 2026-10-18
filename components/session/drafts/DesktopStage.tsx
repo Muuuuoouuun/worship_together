@@ -19,6 +19,7 @@ import {
     type DraftCue,
     type DraftRole,
     type DraftSong,
+    type MockLive,
 } from './mockLive';
 import type { DraftScreenProps } from './types';
 
@@ -56,9 +57,33 @@ function cueGroupTargets(group: CueGroup) {
     return Array.from(new Set(DRAFT_CUES.filter((cue) => cue.group === group).map((cue) => targetLabel(cue.target)))).join(' · ');
 }
 
-export default function DesktopStage({ framed = false }: DraftScreenProps) {
-    const live = useMockLive();
-    const { song, songs, songIndex, sectionIndex, section, nextSection, nextSong, flash, log, goSection, goSong, nextSectionStep, prevSectionStep, sendCue } = live;
+/** 이 화면을 다른 화면 안에 넣어 쓸 때 쓰는 선택 항목 — 모두 비우면 시안 그대로입니다 */
+export interface DesktopStageProps extends DraftScreenProps {
+    /** 바깥에서 같은 진행 상태를 넘겨줄 때 (없으면 이 화면의 상태) */
+    live?: MockLive;
+    /** 위 막대의 'BPM · 박자 점' 자리를 바꿉니다 */
+    headerBeat?: ReactNode;
+    /** 위 막대 오른쪽, 아이콘 버튼들 앞에 넣을 것 (예: 화면 전환) */
+    headerActions?: ReactNode;
+    /** '인도자 따라가는 중 · 경과 시간'을 숨깁니다 (다른 곳에서 보여 줄 때) */
+    hideStatus?: boolean;
+    /** 악보 열(위 막대와 아래 막대 사이, 오른쪽 레일 왼쪽) 위에 겹쳐 그릴 층. 화면을 잠가도 눌립니다 */
+    stageOverlay?: ReactNode;
+    /** 악보를 숨깁니다 — 자리와 스크롤 위치는 그대로 지키고, 보이지도 눌리지도 않습니다 */
+    chartHidden?: boolean;
+    /**
+     * 큐를 보낼 때 함께 부릅니다 (받는 사람은 '전체' · '악기' 같은 이름).
+     * 주면 보낸 큐·받은 큐 표시는 바깥 알림이 맡으므로, 이 화면의 보냄 표시(초록 버튼·보냄 알약)와 받은 큐 알약을 그리지 않습니다.
+     */
+    onSendCue?: (label: string, target: string) => void;
+}
+
+export default function DesktopStage({ framed = false, live: sharedLive, headerBeat, headerActions, hideStatus = false, stageOverlay, chartHidden = false, onSendCue }: DesktopStageProps) {
+    const ownLive = useMockLive();
+    const live = sharedLive ?? ownLive;
+    const { song, songs, songIndex, sectionIndex, section, nextSection, nextSong, log, goSection, goSong, nextSectionStep, prevSectionStep, sendCue } = live;
+    // 바깥 알림이 보낸 큐를 보여 줄 때는 이 화면의 보냄 표시를 끕니다
+    const flash = onSendCue ? null : live.flash;
 
     const [panel, setPanel] = useState<Panel>(null);
     const [role, setRole] = useState<DraftRole>('instrument');
@@ -212,6 +237,7 @@ export default function DesktopStage({ framed = false }: DraftScreenProps) {
 
     const send = (cue: Pick<DraftCue, 'label' | 'target'>) => {
         sendCue(cue);
+        onSendCue?.(cue.label, targetLabel(cue.target));
         setPanel(null);
     };
 
@@ -259,7 +285,7 @@ export default function DesktopStage({ framed = false }: DraftScreenProps) {
                 <div className="flex min-w-0 items-center gap-3">
                     <h2 className="min-w-0 truncate text-[22px] font-semibold tracking-tight">{song.title}</h2>
                     <span className="inline-flex h-7 shrink-0 items-center rounded-full bg-muted px-2.5 text-sm font-semibold">Key {song.key}</span>
-                    <BeatIndicator bpm={live.bpm} enabled>
+                    {headerBeat ?? <BeatIndicator bpm={live.bpm} enabled>
                         {(activeBeat) => (
                             <span role="img" className="flex shrink-0 items-center gap-2.5" aria-label={`${live.bpm} BPM, ${song.meter}`}>
                                 <span className="flex items-baseline gap-1" aria-hidden="true">
@@ -279,22 +305,27 @@ export default function DesktopStage({ framed = false }: DraftScreenProps) {
                                 </span>
                             </span>
                         )}
-                    </BeatIndicator>
+                    </BeatIndicator>}
                 </div>
                 <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
                     {songIndex + 1} / {songs.length}곡
                 </span>
 
                 <div className="ml-auto flex shrink-0 items-center gap-1">
-                    <span className="mr-2 inline-flex items-center gap-2 text-sm font-medium">
-                        <span aria-hidden="true" className="size-2 rounded-full bg-brand" />
-                        {role === 'leader' ? '내가 진행 중' : '인도자 따라가는 중'}
-                    </span>
-                    <span className="mr-1.5 inline-flex items-center gap-1.5 text-sm text-muted-foreground" title="예배 경과 시간">
-                        <Timer className="size-4" aria-hidden="true" />
-                        <span className="sr-only">경과 시간</span>
-                        <ElapsedClock />
-                    </span>
+                    {hideStatus ? null : (
+                        <>
+                            <span className="mr-2 inline-flex items-center gap-2 text-sm font-medium">
+                                <span aria-hidden="true" className="size-2 rounded-full bg-brand" />
+                                {role === 'leader' ? '내가 진행 중' : '인도자 따라가는 중'}
+                            </span>
+                            <span className="mr-1.5 inline-flex items-center gap-1.5 text-sm text-muted-foreground" title="예배 경과 시간">
+                                <Timer className="size-4" aria-hidden="true" />
+                                <span className="sr-only">경과 시간</span>
+                                <ElapsedClock />
+                            </span>
+                        </>
+                    )}
+                    {headerActions}
                     <IconToggle label="화면 꺼짐 방지" pressed={awake} onClick={() => void toggleAwake()}>
                         <MonitorCheck className="size-5" />
                     </IconToggle>
@@ -334,7 +365,7 @@ export default function DesktopStage({ framed = false }: DraftScreenProps) {
             <div className="flex min-h-0 flex-1" inert={locked}>
                 {/* ── 가운데: 악보 (코드 차트) ── */}
                 <section aria-label="악보" className="flex min-w-0 flex-1 flex-col">
-                    <div className="flex h-14 shrink-0 items-center justify-between gap-3 pl-9 pr-5 @min-[1200px]:pl-12 @min-[1200px]:pr-7">
+                    <div className={cn('flex h-14 shrink-0 items-center justify-between gap-3 pl-9 pr-5 @min-[1200px]:pl-12 @min-[1200px]:pr-7', chartHidden && 'invisible')}>
                         <p className="truncate text-xs font-medium text-muted-foreground">
                             코드 차트 · {song.form.length}섹션 · {song.meter}
                         </p>
@@ -363,7 +394,7 @@ export default function DesktopStage({ framed = false }: DraftScreenProps) {
                         </div>
                     </div>
 
-                    <div ref={chartRef} onScroll={onChartScroll} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 @min-[1200px]:px-6">
+                    <div ref={chartRef} onScroll={onChartScroll} className={cn('relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 @min-[1200px]:px-6', chartHidden && 'invisible')}>
                         {pages.map((page) => (
                             <div key={`${song.id}-${page}`} data-page={page}>
                                 {page > 1 ? (
@@ -612,7 +643,7 @@ export default function DesktopStage({ framed = false }: DraftScreenProps) {
                                 보냄 <span className="hidden @min-[1200px]:inline">· {flash.label} </span>→ {targetLabel(flash.target)}
                             </span>
                         </span>
-                    ) : received ? (
+                    ) : received && !onSendCue ? (
                         <button
                             type="button"
                             data-trigger
@@ -648,6 +679,8 @@ export default function DesktopStage({ framed = false }: DraftScreenProps) {
                     {panel === 'log' ? <LogPanel entries={visibleLog} freshId={freshId} /> : null}
                 </div>
             </footer>
+
+            {stageOverlay ? <div className="absolute bottom-[76px] left-0 right-[300px] top-16 z-20 @min-[1200px]:right-80">{stageOverlay}</div> : null}
         </div>
     );
 }

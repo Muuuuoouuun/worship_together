@@ -67,8 +67,30 @@ const focusRing = 'outline-none focus-visible:ring-2 focus-visible:ring-ring';
 /** 흰 알약·스위치처럼 링과 같은 색인 요소는 틈을 두고 (시트 바탕색) */
 const focusRingOffset = cn(focusRing, 'focus-visible:ring-offset-2 focus-visible:ring-offset-card');
 
-export default function MobileScore({ framed = false, alt = false }: DraftScreenProps) {
-    const live = useMockLive();
+/** 이 화면을 다른 화면의 틀로 쓸 때 위 막대 · 본문에 넘겨 주는 상태 */
+export interface MobileScoreChrome {
+    live: MockLive;
+    locked: boolean;
+    beatOn: boolean;
+    /** 더보기 시트 열기 */
+    onMore: () => void;
+}
+
+/** 모두 선택 사항 — 주지 않으면 시안 그대로 그립니다 */
+export interface MobileScoreSlots {
+    /** 바깥에서 만든 진행 상태를 함께 씁니다 (주지 않으면 이 화면의 목업 상태) */
+    live?: MockLive;
+    /** 받은 큐 줄과 보낸 큐 확인을 그리지 않습니다 (알림을 바깥에서 한 가지로 그릴 때) */
+    hideOwnCues?: boolean;
+    /** 위 막대를 바꿔 그립니다 */
+    renderTopBar?: (chrome: MobileScoreChrome) => ReactNode;
+    /** 위 막대와 아래 막대 사이(코드 악보 자리)를 바꿔 그립니다 */
+    renderBody?: (chrome: MobileScoreChrome) => ReactNode;
+}
+
+export default function MobileScore({ framed = false, alt = false, live: liveProp, hideOwnCues = false, renderTopBar, renderBody }: DraftScreenProps & MobileScoreSlots) {
+    const ownLive = useMockLive();
+    const live = liveProp ?? ownLive;
     const rootRef = useRef<HTMLDivElement>(null);
     const [sheet, setSheet] = useState<SheetKind | null>(alt ? 'order' : null);
     /** 사용자가 직접 연 시트에만 초점을 옮깁니다 (처음부터 열린 alt 화면은 페이지를 움직이지 않도록). */
@@ -154,21 +176,22 @@ export default function MobileScore({ framed = false, alt = false }: DraftScreen
 
     const latest = live.log[0] ?? null;
     const incoming = latest && latest.from !== '나' && latest.id !== dismissedCue ? latest : null;
+    const chrome: MobileScoreChrome = { live, locked, beatOn, onMore: () => openSheet('more') };
 
     return (
         <div ref={rootRef} className="dark relative flex h-full w-full flex-col overflow-hidden bg-background text-foreground [color-scheme:dark]">
             {/* 시트가 열려 있으면 뒤의 악보는 어둡게 보이기만 하고 누를 수 없습니다 */}
             <div className="flex min-h-0 flex-1 flex-col" inert={sheet !== null}>
-                <TopBar live={live} beatOn={beatOn} locked={locked} onMore={() => openSheet('more')} />
+                {renderTopBar ? <ChromeSlot render={renderTopBar} chrome={chrome} /> : <TopBar live={live} beatOn={beatOn} locked={locked} onMore={() => openSheet('more')} />}
 
-                {incoming && !live.flash ? <IncomingCue entry={incoming} onDismiss={() => setDismissedCue(incoming.id)} /> : null}
+                {!hideOwnCues && incoming && !live.flash ? <IncomingCue entry={incoming} onDismiss={() => setDismissedCue(incoming.id)} /> : null}
 
-                <ScoreChart live={live} locked={locked} />
+                {renderBody ? <ChromeSlot render={renderBody} chrome={chrome} /> : <ScoreChart live={live} locked={locked} />}
 
                 <BottomBar live={live} locked={locked} onOrder={() => openSheet('order')} onCue={() => openSheet('cue')} onUnlock={() => setLocked(false)} />
             </div>
 
-            <SentFlash flash={live.flash} />
+            {hideOwnCues ? null : <SentFlash flash={live.flash} />}
 
             {sheet === 'order' ? (
                 <Sheet title="송폼 · 순서" hideTitle focusOnOpen={sheetFocus} onClose={closeSheet}>
@@ -215,6 +238,11 @@ export default function MobileScore({ framed = false, alt = false }: DraftScreen
             ) : null}
         </div>
     );
+}
+
+/** 바꿔 끼운 위 막대 · 본문 — onMore 는 누를 때만 부르므로 자식 컴포넌트에서 그립니다 */
+function ChromeSlot({ render, chrome }: { render: (chrome: MobileScoreChrome) => ReactNode; chrome: MobileScoreChrome }) {
+    return render(chrome);
 }
 
 /* ───────────── 위 막대 ───────────── */
@@ -316,7 +344,7 @@ function SentFlash({ flash }: { flash: CueLogEntry | null }) {
 
 /* ───────────── 코드 차트 ───────────── */
 
-function ScoreChart({ live, locked }: { live: MockLive; locked: boolean }) {
+export function ScoreChart({ live, locked }: { live: MockLive; locked: boolean }) {
     const { song, songIndex, sectionIndex, nextSong, goSection, goSong } = live;
     const scrollRef = useRef<HTMLDivElement>(null);
     const firstScroll = useRef(true);
