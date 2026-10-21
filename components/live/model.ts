@@ -45,11 +45,15 @@ export const CUE_LIBRARY: readonly CueDefinition[] = [
     { id: 'vol-down', label: '볼륨 다운', target: 'sound' },
     { id: 'vocal-up', label: '보컬 UP', target: 'sound' },
     { id: 'next-lyric', label: '다음 가사', target: 'media' },
+    { id: 'ready', label: '준비됐어요', target: 'leader' },
+    { id: 'wait', label: '잠깐만요', target: 'leader' },
 ];
 
 /** 전체 큐를 보낼 수 있으면 흐름 큐 세 개, 아니면 음향에게 가는 큐 세 개가 엄지 자리에 놓입니다. */
 export const QUICK_CUES_ALL = ['again', 'ending', 'prayer'] as const;
 export const QUICK_CUES_SOUND = ['monitor', 'vol-up', 'vol-down'] as const;
+/** 음향 담당이 전체 큐를 못 보낼 때 — 인도자에게 알리는 큐 */
+export const QUICK_CUES_TO_LEADER = ['ready', 'wait', 'next-lyric'] as const;
 
 export function cueById(id: string): CueDefinition | undefined {
     return CUE_LIBRARY.find((cue) => cue.id === id);

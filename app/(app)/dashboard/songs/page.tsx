@@ -19,7 +19,7 @@ export default async function SongsPage({ searchParams }: SongsPageProps) {
     const { screen, setlistId } = resolveScreen(tab, setlist);
 
     // 곡 보관함과 같은 데이터를 같은 규칙으로 읽습니다.
-    const inputs = await getLiveContiInputs();
+    const inputs = await getLiveContiInputs(team);
 
-    return <LiveContiWorkspace {...inputs} onlineTeamId={team} initialScreen={screen} initialSetlistId={setlistId} />;
+    return <LiveContiWorkspace {...inputs} initialScreen={screen} initialSetlistId={setlistId} />;
 }

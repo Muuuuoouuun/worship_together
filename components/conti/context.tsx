@@ -32,6 +32,8 @@ export type SaveResult = { ok: true } | { ok: false; error: string };
 export interface ContiEditor {
     /** 서버 저장 콘티는 아직 순서 변경을 지원하지 않습니다. */
     canReorder: boolean;
+    /** 팀 권한상 콘티를 고칠 수 있는지 (false 면 보기 · 코멘트만). 없으면 true */
+    canEdit?: boolean;
     /** 저장 위치 안내 (예: '이 브라우저에 저장돼요') */
     storageNote: string;
     /** 새 콘티를 만드는 곳 */

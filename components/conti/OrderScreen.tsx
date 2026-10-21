@@ -156,12 +156,17 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
                     </span>
                 </button>
                 {editor ? (
-                    !editing && (
+                    !editing && (editor.canEdit === false ? (
+                        // 팀 권한이 '보기 · 코멘트' 인 팀원 — 편집 대신 무엇을 할 수 있는지 보여 줍니다.
+                        <span className={cn('inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-xs font-medium', chip, sub)} title="콘티 편집은 팀 권한이 있는 사람만 할 수 있어요">
+                            보기 · 코멘트
+                        </span>
+                    ) : (
                         <button type="button" onClick={startEdit} className={cn(buttonVariants({ size: 'sm' }), 'shrink-0')}>
                             <Pencil size={15} aria-hidden="true" />
                             편집
                         </button>
-                    )
+                    ))
                 ) : (
                     <AddButton label="곡 추가" />
                 )}

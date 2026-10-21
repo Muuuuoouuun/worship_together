@@ -1,6 +1,6 @@
 import TeamManager from '@/components/team/TeamManager';
 import OnlineTeamManager from '@/components/team/OnlineTeamManager';
-import { getCurrentUser } from '@/lib/auth';
+import { getViewer } from '@/lib/server/viewer';
 import { getTeamRepository } from '@/lib/server/teams';
 import Link from 'next/link';
 import type { Metadata } from 'next';
@@ -18,14 +18,16 @@ export default async function TeamPage({ searchParams }: {
 }) {
     const params = await searchParams;
     const invite = typeof params.invite === 'string' ? params.invite.slice(0, 2048) : '';
-    const user = await getCurrentUser();
-    const teams = user ? getTeamRepository().list(user.id) : [];
+    const viewer = await getViewer(typeof params.team === 'string' ? params.team : undefined);
+    const user = viewer?.user ?? null;
+    const teams = viewer?.teams ?? [];
+    const activeInvite = viewer?.team && viewer.member?.permission === 'owner' ? getTeamRepository().activeInviteCode(viewer.team.id, viewer.user.id) : null;
     return (
         <>
             <div className="space-y-6">
-                <PageHeader title="팀·초대" description="팀을 만들고 링크로 초대해 역할을 나눠요" />
-                {user ? (
-                    <OnlineTeamManager teams={teams} userId={user.id} selectedTeamId={typeof params.team === 'string' ? params.team : undefined} />
+                <PageHeader title="팀·초대" description="팀을 만들고 링크 · 코드로 초대해 역할과 권한을 나눠요" />
+                {viewer && user ? (
+                    <OnlineTeamManager teams={teams} userId={user.id} currentTeamId={viewer.team?.id} policy={viewer.policy} profileName={viewer.profile.name} activeInvite={activeInvite} />
                 ) : (
                     <section aria-labelledby="team-start" className="rounded-3xl bg-muted/60 p-5 sm:p-7">
                         <div className="flex items-center gap-2" aria-hidden="true">

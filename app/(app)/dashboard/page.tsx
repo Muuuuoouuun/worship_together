@@ -14,9 +14,9 @@ interface DashboardPageProps {
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
     const params = await searchParams;
-    // 콘티·악보 화면과 같은 규칙: 처음 보여줄 온라인 팀은 주소(?team=)에서 정합니다.
+    // 콘티·악보 화면과 같은 규칙: 온라인 팀은 지금 팀(팀 바꾸기, 또는 주소의 ?team=)을 봅니다.
     const team = typeof params.team === 'string' && params.team ? params.team : undefined;
-    const [inputs, currentSession] = await Promise.all([getLiveContiInputs(), getCurrentSession(DEMO_TEAM_ID)]);
+    const [inputs, currentSession] = await Promise.all([getLiveContiInputs(team), getCurrentSession(DEMO_TEAM_ID)]);
 
-    return <LiveHome {...inputs} onlineTeamId={team} sessionId={currentSession?.id ?? null} />;
+    return <LiveHome {...inputs} sessionId={currentSession?.id ?? null} />;
 }

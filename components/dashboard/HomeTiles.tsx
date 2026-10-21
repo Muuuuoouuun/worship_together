@@ -226,6 +226,10 @@ export interface HomeTilesProps {
     team?: { name: string } | null;
     /** 날짜 제목의 단계 (시안 페이지는 따로 h1 이 있어 h2) */
     titleAs?: 'h1' | 'h2';
+    /** 팀에서 지금 진행 중인 예배 (온라인 팀) — 있으면 맨 위에 '입장' 을 띄웁니다 */
+    live?: { title: string; startedByName: string; present: number; currentSongTitle: string | null; href: string } | null;
+    /** 예배를 시작할 수 있는지 (온라인 팀 권한). false 면 '시작' 대신 '인도자가 시작하면 입장' */
+    canStart?: boolean;
 }
 
 /**
@@ -234,7 +238,7 @@ export interface HomeTilesProps {
  * 민트 = 이번 주 콘티, 하늘 = 다음 일정, 복숭아 = 확인할 요청, 모래 = 팀 배치, 라일락 = 팀 소식, 흰 타일 = 할 일 · 바로가기.
  * 데이터는 useConti() 하나에서만 읽으므로 실제 데이터(LiveHome)와 목업(시안 페이지)이 같은 화면을 씁니다.
  */
-export default function HomeTiles({ sessionHref, team, titleAs: Title = 'h1' }: HomeTilesProps) {
+export default function HomeTiles({ sessionHref, team, titleAs: Title = 'h1', live = null, canStart = true }: HomeTilesProps) {
     const { today, setlists, thisWeekId, editor, planning, roster } = useConti();
     const setlist = setlists.find((item) => item.id === thisWeekId) ?? null;
     const anchor = nextSunday(today);
@@ -257,7 +261,7 @@ export default function HomeTiles({ sessionHref, team, titleAs: Title = 'h1' }: 
     const todaySetlist = setlists.find((item) => item.date === today) ?? null;
     const serviceToday = Boolean(todaySetlist) || planning.services.some((item) => item.date === today);
     const liveSetlist = todaySetlist ?? setlist;
-    const liveHref = sessionHref ? sessionHref(liveSetlist?.id ?? null) : liveSetlist && editor?.sessionHref ? editor.sessionHref(liveSetlist.id) : `/session/${DEMO_SESSION_ID}`;
+    const liveHref = live?.href ?? (sessionHref ? sessionHref(liveSetlist?.id ?? null) : liveSetlist && editor?.sessionHref ? editor.sessionHref(liveSetlist.id) : `/session/${DEMO_SESSION_ID}`);
     const serviceDate = service?.date ?? setlist?.date ?? anchor;
     const serviceTime = service?.time ?? setlist?.time ?? '';
 
@@ -290,7 +294,7 @@ export default function HomeTiles({ sessionHref, team, titleAs: Title = 'h1' }: 
                     </Title>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                    {serviceToday && (
+                    {serviceToday && !live && canStart && (
                         <Link href={liveHref} className={buttonVariants({ size: 'sm' })}>
                             <Radio aria-hidden="true" />
                             예배 시작
@@ -307,6 +311,8 @@ export default function HomeTiles({ sessionHref, team, titleAs: Title = 'h1' }: 
                     <AddButton label="일정 추가 (일정·요청 화면)" href={scheduleHref} />
                 </div>
             </header>
+
+            {live ? <LiveNow live={live} /> : null}
 
             {planning.error && (
                 <p role="alert" className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
@@ -331,13 +337,17 @@ export default function HomeTiles({ sessionHref, team, titleAs: Title = 'h1' }: 
                             {
                                 href: liveHref,
                                 icon: Radio,
-                                label: '라이브 세션 입장',
-                                detail: serviceToday
-                                    ? `오늘${serviceTime ? ` ${serviceTime}` : ''} 예배 · 지금 입장`
-                                    : serviceTime
-                                      ? `${md(serviceDate)} ${dayName(serviceDate)} ${serviceTime} · ${dDay(serviceDate, today)}`
-                                      : '예배 화면 미리 보기',
-                                primary: serviceToday,
+                                label: live ? '예배 입장 · 진행 중' : canStart ? '예배 시작 · 입장' : '예배 화면',
+                                detail: live
+                                    ? `${live.present}명 접속 · ${live.currentSongTitle ?? live.title}`
+                                    : !canStart
+                                      ? '인도자가 시작하면 바로 입장해요'
+                                      : serviceToday
+                                        ? `오늘${serviceTime ? ` ${serviceTime}` : ''} 예배 · 지금 시작`
+                                        : serviceTime
+                                          ? `${md(serviceDate)} ${dayName(serviceDate)} ${serviceTime} · ${dDay(serviceDate, today)}`
+                                          : '예배 화면 미리 보기',
+                                primary: Boolean(live) || (serviceToday && canStart),
                             },
                         ]}
                     />
@@ -1013,5 +1023,25 @@ function ShortcutsTile({ items, className }: { items: Shortcut[]; className?: st
                 ))}
             </ul>
         </Tile>
+    );
+}
+
+/** 팀에서 예배가 진행 중일 때 홈 맨 위 — 누가 시작했고 몇 명이 들어와 있는지, 그리고 '입장' */
+function LiveNow({ live }: { live: NonNullable<HomeTilesProps['live']> }) {
+    return (
+        <section aria-label="진행 중인 예배" className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-3xl bg-brand p-4 text-brand-foreground sm:p-5">
+            <span className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand-foreground/15">
+                <Radio className="size-5" aria-hidden="true" />
+                <span className="absolute right-2 top-2 size-2 rounded-full bg-brand-foreground motion-safe:animate-pulse" aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-brand-foreground/75">예배 진행 중 · {live.startedByName}님이 시작</p>
+                <p className="mt-0.5 truncate text-[17px] font-semibold tracking-tight">{live.currentSongTitle ? `지금 「${live.currentSongTitle}」` : live.title}</p>
+                <p className="mt-0.5 text-xs text-brand-foreground/75">{live.present}명 접속 · {live.title}</p>
+            </div>
+            <Link href={live.href} className={cn(buttonVariants({ size: 'lg' }), 'w-full bg-brand-foreground text-brand hover:bg-brand-foreground/90 sm:w-auto')}>
+                입장
+            </Link>
+        </section>
     );
 }

@@ -34,6 +34,10 @@ import {
     setOnlineMemberRole,
 } from '@/actions/teamActions';
 import { worshipRoles, type OnlineTeam, type WorshipRole } from '@/types/team';
+import type { TeamPolicy } from '@/lib/permissions';
+import TeamPolicyPanel from './TeamPolicyPanel';
+import ProfileNameField from './ProfileNameField';
+import InviteCode from './InviteCode';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input, Select, Textarea, searchFieldClass } from '@/components/ui/input';
 import Notice from '@/components/ui/Notice';
@@ -88,25 +92,35 @@ function parseMemberLines(text: string): Array<{ name: string; role: WorshipRole
 export default function OnlineTeamManager({
     teams,
     userId,
-    selectedTeamId,
+    currentTeamId,
+    policy,
+    profileName,
+    activeInvite,
 }: {
     teams: OnlineTeam[];
     userId: string;
-    selectedTeamId?: string;
+    /** 지금 팀 (팀 바꾸기에서 고른 팀) */
+    currentTeamId?: string;
+    policy: TeamPolicy;
+    profileName: string;
+    /** 관리자에게만: 아직 유효한 초대 코드 */
+    activeInvite: { code: string; expiresAt: string } | null;
 }) {
     const router = useRouter();
     const batchInputId = useId();
     const sectionId = useId();
-    const [selected, setSelected] = useState(selectedTeamId ?? teams[0]?.id ?? '');
-    const team = teams.find((item) => item.id === selected) ?? teams[0];
-    const isOwner = team?.ownerId === userId || team?.members.some(m => m.userId === userId && m.permission === 'owner');
+    const team = teams.find((item) => item.id === currentTeamId) ?? teams[0];
+    const me = team?.members.find((member) => member.userId === userId);
+    // 관리자 = 권한 'owner'. 팀을 만든 사람(ownerId)은 다른 관리자가 내리거나 내보낼 수 없습니다.
+    const isOwner = me?.permission === 'owner';
+    const isCreator = team?.ownerId === userId;
     
     // States
     const [name, setName] = useState('');
     const [message, setMessage] = useState('');
     const [isError, setIsError] = useState(false);
     const [pending, startTransition] = useTransition();
-    const [invitations, setInvitations] = useState<Record<string, { url: string; expiresAt: string }>>({});
+    const [invitations, setInvitations] = useState<Record<string, { url?: string; code: string; expiresAt: string }>>(() => (team && activeInvite ? { [team.id]: activeInvite } : {}));
     
     // Direct Member Add state
     const [directName, setDirectName] = useState('');
@@ -158,8 +172,7 @@ export default function OnlineTeamManager({
                     return;
                 }
                 setName('');
-                setSelected(result.value.teamId);
-                showFeedback('새 팀을 만들었습니다. 초대 링크로 팀원을 모아보세요.');
+                showFeedback('새 팀을 만들었습니다. 지금 팀으로 바꿨어요 — 초대 링크로 팀원을 모아보세요.');
                 router.refresh();
             } catch {
                 showFeedback('팀을 저장하지 못했습니다. 연결을 확인해주세요.', true);
@@ -177,7 +190,7 @@ export default function OnlineTeamManager({
                     return;
                 }
                 setInvitations((current) => ({ ...current, [team.id]: result.value }));
-                showFeedback('7일간 유효한 초대 링크를 만들었습니다. 이전 링크는 취소되었습니다.');
+                showFeedback('7일간 유효한 초대 링크 · 코드를 만들었습니다. 이전 초대는 취소되었습니다.');
             } catch {
                 showFeedback('초대 링크를 만들지 못했습니다. 다시 시도해주세요.', true);
             }
@@ -344,26 +357,15 @@ export default function OnlineTeamManager({
 
             {team ? (
                 <>
-                    {/* 팀 선택 및 콘티 링크 */}
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                        <label className={cn(labelClass, 'flex-1 sm:max-w-sm')}>
-                            현재 선택된 팀
-                            <Select
-                                className="mt-1.5"
-                                value={team.id}
-                                onChange={(event) => {
-                                    setSelected(event.target.value);
-                                    setMessage('');
-                                }}
-                            >
-                                {teams.map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                        {item.name} ({item.members.length}명)
-                                    </option>
-                                ))}
-                            </Select>
-                        </label>
-                        <Link className={cn(buttonVariants(), 'sm:ml-auto')} href={`/dashboard/songs/library?team=${team.id}`}>
+                    {/* 지금 팀 (다른 팀은 위의 팀 바꾸기에서) · 콘티 링크 */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-muted-foreground">지금 팀{teams.length > 1 ? ` · ${teams.length}개 팀 중` : ''}</p>
+                            <p className="mt-0.5 truncate text-xl font-semibold tracking-tight text-foreground">
+                                {team.name} <span className="text-sm font-normal tabular-nums text-muted-foreground">{team.members.length}명</span>
+                            </p>
+                        </div>
+                        <Link className={cn(buttonVariants(), 'sm:ml-auto')} href="/dashboard/songs">
                             <Sparkles aria-hidden="true" />
                             <span>이 팀의 콘티 준비</span>
                         </Link>
@@ -423,7 +425,7 @@ export default function OnlineTeamManager({
                         <section aria-labelledby={`${sectionId}-invite`} className={cn('min-w-0 xl:col-start-2', isOwner ? 'xl:row-start-2' : 'xl:row-start-1')}>
                             <h2 id={`${sectionId}-invite`} className={sectionTitle}>카카오톡 · 링크로 초대</h2>
                             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                                초대받은 팀원은 구글이나 네이버로 간편하게 참여할 수 있습니다.
+                                링크를 열거나, 앱의 &lsquo;초대 코드로 참여&rsquo;에 8자리 코드를 입력하면 참여해요.
                             </p>
 
                             {isOwner ? (
@@ -441,7 +443,7 @@ export default function OnlineTeamManager({
                                         새 링크를 만들면 이전 링크는 자동 만료됩니다. (초대 유효 기간: 7일)
                                     </p>
                                     {invite && (
-                                        <div className={cn('rounded-3xl p-4 sm:p-5', TONE_BLOCK.mint)}>
+                                        <div className={cn('space-y-4 rounded-3xl p-4 sm:p-5', TONE_BLOCK.mint)}>
                                             <p className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                                                 <span className={cn('inline-flex items-center gap-1.5 font-semibold', STATUS.ok.text)}>
                                                     <span className={cn('size-1.5 rounded-full', STATUS.ok.dot)} aria-hidden="true" />
@@ -451,7 +453,10 @@ export default function OnlineTeamManager({
                                                     만료일: {new Date(invite.expiresAt).toLocaleDateString('ko-KR')}
                                                 </span>
                                             </p>
-                                            <InviteShareButtons key={invite.url} url={invite.url} teamName={team.name} />
+                                            <InviteCode code={invite.code} />
+                                            {invite.url ? <InviteShareButtons key={invite.url} url={invite.url} teamName={team.name} /> : (
+                                                <p className="text-xs text-muted-foreground">링크를 다시 보내려면 &lsquo;새 링크로 교체 발급&rsquo;을 눌러주세요 (코드도 바뀌어요).</p>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -558,6 +563,8 @@ export default function OnlineTeamManager({
                                     {filteredMembers.map((member) => {
                                         const isMe = member.userId === userId;
                                         const isManager = member.permission === 'owner';
+                                        // 만든 사람의 줄은 본인만 바꿀 수 있습니다.
+                                        const protectedRow = member.userId === team.ownerId && !isCreator;
                                         return (
                                             <li key={member.userId} className="flex flex-wrap items-center gap-x-3 gap-y-2.5 py-3.5">
                                                 <Avatar name={member.name} size="md" />
@@ -569,7 +576,7 @@ export default function OnlineTeamManager({
                                                     <p className="mt-0.5 truncate text-xs text-muted-foreground">
                                                         주 역할: {worshipRoles[member.role] ?? member.role}
                                                         <span aria-hidden="true"> · </span>
-                                                        <span className={cn(isManager && 'font-medium text-foreground')}>{isManager ? '관리자' : '팀원'}</span>
+                                                        <span className={cn(isManager && 'font-medium text-foreground')}>{member.userId === team.ownerId ? '만든 사람 · 관리자' : isManager ? '관리자' : '팀원'}</span>
                                                         {member.userId.startsWith('direct-') && (
                                                             <>
                                                                 <span aria-hidden="true"> · </span>
@@ -605,14 +612,14 @@ export default function OnlineTeamManager({
                                                                 size="sm"
                                                                 title={isManager ? '관리자 권한 해제' : '관리자 권한 부여'}
                                                                 className={cn('h-10 w-10 shrink-0 px-0 md:w-28', isManager ? 'text-foreground' : 'text-muted-foreground')}
-                                                                disabled={pending}
+                                                                disabled={pending || protectedRow || (member.userId.startsWith('direct-') && !isManager)}
                                                                 onClick={() => handleTogglePermission(member.userId, member.permission)}
                                                             >
                                                                 <Shield aria-hidden="true" />
                                                                 <span className="hidden md:inline">{isManager ? '관리자 해제' : '관리자 지정'}</span>
                                                             </Button>
 
-                                                            {isMe ? (
+                                                            {isMe || protectedRow ? (
                                                                 // 줄마다 버튼 위치가 맞도록 자기 자신 줄에는 빈 자리를 둡니다.
                                                                 <span className="h-10 w-10 shrink-0 md:w-[4.5rem]" aria-hidden="true" />
                                                             ) : (
@@ -639,6 +646,14 @@ export default function OnlineTeamManager({
                             )}
                         </section>
                     </div>
+
+                    {/* 권한 · 내 이름 */}
+                    {me ? (
+                        <div className="grid gap-10 border-t border-border/70 pt-8 xl:grid-cols-[minmax(0,1fr)_20rem] xl:gap-x-12">
+                            <TeamPolicyPanel teamId={team.id} policy={policy} me={me} titleClassName={sectionTitle} />
+                            <ProfileNameField name={profileName} titleClassName={sectionTitle} />
+                        </div>
+                    ) : null}
                 </>
             ) : (
                 <div className="rounded-3xl border border-dashed border-input px-5 py-10 text-center">
@@ -685,7 +700,7 @@ export default function OnlineTeamManager({
                         <AlertTriangle size={14} className={STATUS.warn.text} aria-hidden="true" />
                         <span>팀 탈퇴 및 삭제 관리</span>
                     </p>
-                    {isOwner ? (
+                    {isCreator ? (
                         <Button type="button" variant="destructive-outline" size="sm" onClick={handleDeleteTeam} disabled={pending}>
                             팀 영구 삭제
                         </Button>

@@ -3,6 +3,8 @@
  * 같은 곡을 다른 주에 다시 써도 링크가 따라가도록 곡 기준으로 이 브라우저에 저장합니다.
  */
 
+import { markTeamDocDirty } from './teamDocSync';
+
 export type StoredLinkKind = 'sheet' | 'mr' | 'other';
 
 export interface StoredSongLink {
@@ -73,5 +75,6 @@ export function saveSongLinks(teamId: string, songId: string, links: StoredSongL
     } catch {
         throw new Error('링크를 저장하지 못했어요. 브라우저 저장 공간과 설정을 확인해주세요.');
     }
+    markTeamDocDirty(teamId, songLinksStorageKey(teamId));
     window.dispatchEvent(new CustomEvent(SONG_LINKS_CHANGED_EVENT, { detail: { teamId, songId } }));
 }

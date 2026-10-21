@@ -7,6 +7,8 @@ import { DEMO_SESSION_ID } from '@/lib/constants';
 import { buttonVariants } from '@/components/ui/button';
 import { ContiProvider } from '@/components/conti/context';
 import { useLiveContiData, type LiveContiInputs } from '@/components/conti/useLiveContiData';
+import { liveHref, useTeamConnection } from '@/components/app/TeamConnection';
+import { liveStartHref } from '@/components/live/links';
 import HomeTiles, { HomeTilesSkeleton } from './HomeTiles';
 
 interface LiveHomeProps extends LiveContiInputs {
@@ -19,17 +21,24 @@ interface LiveHomeProps extends LiveContiInputs {
  */
 export default function LiveHome({ sessionId, ...inputs }: LiveHomeProps) {
     const { data, loading, error, source } = useLiveContiData(inputs);
+    const connection = useTeamConnection();
 
     if (loading) return <HomeTilesSkeleton />;
     if (error !== null || !data) return <HomeError message={error ?? '저장된 콘티를 읽지 못했어요.'} />;
 
+    // 온라인 팀은 서버 예배 세션(팀원 모두가 함께 들어오는 화면), 그 밖에는 이 기기의 예배 화면
+    const online = source.kind === 'online' && connection?.teamId === source.teamId;
     const session = `/session/${encodeURIComponent(sessionId ?? DEMO_SESSION_ID)}`;
-    const sessionHref = (setlistId: string | null) =>
-        setlistId ? `${session}?setlist=${encodeURIComponent(setlistId)}&team=${encodeURIComponent(source.teamId)}` : session;
+    const sessionHref = (setlistId: string | null) => online
+        ? liveStartHref(source.teamId, setlistId)
+        : setlistId ? `${session}?setlist=${encodeURIComponent(setlistId)}&team=${encodeURIComponent(source.teamId)}` : session;
+    const live = online && connection.live
+        ? { title: connection.live.title, startedByName: connection.live.startedByName, present: connection.live.present, currentSongTitle: connection.live.currentSongTitle, href: liveHref(connection.live.id) }
+        : null;
 
     return (
         <ContiProvider value={data}>
-            <HomeTiles sessionHref={sessionHref} team={source.teamName ? { name: source.teamName } : null} />
+            <HomeTiles sessionHref={sessionHref} team={source.teamName ? { name: source.teamName } : null} live={live} canStart={online ? connection.canRun : true} />
         </ContiProvider>
     );
 }

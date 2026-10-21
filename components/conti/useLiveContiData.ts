@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClientId } from '@/lib/clientId';
 import { DEMO_SESSION_ID, DEMO_TEAM_ID } from '@/lib/constants';
 import {
@@ -24,6 +25,8 @@ import { seoulDateTime, upcomingSetlistId } from './model';
 import { EMPTY_PLANNING_VIEW, buildPlanningView, type PlanningView } from './planningBridge';
 import { usePlanning, type PlanningSource } from './usePlanning';
 import type { ContiData, ContiEditor, SaveResult } from './context';
+import { liveStartHref } from '@/components/live/links';
+import { selectTeam } from '@/actions/teamActions';
 
 /** 서버에서 읽은 콘티 한 줄 (곡 목록 없이) */
 export interface ServerSetlist {
@@ -43,8 +46,12 @@ export interface LiveContiInputs {
     initialSetlists: ServerSetlist[];
     hasBackend: boolean;
     onlineTeams: { id: string; name: string }[];
-    /** 처음 보여줄 온라인 팀 (없으면 첫 번째 팀) */
+    /** 지금 온라인 팀 (없으면 첫 번째 팀) */
     onlineTeamId?: string;
+    /** 온라인 팀에서 콘티를 고칠 수 있는지 (팀 권한). 온라인 팀이 아니면 늘 true */
+    canEditConti?: boolean;
+    /** 온라인 팀에서 예배를 시작할 수 있는지 */
+    canRunSession?: boolean;
     viewerName: string | null;
     /** 로그인한 사용자 id (온라인 팀 일정·요청에 필요) */
     viewerId: string | null;
@@ -163,7 +170,9 @@ function load(source: Source, now: Date): Loaded {
 export function useLiveContiData(props: LiveContiInputs): LiveContiResult {
     const isClient = useSyncExternalStore(noopSubscribe, () => true, () => false);
     const rawTeams = useSyncExternalStore(subscribeToTeams, getTeamSnapshot, getTeamServerSnapshot);
-    const [onlineId, setOnlineId] = useState(props.onlineTeamId ?? props.onlineTeams[0]?.id ?? '');
+    // 온라인 팀은 지금 팀(서버가 정해 넘겨줌)을 그대로 씁니다 — 팀을 바꾸면 서버가 다시 그려 줍니다.
+    const onlineId = props.onlineTeamId ?? props.onlineTeams[0]?.id ?? '';
+    const router = useRouter();
     const [version, setVersion] = useState(0);
     /** '방금·N분 전' 표시용 1분 시계 (같은 내용의 폴링은 다시 그리지 않으므로 따로 둡니다) */
     const [minute, setMinute] = useState(() => Date.now());
@@ -266,14 +275,21 @@ export function useLiveContiData(props: LiveContiInputs): LiveContiResult {
         if (!loaded?.ok) return null;
         const { library, forms, links } = loaded.value;
         const local = source.kind !== 'server';
+        const online = source.kind === 'online';
+        const canEdit = !online || props.canEditConti !== false;
         const findSetlist = (id: string): LibrarySetlist | undefined => library.setlists.find((setlist) => setlist.id === id);
 
         return {
             canReorder: local,
-            storageNote: local ? '이 브라우저에 저장돼요' : '세부 정보는 이 브라우저에 저장돼요',
+            canEdit,
+            storageNote: online ? '팀원 모두에게 저장돼요' : local ? '이 브라우저에 저장돼요' : '세부 정보는 이 브라우저에 저장돼요',
             createHref: '/dashboard/songs/library',
-            sessionHref: (setlistId) => `/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(setlistId)}&team=${encodeURIComponent(source.teamId)}`,
+            // 온라인 팀은 서버 예배(팀원 모두 함께), 그 밖에는 이 기기의 예배 화면
+            sessionHref: (setlistId) => online
+                ? liveStartHref(source.teamId, setlistId)
+                : `/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(setlistId)}&team=${encodeURIComponent(source.teamId)}`,
             saveSetlist: (setlistId, draft): SaveResult => {
+                if (!canEdit) return { ok: false, error: '콘티를 편집할 권한이 없어요. 코멘트는 남길 수 있어요.' };
                 const setlist = findSetlist(setlistId);
                 if (!setlist) return { ok: false, error: '콘티를 찾지 못했어요. 새로고침 후 다시 시도해주세요.' };
                 const result = planSave({ setlist, songs: library.songs, draft, canReorder: local, forms, links, now: new Date().toISOString(), createId: createClientId });
@@ -313,11 +329,24 @@ export function useLiveContiData(props: LiveContiInputs): LiveContiResult {
                 }
             },
         };
-    }, [loaded, source, authorName]);
+    }, [loaded, source, authorName, props.canEditConti]);
 
     function chooseTeam(id: string) {
         if (source.kind === 'online') {
-            setOnlineId(id);
+            // 지금 팀을 바꾸면 사이드바 · 홈 · 일정도 같은 팀을 봅니다.
+            void selectTeam(id).then((result) => {
+                if (!result.ok) {
+                    setTeamError(result.error);
+                    return;
+                }
+                setTeamError('');
+                const params = new URLSearchParams(window.location.search);
+                if (params.has('team')) {
+                    params.delete('team');
+                    router.replace(params.size ? `${window.location.pathname}?${params}` : window.location.pathname);
+                }
+                router.refresh();
+            });
             return;
         }
         try {

@@ -1,4 +1,5 @@
 import { isSongForm, type SongForm } from './songForm';
+import { markTeamDocDirty } from './teamDocSync';
 
 export const SONG_FORM_CHANGED_EVENT = 'worship:song-form-changed';
 export function songFormStorageKey(songId: string, teamId: string): string {
@@ -16,5 +17,6 @@ export function saveSongForm(form: SongForm, teamId: string): void {
     if (!isSongForm(form)) throw new Error('송폼 형식이 올바르지 않습니다.');
     try { localStorage.setItem(songFormStorageKey(form.songId, teamId), JSON.stringify(form)); }
     catch { throw new Error('송폼을 저장하지 못했습니다. 브라우저 저장 공간과 설정을 확인해주세요.'); }
+    markTeamDocDirty(teamId, songFormStorageKey(form.songId, teamId));
     window.dispatchEvent(new CustomEvent(SONG_FORM_CHANGED_EVENT, { detail: { songId: form.songId, teamId } }));
 }

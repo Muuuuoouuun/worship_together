@@ -1,6 +1,13 @@
 import React, { Suspense } from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import AppToaster from '@/components/app/AppToaster';
+import TeamConnection, { type TeamConnectionInput } from '@/components/app/TeamConnection';
+import TeamSwitcher from '@/components/app/TeamSwitcher';
+import TeamParamSync from '@/components/app/TeamParamSync';
+import { can, isAdmin } from '@/lib/permissions';
+import { getViewer } from '@/lib/server/viewer';
 import AccountMenu from '@/components/auth/AccountMenu';
 import PlanningInbox from '@/components/planning/PlanningInbox';
 import LiveSessionMiniBar from '@/components/session/LiveSessionMiniBar';
@@ -21,13 +28,42 @@ function Brand({ compact = false }: { compact?: boolean }) {
     );
 }
 
+function LogoMark() {
+    return (
+        <Link href="/dashboard" aria-label="Worship Together 홈" className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl transition-opacity hover:opacity-80">
+            <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">W</span>
+        </Link>
+    );
+}
+
 /**
- * 앱 공통 틀(사이드바·모바일 헤더·하단 내비·라이브 미니바).
+ * 앱 공통 틀(사이드바·모바일 헤더·하단 내비·라이브 미니바·알림 자리).
  * app/(app)/layout.tsx 에서 한 번만 그리므로 화면을 옮겨도 다시 만들어지지 않습니다.
  * 본문 폭과 여백도 여기서 한 번만 정합니다.
+ * 로그인한 사람은 지금 팀과 실시간으로 이어지고(TeamConnection), 팀이 없으면 시작 화면(/welcome)으로 갑니다.
  */
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+    const viewer = await getViewer();
+    if (viewer && !viewer.teams.length && !viewer.profile.onboardedAt) redirect('/welcome');
+    const connection: TeamConnectionInput | null = viewer?.team && viewer.member
+        ? {
+            userId: viewer.user.id,
+            userName: viewer.profile.name,
+            teamId: viewer.team.id,
+            teamName: viewer.team.name,
+            teams: viewer.teams.map((team) => ({ id: team.id, name: team.name })),
+            isAdmin: isAdmin(viewer.member),
+            canRun: can(viewer.member, viewer.policy, 'sessionRun'),
+            canEditConti: can(viewer.member, viewer.policy, 'contiEdit'),
+        }
+        : null;
+    const switcher = (variant: 'sidebar' | 'compact') => connection ? (
+        <Suspense fallback={null}>
+            <TeamSwitcher teams={connection.teams} currentId={connection.teamId} variant={variant} />
+        </Suspense>
+    ) : null;
     return (
+        <TeamConnection value={connection}>
         <div className="flex min-h-screen bg-background text-foreground [--app-header-h:calc(env(safe-area-inset-top)+3.5rem)] lg:[--app-header-h:0px]">
             <Suspense fallback={null}>
                 <PlanningInbox />
@@ -35,8 +71,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* 데스크톱 사이드바 */}
             <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border/70 bg-card lg:flex">
-                <div className="px-6 pb-4 pt-6">
-                    <Brand />
+                <div className="space-y-3 px-4 pb-4 pt-6">
+                    <div className="px-2">
+                        <Brand />
+                    </div>
+                    {switcher('sidebar')}
                 </div>
                 <SidebarNav />
                 <div className="flex flex-col items-start gap-2 border-t border-border/70 p-4 [&_details>div]:bottom-[calc(100%+8px)] [&_details>div]:left-0 [&_details>div]:right-auto [&_details>div]:top-auto">
@@ -51,7 +90,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {/* 모바일 상단 헤더 */}
                 <header className="sticky top-0 z-30 border-b border-border/70 bg-card/90 pt-[env(safe-area-inset-top)] backdrop-blur-md lg:hidden">
                     <div className="safe-area-x flex h-14 items-center justify-between gap-2">
-                        <Brand compact />
+                        {connection ? (
+                            <div className="-ml-2 flex min-w-0 items-center">
+                                <LogoMark />
+                                {switcher('compact')}
+                            </div>
+                        ) : <Brand compact />}
                         <div className="flex shrink-0 items-center gap-2">
                             <ThemeToggle />
                             <Suspense fallback={<div className="size-10 animate-pulse rounded-full bg-muted" />}>
@@ -69,6 +113,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <LiveSessionMiniBar />
                 <MobileNav />
             </div>
+            <AppToaster />
+            {connection ? (
+                <Suspense fallback={null}>
+                    <TeamParamSync currentId={connection.teamId} teamIds={connection.teams.map((team) => team.id)} />
+                </Suspense>
+            ) : null}
         </div>
+        </TeamConnection>
     );
 }
