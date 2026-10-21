@@ -48,7 +48,7 @@ import {
     weekday,
     type ContiSetlist,
 } from '@/components/conti/model';
-import { AddButton, Avatar, AvatarStack, KeyText, SampleChip, STATUS, TONE_DOT, TONE_ICON, body, divide, ink, line, ringCard, selected, sub, todayText } from '@/components/conti/ui';
+import { AddButton, Avatar, AvatarStack, KeyText, SampleChip, STATUS, TONE_DOT, TONE_ICON, body, ink, line, ringCard, selected, sub, todayText } from '@/components/conti/ui';
 
 /** 팀 배치 타일의 짧은 역할 이름 */
 const SHORT_ROLE: Record<WorshipRole, string> = {
@@ -367,11 +367,11 @@ export function HomeTilesSkeleton() {
             </div>
             <div className="@container" aria-hidden="true">
                 <div className="grid grid-cols-12 gap-4">
-                    <SkeletonTile className={cn(SLOT.todo, 'min-h-[7.25rem]')} lines={1} />
+                    <SkeletonTile className={cn(SLOT.todo, 'min-h-[8rem]')} lines={1} />
                     <SkeletonTile tone="mint" className={cn(SLOT.conti, 'min-h-[22rem]')} lines={5} />
                     <SkeletonTile tone="sky" className={cn(SLOT.schedule, 'min-h-[18.5rem]')} lines={3} />
-                    <SkeletonTile tone="peach" className={cn(SLOT.request, 'min-h-[17rem]')} lines={3} />
-                    <SkeletonTile tone="sand" className={cn(SLOT.team, 'min-h-[17rem]')} lines={3} />
+                    <SkeletonTile tone="peach" className={cn(SLOT.request, 'min-h-[18.75rem]')} lines={3} />
+                    <SkeletonTile tone="sand" className={cn(SLOT.team, 'min-h-[18.75rem]')} lines={3} />
                     <SkeletonTile tone="lilac" className={cn(SLOT.feed, 'min-h-[18rem]')} lines={3} />
                     <SkeletonTile className={cn(SLOT.shortcuts, 'min-h-[18rem]')} lines={4} />
                 </div>
@@ -452,10 +452,11 @@ function Tile({
     );
 }
 
-function TileLink({ href, label, children }: { href: string; label?: string; children: ReactNode }) {
+/** 타일 오른쪽 위 이동 링크. tight = 좁은 1/4 타일(1280 폭 근처)에서는 제목이 잘리지 않도록 화살표만 남깁니다. */
+function TileLink({ href, label, tight = false, children }: { href: string; label?: string; tight?: boolean; children: ReactNode }) {
     return (
-        <Link href={href} aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), '-mr-2 shrink-0 gap-0.5 font-medium text-foreground/75 hover:bg-foreground/5 hover:text-foreground')}>
-            {children}
+        <Link href={href} aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), '-mr-2 shrink-0 gap-0.5 font-medium text-foreground/75 hover:bg-foreground/5 hover:text-foreground', tight && '@4xl:@max-5xl:px-2')}>
+            <span className={cn(tight && '@4xl:@max-5xl:sr-only')}>{children}</span>
             <ChevronRight size={14} aria-hidden="true" />
         </Link>
     );
@@ -772,7 +773,7 @@ function RequestTile({ summary, ready, href, sample, className }: { summary: Req
     ].filter((item) => item.value > 0);
 
     return (
-        <Tile tone="peach" icon={Inbox} title="확인할 요청" action={<TileLink href={href} label="확인할 요청 모두 보기">모두 보기</TileLink>} className={className}>
+        <Tile tone="peach" icon={Inbox} title="확인할 요청" action={<TileLink href={href} label="확인할 요청 모두 보기" tight>모두 보기</TileLink>} className={className}>
             {!ready ? (
                 <Pending className="mt-5 flex-1" />
             ) : !open.length ? (
@@ -869,7 +870,7 @@ function TeamTile({ service, anchor, hasTeam, ready, rosterCount, href, classNam
     const title = service.date === anchor ? `${dayName(service.date)} 팀 배치` : `${md(service.date)} ${dayName(service.date)} 팀 배치`;
 
     return (
-        <Tile tone="sand" icon={UsersRound} title={title} action={<TileLink href={href} label="팀 배치 보기">배치 보기</TileLink>} className={className}>
+        <Tile tone="sand" icon={UsersRound} title={title} action={<TileLink href={href} label="팀 배치 보기" tight>배치 보기</TileLink>} className={className}>
             <p className="mt-4 flex items-baseline gap-1">
                 <span className={cn(bigValue, ink)}>
                     {counts.confirmed}
