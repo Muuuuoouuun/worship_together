@@ -99,7 +99,8 @@ export default function LiveSessionMiniBar() {
         };
     }, [pathname]);
 
-    if (!isClient || dismissed) {
+    // 홈(/dashboard)은 타일 안에 라이브 세션 입장(예배 당일에만 검정)이 있으므로, 타일을 가리는 떠 있는 바를 두지 않습니다.
+    if (!isClient || dismissed || pathname === '/dashboard') {
         return null;
     }
 
