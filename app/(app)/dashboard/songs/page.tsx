@@ -1,11 +1,7 @@
 import type { Metadata } from 'next';
 import LiveContiWorkspace from '@/components/conti/LiveContiWorkspace';
 import { resolveScreen } from '@/components/conti/model';
-import { getCurrentUser } from '@/lib/auth';
-import { DEMO_TEAM_ID } from '@/lib/constants';
-import { getSetlistsByTeam, getSongsByTeam } from '@/lib/data';
-import { getTeamRepository } from '@/lib/server/teams';
-import { supabase } from '@/lib/supabase';
+import { getLiveContiInputs } from '@/lib/server/contiInputs';
 
 export const metadata: Metadata = {
     title: '콘티·악보',
@@ -23,25 +19,7 @@ export default async function SongsPage({ searchParams }: SongsPageProps) {
     const { screen, setlistId } = resolveScreen(tab, setlist);
 
     // 곡 보관함과 같은 데이터를 같은 규칙으로 읽습니다.
-    const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID, { withSongs: false }), getCurrentUser()]);
-    const onlineTeams = user ? getTeamRepository().list(user.id).map((item) => ({ id: item.id, name: item.name })) : [];
+    const inputs = await getLiveContiInputs();
 
-    return (
-        <>
-            <LiveContiWorkspace
-                initialSongs={songs.map((song) => ({ ...song, data_xml: null }))}
-                initialSetlists={setlists.map(({ songs: _songs, ...row }) => {
-                    void _songs;
-                    return row;
-                })}
-                hasBackend={Boolean(supabase)}
-                onlineTeams={onlineTeams}
-                onlineTeamId={team}
-                viewerName={user?.name ?? null}
-                viewerId={user?.id ?? null}
-                initialScreen={screen}
-                initialSetlistId={setlistId}
-            />
-        </>
-    );
+    return <LiveContiWorkspace {...inputs} onlineTeamId={team} initialScreen={screen} initialSetlistId={setlistId} />;
 }
