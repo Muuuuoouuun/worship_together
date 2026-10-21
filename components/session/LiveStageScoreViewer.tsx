@@ -95,6 +95,11 @@ export interface LiveStageScoreViewerProps {
     participantCount?: number;
     realtimeStatus?: string;
     lastSentDeliveryLabel?: string;
+    /**
+     * false 면 이 뷰어 안의 큐 도구(아래 무음 큐 묶음 · 떠 있는 '신호' 버튼 · 상태 점검의 점검 신호 · B 단축키)를 숨깁니다.
+     * 큐를 화면의 다른 곳(예배 중 화면의 빠른 큐)에서 보낼 때 씁니다. 기본은 보여 줌.
+     */
+    cueTools?: boolean;
 }
 
 export default function LiveStageScoreViewer({
@@ -135,6 +140,7 @@ export default function LiveStageScoreViewer({
     participantCount = 1,
     realtimeStatus = 'connected',
     lastSentDeliveryLabel,
+    cueTools = true,
 }: LiveStageScoreViewerProps) {
     const [sheet, setSheet] = useState<SheetDocument | null>(null);
     const [sheetSource, setSheetSource] = useState<'published' | 'draft'>('published');
@@ -504,7 +510,7 @@ export default function LiveStageScoreViewer({
                 e.preventDefault();
                 setIsZenMode((prev) => !prev);
                 triggerHaptic(20);
-            } else if (e.code === 'KeyB') {
+            } else if (e.code === 'KeyB' && cueTools) {
                 e.preventDefault();
                 setShowFloatingCueDial((prev) => !prev);
                 triggerHaptic(15);
@@ -520,7 +526,7 @@ export default function LiveStageScoreViewer({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [stageNote, handleTapTempo]);
+    }, [stageNote, handleTapTempo, cueTools]);
 
     // Flash cue banner and play in-ear chime when a stage action cue arrives
     useEffect(() => {
@@ -1657,6 +1663,7 @@ export default function LiveStageScoreViewer({
             )}
 
             {/* Stage Feedback & Quick Cue Hub (Non-verbal Stage Communication) */}
+            {cueTools ? (
             <div
                 className={`mt-2 p-2.5 sm:p-3 rounded-2xl bg-gradient-to-r from-[#0a0f0e] via-[#0d1413] to-[#121a18] border border-white/10 shadow-lg space-y-2.5 transition-all duration-300 ${
                     isZenMode ? 'translate-y-4 opacity-0 pointer-events-none h-0 p-0 m-0 overflow-hidden' : 'opacity-100'
@@ -1917,6 +1924,7 @@ export default function LiveStageScoreViewer({
                     </div>
                 )}
             </div>
+            ) : null}
 
             {/* Diagnostics Modal Dialog */}
             {showDiagnosticsModal && (
@@ -1986,6 +1994,7 @@ export default function LiveStageScoreViewer({
                         </div>
 
                         {/* Quick Test Ping Button */}
+                        {cueTools ? (
                         <div className="pt-1 space-y-2">
                             <button
                                 type="button"
@@ -1999,6 +2008,7 @@ export default function LiveStageScoreViewer({
                                 <span>전체 기기에 통신 점검 신호 보내기</span>
                             </button>
                         </div>
+                        ) : null}
                     </div>
                 </>
             )}
@@ -2110,6 +2120,7 @@ export default function LiveStageScoreViewer({
             </footer>
 
             {/* Floating Quick Cue FAB (Always accessible, even in Zen mode) */}
+            {cueTools ? (
             <div className="fixed sm:absolute bottom-4 right-4 z-40 flex flex-col items-end">
                 {showFloatingCueDial && (
                     <>
@@ -2219,6 +2230,7 @@ export default function LiveStageScoreViewer({
                     <span>신호 (B)</span>
                 </button>
             </div>
+            ) : null}
 
             {/* Recent Cues History Drawer / Modal */}
             {showRecentCuesDrawer && (
