@@ -127,6 +127,14 @@ test("authentication contract and real OAuth flow with mocked network", async (t
     assert.equal(getAuthConfiguration({ ...fixture, GOOGLE_CLIENT_SECRET: "" }).providers[0].enabled, false);
     assert.equal(getAuthConfiguration({ ...fixture, GOOGLE_CLIENT_SECRET: "" }).providers[1].enabled, true);
   });
+  await t.test("development name login never turns on in production or without opt-in", () => {
+    assert.equal(getAuthConfiguration({ ...fixture, DEV_LOGIN: "1", NODE_ENV: "development" }).devLogin, true);
+    assert.equal(getAuthConfiguration({ ...fixture, DEV_LOGIN: "1", NODE_ENV: "production" }).devLogin, false);
+    assert.equal(getAuthConfiguration({ ...fixture, NODE_ENV: "development" }).devLogin, false);
+    assert.equal(getAuthConfiguration({ DEV_LOGIN: "1", NODE_ENV: "development" }).devLogin, false);
+    assert.equal(createAuthOptions({ ...fixture, DEV_LOGIN: "1", NODE_ENV: "production" }).providers.some((provider) => (provider.options?.id ?? provider.id) === "dev"), false);
+    assert.equal(createAuthOptions({ ...fixture, DEV_LOGIN: "1", NODE_ENV: "development" }).providers.some((provider) => (provider.options?.id ?? provider.id) === "dev"), true);
+  });
   await t.test("callback redirects preserve invites and reject foreign/encoded destinations", async () => {
     for (const value of ["//evil.test", "/\\evil.test", "/%5cevil.test", "/%2fevil.test", "/%252fevil.test", "/%00evil", "https://worship.example.evil.test", "https://user@worship.example", "javascript:alert(1)", "/api/auth/callback/google", "/api%2fauth/signin", " /invite/x", "/invite/%"]) {
       assert.equal(safeLocalCallbackUrl(value, fixture.NEXTAUTH_URL), "/dashboard", value);

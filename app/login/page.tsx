@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getAuthConfiguration } from "@/lib/authConfig";
 import { safeLocalCallbackUrl } from "@/lib/authRedirect";
 import LoginButtons from "@/components/auth/LoginButtons";
+import DevLoginForm from "@/components/auth/DevLoginForm";
 import SignOutButton from "@/components/auth/SignOutButton";
 import styles from "./login.module.css";
 
@@ -46,8 +47,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <Link className={styles.primary} href={callbackUrl}>{invited ? "초대받은 팀 확인하기" : "계속하기"}</Link>
         <div className={styles.footer}><SignOutButton /></div>
       </> : <>
-        {!available && !errorText ? <p className={styles.notice}>계정 로그인 연결을 준비하고 있습니다. 지금은 로그인 없이 프로토타입을 둘러볼 수 있어요.</p> : null}
+        {!available && !config.devLogin && !errorText ? <p className={styles.notice}>계정 로그인 연결을 준비하고 있습니다. 지금은 로그인 없이 프로토타입을 둘러볼 수 있어요.</p> : null}
         <LoginButtons providers={config.providers} callbackUrl={callbackUrl} />
+        {config.devLogin ? <DevLoginForm callbackUrl={callbackUrl} /> : null}
         <div className={styles.footer}>
           <p>팀에서 사용하던 로그인 방법을 선택해 주세요. Google과 네이버는 각각 별도 계정으로 사용됩니다.</p>
           <Link className={styles.link} href="/dashboard">로그인 없이 둘러보기 →</Link>
