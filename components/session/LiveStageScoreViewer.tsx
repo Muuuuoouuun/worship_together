@@ -275,10 +275,11 @@ export default function LiveStageScoreViewer({
     };
 
     // Persistent display settings
+    // 악보 반전: 정하지 않았으면 앱 테마를 따릅니다 (어두운 화면에서만 반전).
     const [isDarkInverted, setIsDarkInverted] = useState<boolean>(() => {
-        if (typeof window === 'undefined') return true;
-        const saved = window.localStorage.getItem('wt_score_dark_inverted');
-        return saved !== null ? saved === 'true' : true;
+        if (typeof window === 'undefined') return false;
+        const saved = window.localStorage.getItem('wt_score_dark_inverted:v2');
+        return saved !== null ? saved === 'true' : document.documentElement.classList.contains('dark');
     });
     const [isAmberShield, setIsAmberShield] = useState<boolean>(() => {
         if (typeof window === 'undefined') return false;
@@ -321,7 +322,7 @@ export default function LiveStageScoreViewer({
     // Save preferences
     useEffect(() => {
         try {
-            window.localStorage.setItem('wt_score_dark_inverted', String(isDarkInverted));
+            window.localStorage.setItem('wt_score_dark_inverted:v2', String(isDarkInverted));
         } catch {}
     }, [isDarkInverted]);
 
@@ -617,7 +618,7 @@ export default function LiveStageScoreViewer({
         <section
             ref={containerRef}
             aria-label="예배 무대 악보 뷰어"
-            className={`relative flex min-h-[32rem] flex-col rounded-2xl border border-white/10 bg-[#060c0b] text-[#fff7e8] transition-all lg:min-h-full ${
+            className={`relative flex min-h-[32rem] flex-col rounded-2xl border border-foreground/10 bg-background text-foreground transition-all lg:min-h-full ${
                 isFullscreen ? 'fixed inset-0 z-50 rounded-none border-none p-2 sm:p-4' : 'p-2 sm:p-3'
             }`}
         >
@@ -625,18 +626,18 @@ export default function LiveStageScoreViewer({
             {cueBanner && (
                 <div className="pointer-events-none absolute top-3 inset-x-4 z-40 flex justify-center animate-in slide-in-from-top duration-200">
                     <div
-                        className="flex items-center gap-3 rounded-2xl border-2 px-5 py-3 shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-xl bg-black/95 text-white"
+                        className="flex items-center gap-3 rounded-2xl border-2 px-5 py-3 shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-xl bg-background/95 text-foreground"
                         style={{ borderColor: cueBanner.accent ? `rgb(${cueBanner.accent})` : '#f0b56b' }}
                     >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-300 font-black text-sm">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/20 text-brand font-black text-sm">
                             큐
                         </div>
                         <div className="min-w-0">
-                            <p className="text-sm font-black leading-tight text-white tracking-wide">
+                            <p className="text-sm font-black leading-tight text-foreground tracking-wide">
                                 {cueBanner.message}
                             </p>
                             {cueBanner.role && (
-                                <p className="text-[11px] font-semibold text-white/70">
+                                <p className="text-[11px] font-semibold text-foreground/70">
                                     대상: {cueBanner.role}
                                 </p>
                             )}
@@ -648,7 +649,7 @@ export default function LiveStageScoreViewer({
             {/* Stage Top HUD (Zen mode collapses it smoothly with pure whitespace) */}
             <header
                 // z-40 keeps the settings popover above the score area's song form overlay (z-30).
-                className={`relative z-40 mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#0a0f0e]/85 px-3.5 py-2 backdrop-blur-xl shadow-lg transition-all duration-300 ${
+                className={`relative z-40 mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-foreground/10 bg-background/85 px-3.5 py-2 backdrop-blur-xl shadow-lg transition-all duration-300 ${
                     isZenMode ? '-translate-y-4 opacity-0 pointer-events-none h-0 p-0 m-0 overflow-hidden' : 'opacity-100'
                 }`}
             >
@@ -660,7 +661,7 @@ export default function LiveStageScoreViewer({
                             <button
                                 type="button"
                                 onClick={() => setShowSetlistDrawer((prev) => !prev)}
-                                className="tap-target inline-flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-400/15 px-3 py-1.5 text-xs font-black text-amber-200 hover:bg-amber-400/25 transition active:scale-95"
+                                className="tap-target inline-flex items-center gap-1.5 rounded-xl border border-brand/40 bg-brand/15 px-3 py-1.5 text-xs font-black text-brand hover:bg-brand/25 transition active:scale-95"
                                 title="콘티 목록 빠른 이동"
                             >
                                 <ListMusic size={14} />
@@ -679,10 +680,10 @@ export default function LiveStageScoreViewer({
                                         className="fixed inset-0 z-40"
                                         onClick={() => setShowSetlistDrawer(false)}
                                     />
-                                    <div className="absolute left-0 top-full mt-2 z-50 w-72 max-h-80 overflow-y-auto rounded-2xl border border-white/15 bg-[#0a0f0e]/95 p-2 shadow-[0_15px_40px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in fade-in slide-in-from-top-2 duration-150">
-                                        <div className="px-2.5 py-1.5 text-[11px] font-bold text-white/50 border-b border-white/10 mb-1 flex items-center justify-between">
+                                    <div className="absolute left-0 top-full mt-2 z-50 w-72 max-h-80 overflow-y-auto rounded-2xl border border-foreground/15 bg-background/95 p-2 shadow-[0_15px_40px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in fade-in slide-in-from-top-2 duration-150">
+                                        <div className="px-2.5 py-1.5 text-[11px] font-bold text-foreground/50 border-b border-foreground/10 mb-1 flex items-center justify-between">
                                             <span>전체 콘티 ({songs.length}곡)</span>
-                                            <span className="text-[10px] text-amber-300">선택 시 즉시 이동</span>
+                                            <span className="text-[10px] text-brand">선택 시 즉시 이동</span>
                                         </div>
                                         <div className="space-y-1">
                                             {songs.map((s, idx) => {
@@ -697,23 +698,23 @@ export default function LiveStageScoreViewer({
                                                         }}
                                                         className={`w-full text-left flex items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-xs transition ${
                                                             isCurrent
-                                                                ? 'border border-amber-400/50 bg-amber-400/20 font-black text-amber-200'
-                                                                : 'text-white/80 hover:bg-white/10'
+                                                                ? 'border border-brand/50 bg-brand/20 font-black text-brand'
+                                                                : 'text-foreground/80 hover:bg-foreground/10'
                                                         }`}
                                                     >
                                                         <div className="flex items-center gap-2 min-w-0">
                                                             <span
                                                                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                                                                    isCurrent ? 'bg-amber-400 text-black' : 'bg-white/10 text-white/70'
+                                                                    isCurrent ? 'bg-brand text-brand-foreground' : 'bg-foreground/10 text-foreground/70'
                                                                 }`}
                                                             >
                                                                 {idx + 1}
                                                             </span>
                                                             <span className="truncate">{s.title}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-1.5 text-[10px] text-white/50 shrink-0">
+                                                        <div className="flex items-center gap-1.5 text-[10px] text-foreground/50 shrink-0">
                                                             {s.original_key && (
-                                                                <span className="rounded bg-white/10 px-1.5 py-0.5 font-bold text-amber-300">
+                                                                <span className="rounded bg-foreground/10 px-1.5 py-0.5 font-bold text-brand">
                                                                     {s.original_key}
                                                                 </span>
                                                             )}
@@ -730,16 +731,16 @@ export default function LiveStageScoreViewer({
                     )}
 
                     <div className="flex items-center gap-2 truncate">
-                        <span className="truncate text-sm font-black text-white/95">
+                        <span className="truncate text-sm font-black text-foreground/95">
                             {title}
                         </span>
                         {songKey.key && (
-                            <span className="inline-flex rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-black text-amber-300 shrink-0">
+                            <span className="inline-flex rounded-md bg-foreground/10 px-2 py-0.5 text-[10px] font-black text-brand shrink-0">
                                 {formatKeyLabel(songKey)}
                             </span>
                         )}
                         {currentSection && (
-                            <span className="hidden sm:inline-flex items-center rounded-md border border-[#ffe0b8]/30 bg-[#ffe0b8]/15 px-2 py-0.5 text-[10px] font-black text-[#ffe0b8] shrink-0">
+                            <span className="hidden sm:inline-flex items-center rounded-md border border-brand/30 bg-brand/15 px-2 py-0.5 text-[10px] font-black text-brand shrink-0">
                                 {currentSection}
                             </span>
                         )}
@@ -753,10 +754,10 @@ export default function LiveStageScoreViewer({
                             <button
                                 type="button"
                                 onClick={() => setShowBpmPopover((prev) => !prev)}
-                                className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-full border border-amber-400/30 bg-amber-400/10 hover:bg-amber-400/20 active:scale-95 transition cursor-pointer"
+                                className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-full border border-brand/30 bg-brand/10 hover:bg-brand/20 active:scale-95 transition cursor-pointer"
                                 title="BPM 템포 조정 및 펄스 모드 설정 (클릭)"
                             >
-                                <span className="font-mono text-xs font-black text-amber-300">
+                                <span className="font-mono text-xs font-black text-brand">
                                     ♩ {effectiveBpm}
                                 </span>
                                 <div className="flex items-center gap-1">
@@ -770,11 +771,11 @@ export default function LiveStageScoreViewer({
                                                     className={`rounded-full transition-all duration-75 ${
                                                         isCurrent
                                                             ? isDownbeat
-                                                                ? 'h-2.5 w-2.5 bg-amber-300 shadow-[0_0_8px_#fde047]'
+                                                                ? 'h-2.5 w-2.5 bg-brand shadow-[0_0_8px_#fde047]'
                                                                 : 'h-2 w-2 bg-emerald-400 shadow-[0_0_6px_#4ade80]'
                                                             : isDownbeat
-                                                                ? 'h-2 w-2 bg-white/20'
-                                                                : 'h-1.5 w-1.5 bg-white/10'
+                                                                ? 'h-2 w-2 bg-foreground/20'
+                                                                : 'h-1.5 w-1.5 bg-foreground/10'
                                                     }`}
                                                 />
                                             );
@@ -788,7 +789,7 @@ export default function LiveStageScoreViewer({
                                 <button
                                     type="button"
                                     onClick={() => updateBpm(effectiveBpm - 2)}
-                                    className="tap-target px-1.5 py-0.5 rounded-md text-[10px] font-black text-amber-300 hover:bg-amber-400/20 active:scale-90 transition"
+                                    className="tap-target px-1.5 py-0.5 rounded-md text-[10px] font-black text-brand hover:bg-brand/20 active:scale-90 transition"
                                     title="BPM -2 (단축 감속)"
                                 >
                                     -2
@@ -796,7 +797,7 @@ export default function LiveStageScoreViewer({
                                 <button
                                     type="button"
                                     onClick={() => updateBpm(effectiveBpm + 2)}
-                                    className="tap-target px-1.5 py-0.5 rounded-md text-[10px] font-black text-amber-300 hover:bg-amber-400/20 active:scale-90 transition"
+                                    className="tap-target px-1.5 py-0.5 rounded-md text-[10px] font-black text-brand hover:bg-brand/20 active:scale-90 transition"
                                     title="BPM +2 (단축 가속)"
                                 >
                                     +2
@@ -804,7 +805,7 @@ export default function LiveStageScoreViewer({
                                 <button
                                     type="button"
                                     onClick={handleTapTempo}
-                                    className="tap-target px-1.5 py-0.5 rounded-md bg-amber-400/20 hover:bg-amber-400/30 text-[10px] font-black text-amber-200 border border-amber-400/30 active:scale-90 transition ml-0.5"
+                                    className="tap-target px-1.5 py-0.5 rounded-md bg-brand/20 hover:bg-brand/30 text-[10px] font-black text-brand border border-brand/30 active:scale-90 transition ml-0.5"
                                     title="탭 템포 (단축키 T)"
                                 >
                                     TAP
@@ -815,18 +816,18 @@ export default function LiveStageScoreViewer({
                             {showBpmPopover && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setShowBpmPopover(false)} />
-                                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-72 rounded-2xl border border-white/15 bg-[#0a0f0e]/95 p-3.5 shadow-[0_20px_50px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150 space-y-3">
-                                        <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                                            <span className="text-xs font-black text-amber-300">♩ 템포(BPM) 및 펄스 모드</span>
-                                            <button type="button" onClick={() => setShowBpmPopover(false)} className="text-white/40 hover:text-white">
+                                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-72 rounded-2xl border border-foreground/15 bg-background/95 p-3.5 shadow-[0_20px_50px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150 space-y-3">
+                                        <div className="flex items-center justify-between border-b border-foreground/10 pb-2">
+                                            <span className="text-xs font-black text-brand">♩ 템포(BPM) 및 펄스 모드</span>
+                                            <button type="button" onClick={() => setShowBpmPopover(false)} className="text-foreground/40 hover:text-foreground">
                                                 <X size={14} />
                                             </button>
                                         </div>
 
                                         {/* Quick BPM Adjustment */}
                                         <div className="flex items-center justify-between gap-1.5">
-                                            <button type="button" onClick={() => updateBpm(effectiveBpm - 5)} className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-black text-white">-5</button>
-                                            <button type="button" onClick={() => updateBpm(effectiveBpm - 1)} className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-black text-white">-1</button>
+                                            <button type="button" onClick={() => updateBpm(effectiveBpm - 5)} className="px-2 py-1 rounded-lg bg-foreground/10 hover:bg-foreground/20 text-xs font-black text-foreground">-5</button>
+                                            <button type="button" onClick={() => updateBpm(effectiveBpm - 1)} className="px-2 py-1 rounded-lg bg-foreground/10 hover:bg-foreground/20 text-xs font-black text-foreground">-1</button>
                                             <div className="flex items-center gap-1">
                                                 <input
                                                     type="number"
@@ -834,31 +835,31 @@ export default function LiveStageScoreViewer({
                                                     max={280}
                                                     value={effectiveBpm}
                                                     onChange={(e) => updateBpm(Number(e.target.value))}
-                                                    className="w-16 rounded-lg bg-black/60 border border-amber-400/40 px-2 py-1 text-center font-mono text-sm font-black text-amber-300 focus:outline-none"
+                                                    className="w-16 rounded-lg bg-background/60 border border-brand/40 px-2 py-1 text-center font-mono text-sm font-black text-brand focus:outline-none"
                                                 />
                                             </div>
-                                            <button type="button" onClick={() => updateBpm(effectiveBpm + 1)} className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-black text-white">+1</button>
-                                            <button type="button" onClick={() => updateBpm(effectiveBpm + 5)} className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-black text-white">+5</button>
+                                            <button type="button" onClick={() => updateBpm(effectiveBpm + 1)} className="px-2 py-1 rounded-lg bg-foreground/10 hover:bg-foreground/20 text-xs font-black text-foreground">+1</button>
+                                            <button type="button" onClick={() => updateBpm(effectiveBpm + 5)} className="px-2 py-1 rounded-lg bg-foreground/10 hover:bg-foreground/20 text-xs font-black text-foreground">+5</button>
                                         </div>
 
                                         {/* Tap Tempo Button */}
                                         <button
                                             type="button"
                                             onClick={handleTapTempo}
-                                            className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 border border-amber-400/40 text-xs font-black text-amber-200 active:scale-95 transition-all shadow"
+                                            className="w-full py-2 rounded-xl bg-gradient-to-r from-brand/20 to-emerald-500/20 hover:from-brand/30 hover:to-emerald-500/30 border border-brand/40 text-xs font-black text-brand active:scale-95 transition-all shadow"
                                         >
                                             👆 탭 템포 (Tap Tempo)
                                         </button>
 
                                         {/* Pulse Mode Selector */}
-                                        <div className="space-y-1.5 pt-1 border-t border-white/10">
-                                            <span className="text-[11px] font-bold text-white/70 block">시각적 펄스 표시 크기</span>
+                                        <div className="space-y-1.5 pt-1 border-t border-foreground/10">
+                                            <span className="text-[11px] font-bold text-foreground/70 block">시각적 펄스 표시 크기</span>
                                             <div className="grid grid-cols-2 gap-1.5">
                                                 <button
                                                     type="button"
                                                     onClick={() => setPulseMode('dot')}
                                                     className={`p-1.5 rounded-lg border text-[11px] font-bold transition ${
-                                                        pulseMode === 'dot' ? 'border-amber-400 bg-amber-400/20 text-amber-200' : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10'
+                                                        pulseMode === 'dot' ? 'border-brand bg-brand/20 text-brand' : 'border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10'
                                                     }`}
                                                 >
                                                     🔘 미니 점 (기본)
@@ -867,7 +868,7 @@ export default function LiveStageScoreViewer({
                                                     type="button"
                                                     onClick={() => setPulseMode('edge')}
                                                     className={`p-1.5 rounded-lg border text-[11px] font-bold transition ${
-                                                        pulseMode === 'edge' ? 'border-amber-400 bg-amber-400/20 text-amber-200' : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10'
+                                                        pulseMode === 'edge' ? 'border-brand bg-brand/20 text-brand' : 'border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10'
                                                     }`}
                                                 >
                                                     🔲 테두리 플래시
@@ -876,7 +877,7 @@ export default function LiveStageScoreViewer({
                                                     type="button"
                                                     onClick={() => setPulseMode('fullscreen')}
                                                     className={`p-1.5 rounded-lg border text-[11px] font-bold transition ${
-                                                        pulseMode === 'fullscreen' ? 'border-amber-400 bg-amber-400/20 text-amber-200' : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10'
+                                                        pulseMode === 'fullscreen' ? 'border-brand bg-brand/20 text-brand' : 'border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10'
                                                     }`}
                                                 >
                                                     💡 전체 화면 플래시
@@ -885,7 +886,7 @@ export default function LiveStageScoreViewer({
                                                     type="button"
                                                     onClick={() => setPulseMode('giant')}
                                                     className={`p-1.5 rounded-lg border text-[11px] font-bold transition ${
-                                                        pulseMode === 'giant' ? 'border-amber-400 bg-amber-400/20 text-amber-200' : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10'
+                                                        pulseMode === 'giant' ? 'border-brand bg-brand/20 text-brand' : 'border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/10'
                                                     }`}
                                                 >
                                                     📊 대형 상단 바
@@ -904,7 +905,7 @@ export default function LiveStageScoreViewer({
                             className={`tap-target inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold transition ${
                                 audioCueEnabled
                                     ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-300'
-                                    : 'border-white/15 bg-white/5 text-white/40 hover:bg-white/10'
+                                    : 'border-foreground/15 bg-foreground/5 text-foreground/40 hover:bg-foreground/10'
                             }`}
                             title={audioCueEnabled ? '인이어 큐 사운드 알림 켜짐 (클릭 시 무음)' : '인이어 큐 사운드 무음 (클릭 시 켜짐)'}
                         >
@@ -928,8 +929,8 @@ export default function LiveStageScoreViewer({
                             onClick={() => stepper.setSectionMode(!stepper.sectionMode)}
                             className={`tap-target inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
                                 stepper.sectionMode
-                                    ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
-                                    : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10'
+                                    ? 'border-brand/50 bg-brand/20 text-brand'
+                                    : 'border-foreground/15 bg-foreground/5 text-foreground/70 hover:bg-foreground/10'
                             }`}
                             title="페달·방향키가 페이지를 넘길지, 송폼 순서대로 섹션 표시를 따라갈지 바꿉니다"
                         >
@@ -946,8 +947,8 @@ export default function LiveStageScoreViewer({
                         onClick={() => setIsDarkInverted((prev) => !prev)}
                         className={`tap-target inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
                             isDarkInverted
-                                ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
-                                : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10'
+                                ? 'border-brand/50 bg-brand/20 text-brand'
+                                : 'border-foreground/15 bg-foreground/5 text-foreground/70 hover:bg-foreground/10'
                         }`}
                         title="무대 다크 반전 (눈부심 방지)"
                     >
@@ -959,7 +960,7 @@ export default function LiveStageScoreViewer({
                     <button
                         type="button"
                         onClick={() => setIsZenMode(true)}
-                        className="tap-target inline-flex items-center gap-1 rounded-xl border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white/70 hover:bg-white/10 hover:text-white transition"
+                        className="tap-target inline-flex items-center gap-1 rounded-xl border border-foreground/15 bg-foreground/5 px-2.5 py-1.5 text-xs font-bold text-foreground/70 hover:bg-foreground/10 hover:text-foreground transition"
                         title="무대 몰입 모드 (상단/하단 메뉴 숨김)"
                     >
                         <EyeOff size={14} />
@@ -971,7 +972,7 @@ export default function LiveStageScoreViewer({
                         <button
                             type="button"
                             onClick={() => void toggleFullscreen(containerRef.current || undefined)}
-                            className="tap-target inline-flex items-center rounded-xl border border-white/15 bg-white/5 p-2 text-xs font-bold text-white/80 hover:bg-white/10"
+                            className="tap-target inline-flex items-center rounded-xl border border-foreground/15 bg-foreground/5 p-2 text-xs font-bold text-foreground/80 hover:bg-foreground/10"
                             title="무대 전체화면"
                         >
                             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -984,12 +985,12 @@ export default function LiveStageScoreViewer({
                         onClick={() => setShowDiagnosticsModal(true)}
                         className={`tap-target inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
                             showDiagnosticsModal
-                                ? 'border-amber-400 bg-amber-400/20 text-amber-200'
-                                : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
+                                ? 'border-brand bg-brand/20 text-brand'
+                                : 'border-foreground/15 bg-foreground/5 text-foreground/80 hover:bg-foreground/10'
                         }`}
                         title="무대 실시간 연결 및 상태 점검 (클릭)"
                     >
-                        <Activity size={13} className={realtimeStatus === 'connected' ? 'text-emerald-400 animate-pulse' : 'text-amber-400'} />
+                        <Activity size={13} className={realtimeStatus === 'connected' ? 'text-emerald-400 animate-pulse' : 'text-brand'} />
                         <span className="hidden sm:inline">상태 점검</span>
                     </button>
 
@@ -1001,8 +1002,8 @@ export default function LiveStageScoreViewer({
                             onClick={() => chartView.setLyricsOnly(!chartView.preferred)}
                             className={`tap-target inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
                                 chartView.preferred
-                                    ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
-                                    : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10'
+                                    ? 'border-brand/50 bg-brand/20 text-brand'
+                                    : 'border-foreground/15 bg-foreground/5 text-foreground/70 hover:bg-foreground/10'
                             }`}
                             title={chartView.failed ? '가사만 보기를 만들지 못했습니다' : '이 기기에서만 코드를 숨기고 가사를 크게 봅니다'}
                         >
@@ -1017,8 +1018,8 @@ export default function LiveStageScoreViewer({
                             onClick={() => setShowSettingsPopover((p) => !p)}
                             className={`tap-target inline-flex items-center gap-1 rounded-xl border p-2 text-xs font-bold transition ${
                                 showSettingsPopover
-                                    ? 'border-amber-400 bg-amber-400/20 text-amber-200'
-                                    : 'border-white/15 bg-white/5 text-white/70 hover:bg-white/10'
+                                    ? 'border-brand bg-brand/20 text-brand'
+                                    : 'border-foreground/15 bg-foreground/5 text-foreground/70 hover:bg-foreground/10'
                             }`}
                             title="무대 보기 및 디스플레이 설정"
                         >
@@ -1031,13 +1032,13 @@ export default function LiveStageScoreViewer({
                                     className="fixed inset-0 z-40"
                                     onClick={() => setShowSettingsPopover(false)}
                                 />
-                                <div className="absolute right-0 top-full mt-2 z-50 w-64 rounded-2xl border border-white/15 bg-[#0a0f0e]/95 p-3 shadow-[0_20px_50px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150 space-y-2.5">
-                                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                                        <span className="text-xs font-black text-white/90">무대 디스플레이 설정</span>
+                                <div className="absolute right-0 top-full mt-2 z-50 w-64 rounded-2xl border border-foreground/15 bg-background/95 p-3 shadow-[0_20px_50px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150 space-y-2.5">
+                                    <div className="flex items-center justify-between border-b border-foreground/10 pb-2">
+                                        <span className="text-xs font-black text-foreground/90">무대 디스플레이 설정</span>
                                         <button
                                             type="button"
                                             onClick={() => setShowSettingsPopover(false)}
-                                            className="text-white/40 hover:text-white"
+                                            className="text-foreground/40 hover:text-foreground"
                                         >
                                             <X size={14} />
                                         </button>
@@ -1045,14 +1046,14 @@ export default function LiveStageScoreViewer({
 
                                     {/* Amber Eye Shield */}
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs text-white/70 font-medium">웜톤 앰버 시력보호</span>
+                                        <span className="text-xs text-foreground/70 font-medium">웜톤 앰버 시력보호</span>
                                         <button
                                             type="button"
                                             onClick={() => setIsAmberShield((prev) => !prev)}
                                             className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
                                                 isAmberShield
-                                                    ? 'bg-amber-400 text-black'
-                                                    : 'bg-white/10 text-white/60 hover:bg-white/15'
+                                                    ? 'bg-brand text-brand-foreground'
+                                                    : 'bg-foreground/10 text-foreground/60 hover:bg-foreground/15'
                                             }`}
                                         >
                                             {isAmberShield ? '켜짐' : '꺼짐'}
@@ -1061,13 +1062,13 @@ export default function LiveStageScoreViewer({
 
                                     {/* Page spread mode */}
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs text-white/70 font-medium">페이지 보기</span>
-                                        <div className="flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
+                                        <span className="text-xs text-foreground/70 font-medium">페이지 보기</span>
+                                        <div className="flex items-center rounded-lg border border-foreground/10 bg-foreground/5 p-0.5">
                                             <button
                                                 type="button"
                                                 onClick={() => setIsDualPage(false)}
                                                 className={`rounded-md px-2 py-0.5 text-xs font-bold transition ${
-                                                    !isDualPage ? 'bg-white/20 text-white' : 'text-white/50'
+                                                    !isDualPage ? 'bg-foreground/20 text-foreground' : 'text-foreground/50'
                                                 }`}
                                             >
                                                 1쪽
@@ -1076,7 +1077,7 @@ export default function LiveStageScoreViewer({
                                                 type="button"
                                                 onClick={() => setIsDualPage(true)}
                                                 className={`rounded-md px-2 py-0.5 text-xs font-bold transition ${
-                                                    isDualPage ? 'bg-amber-400 text-black' : 'text-white/50'
+                                                    isDualPage ? 'bg-brand text-brand-foreground' : 'text-foreground/50'
                                                 }`}
                                             >
                                                 2쪽
@@ -1086,7 +1087,7 @@ export default function LiveStageScoreViewer({
 
                                     {/* Song Form Overlay Mode */}
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs text-white/70 font-medium">악보 위 송폼 표시</span>
+                                        <span className="text-xs text-foreground/70 font-medium">악보 위 송폼 표시</span>
                                         <select
                                             aria-label="악보 위 송폼 표시 방식"
                                             value={songFormOverlayMode}
@@ -1097,7 +1098,7 @@ export default function LiveStageScoreViewer({
                                                     window.localStorage.setItem('wt_score_songform_mode', m);
                                                 } catch {}
                                             }}
-                                            className="rounded-lg bg-white/10 px-2 py-1 text-xs font-bold text-amber-300 border border-white/15 focus:outline-none"
+                                            className="rounded-lg bg-foreground/10 px-2 py-1 text-xs font-bold text-brand border border-foreground/15 focus:outline-none"
                                         >
                                             <option value="first_page_only">1페이지에만 (기본)</option>
                                             <option value="all_pages">모든 페이지</option>
@@ -1107,12 +1108,12 @@ export default function LiveStageScoreViewer({
 
                                     {/* My part: other parts' marks hide, marks for everyone always show */}
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs text-white/70 font-medium">내 파트</span>
+                                        <span className="text-xs text-foreground/70 font-medium">내 파트</span>
                                         <select
                                             aria-label="내 파트"
                                             value={myPart ?? ''}
                                             onChange={(e) => setMyPart(parsePart(e.target.value))}
-                                            className="rounded-lg bg-white/10 px-2 py-1 text-xs font-bold text-amber-300 border border-white/15 focus:outline-none"
+                                            className="rounded-lg bg-foreground/10 px-2 py-1 text-xs font-bold text-brand border border-foreground/15 focus:outline-none"
                                         >
                                             <option value="">{PART_ALL_LABEL}</option>
                                             {SHEET_PARTS.map((part) => (
@@ -1124,7 +1125,7 @@ export default function LiveStageScoreViewer({
                                     {/* My draft over the team copy — only offered when there is a draft to draw */}
                                     {canOverlay && (
                                         <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs text-white/70 font-medium">내 필기 겹치기</span>
+                                            <span className="text-xs text-foreground/70 font-medium">내 필기 겹치기</span>
                                             <button
                                                 type="button"
                                                 aria-pressed={overlayOn}
@@ -1132,8 +1133,8 @@ export default function LiveStageScoreViewer({
                                                 onClick={() => setOverlayChoice(!overlayChoice)}
                                                 className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
                                                     overlayOn
-                                                        ? 'bg-amber-400 text-black'
-                                                        : 'bg-white/10 text-white/60 hover:bg-white/15'
+                                                        ? 'bg-brand text-brand-foreground'
+                                                        : 'bg-foreground/10 text-foreground/60 hover:bg-foreground/15'
                                                 }`}
                                             >
                                                 {overlayOn ? '켜짐' : '꺼짐'}
@@ -1143,11 +1144,11 @@ export default function LiveStageScoreViewer({
 
                                     {/* Fit Mode */}
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs text-white/70 font-medium">화면 맞춤</span>
+                                        <span className="text-xs text-foreground/70 font-medium">화면 맞춤</span>
                                         <button
                                             type="button"
                                             onClick={() => setFitMode((m) => (m === 'height' ? 'width' : 'height'))}
-                                            className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-white hover:bg-white/15 transition"
+                                            className="rounded-lg bg-foreground/10 px-2.5 py-1 text-xs font-bold text-foreground hover:bg-foreground/15 transition"
                                         >
                                             {fitMode === 'height' ? '높이 맞춤' : '너비 채움'}
                                         </button>
@@ -1156,14 +1157,14 @@ export default function LiveStageScoreViewer({
                                     {/* Stage Lock */}
                                     {onToggleStageLock && (
                                         <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs text-white/70 font-medium">터치 미스터치 잠금</span>
+                                            <span className="text-xs text-foreground/70 font-medium">터치 미스터치 잠금</span>
                                             <button
                                                 type="button"
                                                 onClick={onToggleStageLock}
                                                 className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
                                                     stageLocked
-                                                        ? 'bg-red-500/80 text-white'
-                                                        : 'bg-white/10 text-white/60 hover:bg-white/15'
+                                                        ? 'bg-red-500/80 text-foreground'
+                                                        : 'bg-foreground/10 text-foreground/60 hover:bg-foreground/15'
                                                 }`}
                                             >
                                                 {stageLocked ? '잠김' : '해제'}
@@ -1174,14 +1175,14 @@ export default function LiveStageScoreViewer({
                                     {/* Screen Wake Lock */}
                                     {isWakeLockSupported && (
                                         <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs text-white/70 font-medium">화면 꺼짐 방지</span>
+                                            <span className="text-xs text-foreground/70 font-medium">화면 꺼짐 방지</span>
                                             <button
                                                 type="button"
                                                 onClick={toggleWakeLock}
                                                 className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
                                                     isWakeLockActive
-                                                        ? 'bg-amber-400 text-black'
-                                                        : 'bg-white/10 text-white/60 hover:bg-white/15'
+                                                        ? 'bg-brand text-brand-foreground'
+                                                        : 'bg-foreground/10 text-foreground/60 hover:bg-foreground/15'
                                                 }`}
                                             >
                                                 {isWakeLockActive ? '유지됨' : '꺼짐'}
@@ -1189,7 +1190,7 @@ export default function LiveStageScoreViewer({
                                         </div>
                                     )}
 
-                                    <div className="border-t border-white/10 pt-2 space-y-1.5">
+                                    <div className="border-t border-foreground/10 pt-2 space-y-1.5">
                                         {/* Switch to BPM View */}
                                         {onSwitchToBpmMode && (
                                             <button
@@ -1198,7 +1199,7 @@ export default function LiveStageScoreViewer({
                                                     setShowSettingsPopover(false);
                                                     onSwitchToBpmMode();
                                                 }}
-                                                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 py-1.5 text-xs font-bold text-white/80 hover:bg-white/10 transition"
+                                                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-foreground/10 bg-foreground/5 py-1.5 text-xs font-bold text-foreground/80 hover:bg-foreground/10 transition"
                                             >
                                                 <Radio size={13} />
                                                 <span>BPM 전광판 뷰 전환</span>
@@ -1212,7 +1213,7 @@ export default function LiveStageScoreViewer({
                                                 setShowSettingsPopover(false);
                                                 void loadSampleSheet();
                                             }}
-                                            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-400/15 py-1.5 text-xs font-black text-amber-200 hover:bg-amber-400/25 transition"
+                                            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-brand/15 py-1.5 text-xs font-black text-brand hover:bg-brand/25 transition"
                                         >
                                             <Sparkles size={13} />
                                             <span>샘플 악보 생성 / 리셋</span>
@@ -1234,10 +1235,10 @@ export default function LiveStageScoreViewer({
                             setIsZenMode(false);
                             triggerHaptic(20);
                         }}
-                        className="tap-target inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-[#0a0f0e]/90 px-3.5 py-1.5 text-xs font-black text-amber-300 shadow-[0_4px_20px_rgba(0,0,0,0.8)] backdrop-blur-xl hover:bg-amber-400/20 active:scale-95 transition"
+                        className="tap-target inline-flex items-center gap-1.5 rounded-full border border-brand/50 bg-background/90 px-3.5 py-1.5 text-xs font-black text-brand shadow-[0_4px_20px_rgba(0,0,0,0.8)] backdrop-blur-xl hover:bg-brand/20 active:scale-95 transition"
                         title="무대 메뉴 복귀 (단축키 Z 또는 탭)"
                     >
-                        <Eye size={13} className="text-amber-400" />
+                        <Eye size={13} className="text-brand" />
                         <span>몰입 모드 해제 (Z)</span>
                     </button>
                 </div>
@@ -1245,9 +1246,9 @@ export default function LiveStageScoreViewer({
 
             {/* Song Stage Note & Arrangement Tip Bar */}
             {!isZenMode && (
-                <div className="mb-2 px-3 py-1.5 rounded-xl border border-white/10 bg-[#0a0f0e]/70 backdrop-blur-md flex items-center justify-between gap-2 text-xs">
+                <div className="mb-2 px-3 py-1.5 rounded-xl border border-foreground/10 bg-background/70 backdrop-blur-md flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="shrink-0 flex items-center gap-1 font-bold text-amber-300 text-[11px]">
+                        <span className="shrink-0 flex items-center gap-1 font-bold text-brand text-[11px]">
                             <FileText size={13} />
                             <span>곡 메모</span>
                         </span>
@@ -1262,20 +1263,20 @@ export default function LiveStageScoreViewer({
                                         if (e.key === 'Escape') setIsEditingNote(false);
                                     }}
                                     placeholder="예: 후렴 2회 반복 후 건반 솔로 4마디, 엔딩 페이드아웃..."
-                                    className="flex-1 rounded-lg bg-black/60 border border-amber-400/40 px-2.5 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                    className="flex-1 rounded-lg bg-background/60 border border-brand/40 px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-brand"
                                     autoFocus
                                 />
                                 <button
                                     type="button"
                                     onClick={handleSaveNote}
-                                    className="tap-target px-2.5 py-1 rounded-lg bg-amber-400 text-black text-[11px] font-black shrink-0 hover:bg-amber-300 transition"
+                                    className="tap-target px-2.5 py-1 rounded-lg bg-brand text-brand-foreground text-[11px] font-black shrink-0 hover:bg-brand transition"
                                 >
                                     저장
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setIsEditingNote(false)}
-                                    className="tap-target px-2 py-1 rounded-lg bg-white/10 text-white/60 text-[11px] font-bold shrink-0 hover:bg-white/20 transition"
+                                    className="tap-target px-2 py-1 rounded-lg bg-foreground/10 text-foreground/60 text-[11px] font-bold shrink-0 hover:bg-foreground/20 transition"
                                 >
                                     취소
                                 </button>
@@ -1286,13 +1287,13 @@ export default function LiveStageScoreViewer({
                                     setNoteDraft(stageNote);
                                     setIsEditingNote(true);
                                 }}
-                                className="truncate text-white/80 text-[11px] cursor-pointer hover:text-white transition flex-1"
+                                className="truncate text-foreground/80 text-[11px] cursor-pointer hover:text-foreground transition flex-1"
                                 title="클릭하여 곡 진행 메모 수정 (단축키 M)"
                             >
                                 {stageNote ? (
                                     <span>{stageNote}</span>
                                 ) : (
-                                    <span className="text-white/40 italic">클릭하여 이 곡의 연주/송폼 팁을 기록하세요 (예: 후렴 2회 반복, BPM 가속 등)</span>
+                                    <span className="text-foreground/40 italic">클릭하여 이 곡의 연주/송폼 팁을 기록하세요 (예: 후렴 2회 반복, BPM 가속 등)</span>
                                 )}
                             </div>
                         )}
@@ -1304,7 +1305,7 @@ export default function LiveStageScoreViewer({
                                 setNoteDraft(stageNote);
                                 setIsEditingNote(true);
                             }}
-                            className="tap-target px-2 py-0.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-white/60 shrink-0 transition"
+                            className="tap-target px-2 py-0.5 rounded-lg border border-foreground/10 bg-foreground/5 hover:bg-foreground/10 text-[10px] font-bold text-foreground/60 shrink-0 transition"
                             title="곡 메모 수정 (M)"
                         >
                             메모 편집 (M)
@@ -1314,7 +1315,7 @@ export default function LiveStageScoreViewer({
             )}
 
             {/* Score Display Area with BPM Giant Bar & Pulse Overlay */}
-            <div className="relative flex-1 min-h-0 overflow-hidden rounded-xl border border-white/10 bg-black flex flex-col">
+            <div className="relative flex-1 min-h-0 overflow-hidden rounded-xl border border-foreground/10 bg-muted flex flex-col">
                 {/* Song Form Roadmap Overlay on Sheet Music — yields to a song form band burned into the page */}
                 {activePage && !activePage.marks.some((m) => m.kind === 'songform') && (
                     <SongFormScoreOverlay
@@ -1341,28 +1342,28 @@ export default function LiveStageScoreViewer({
                 {/* Live Stage Beacon Banner (Spontaneous Form & Tempo Alert) */}
                 {cueBanner && (
                     <div
-                        className="w-full p-2.5 sm:p-3 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 text-white text-xs font-black shadow-2xl flex items-center justify-between z-40 shrink-0 animate-in fade-in slide-in-from-top-2 duration-150 ring-2 ring-white/30"
+                        className="w-full p-2.5 sm:p-3 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 text-foreground text-xs font-black shadow-2xl flex items-center justify-between z-40 shrink-0 animate-in fade-in slide-in-from-top-2 duration-150 ring-2 ring-foreground/30"
                         style={{
                             borderColor: cueBanner.accent ?? undefined,
                         }}
                     >
                         <div className="flex items-center gap-2 min-w-0">
-                            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-black/30 text-white font-bold text-xs">
+                            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-background/30 text-foreground font-bold text-xs">
                                 🚨
                             </span>
                             <div className="min-w-0">
-                                <span className="truncate block font-black text-white text-xs sm:text-sm">
+                                <span className="truncate block font-black text-foreground text-xs sm:text-sm">
                                     {cueBanner.message}
                                 </span>
                                 {cueBanner.role && (
-                                    <span className="text-[10px] text-white/80">발신: {cueBanner.role}</span>
+                                    <span className="text-[10px] text-foreground/80">발신: {cueBanner.role}</span>
                                 )}
                             </div>
                         </div>
                         <button
                             type="button"
                             onClick={() => setCueBanner(null)}
-                            className="px-2 py-1 rounded-lg bg-black/40 hover:bg-black/60 text-[10px] font-bold text-white shrink-0 ml-2"
+                            className="px-2 py-1 rounded-lg bg-background/40 hover:bg-background/60 text-[10px] font-bold text-foreground shrink-0 ml-2"
                         >
                             확인 ✕
                         </button>
@@ -1371,7 +1372,7 @@ export default function LiveStageScoreViewer({
 
                 {/* Giant 4-Beat Bar HUD */}
                 {bpmEnabled && pulseMode === 'giant' && (
-                    <div className="grid grid-cols-4 gap-1.5 p-1.5 bg-black/80 border-b border-white/15 shrink-0 z-20">
+                    <div className="grid grid-cols-4 gap-1.5 p-1.5 bg-background/80 border-b border-foreground/15 shrink-0 z-20">
                         <BeatIndicator bpm={effectiveBpm} enabled={metronomeEnabled}>
                             {(activeBeat, blinkActive) => [1, 2, 3, 4].map((beat) => {
                                 const isDownbeat = beat === 1;
@@ -1382,11 +1383,11 @@ export default function LiveStageScoreViewer({
                                         className={`h-4 sm:h-5 rounded-lg transition-all duration-75 text-center flex items-center justify-center font-mono font-black text-xs ${
                                             isHit
                                                 ? isDownbeat
-                                                    ? 'bg-amber-400 text-black shadow-[0_0_20px_#fbbf24] scale-[1.02]'
-                                                    : 'bg-emerald-400 text-black shadow-[0_0_12px_#34d399] scale-[1.02]'
+                                                    ? 'bg-brand text-brand-foreground shadow-[0_0_20px_#fbbf24] scale-[1.02]'
+                                                    : 'bg-emerald-400 text-brand-foreground shadow-[0_0_12px_#34d399] scale-[1.02]'
                                                 : isDownbeat
-                                                ? 'bg-amber-400/20 text-amber-300/40'
-                                                : 'bg-white/10 text-white/30'
+                                                ? 'bg-brand/20 text-brand/40'
+                                                : 'bg-foreground/10 text-foreground/30'
                                         }`}
                                     >
                                         {beat === 1 ? '1 ●' : beat}
@@ -1405,10 +1406,10 @@ export default function LiveStageScoreViewer({
                                 className={`pointer-events-none absolute inset-0 z-30 transition-all duration-75 ${
                                     pulseMode === 'edge'
                                         ? activeBeat === 1
-                                            ? 'border-4 border-amber-300 shadow-[inset_0_0_60px_rgba(251,191,36,0.7)]'
+                                            ? 'border-4 border-brand shadow-[inset_0_0_60px_rgba(251,191,36,0.7)]'
                                             : 'border-2 border-emerald-400 shadow-[inset_0_0_30px_rgba(52,211,153,0.4)]'
                                         : activeBeat === 1
-                                        ? 'bg-amber-400/25 backdrop-brightness-125'
+                                        ? 'bg-brand/25 backdrop-brightness-125'
                                         : 'bg-emerald-400/12'
                                 }`}
                             />
@@ -1505,7 +1506,7 @@ export default function LiveStageScoreViewer({
                                     }}
                                     className="group absolute inset-y-0 left-0 w-1/4 flex items-center justify-start pl-3 cursor-pointer opacity-0 hover:opacity-100 active:opacity-100 focus:outline-hidden transition-all duration-150"
                                 >
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-white/90 shadow-lg backdrop-blur-xs group-active:scale-90 transition transform">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-background/50 text-foreground/90 shadow-lg backdrop-blur-xs group-active:scale-90 transition transform">
                                         <ChevronLeft size={28} />
                                     </div>
                                 </button>
@@ -1529,7 +1530,7 @@ export default function LiveStageScoreViewer({
                                     }}
                                     className="group absolute inset-y-0 right-0 w-1/4 flex items-center justify-end pr-3 cursor-pointer opacity-0 hover:opacity-100 active:opacity-100 focus:outline-hidden transition-all duration-150"
                                 >
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-white/90 shadow-lg backdrop-blur-xs group-active:scale-90 transition transform">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-background/50 text-foreground/90 shadow-lg backdrop-blur-xs group-active:scale-90 transition transform">
                                         <ChevronRight size={28} />
                                     </div>
                                 </button>
@@ -1539,7 +1540,7 @@ export default function LiveStageScoreViewer({
                         {/* Page Turn Flash Indicator */}
                         {pageTurnFlash && (
                             <div
-                                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-white/20 p-4 backdrop-blur-md transition-all duration-300 animate-in fade-in zoom-in-75 ${
+                                className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-foreground/20 p-4 backdrop-blur-md transition-all duration-300 animate-in fade-in zoom-in-75 ${
                                     pageTurnFlash === 'prev' ? 'left-8' : 'right-8'
                                 }`}
                             >
@@ -1549,9 +1550,9 @@ export default function LiveStageScoreViewer({
 
                         {/* Legend for what is drawn: my draft over the team copy, and the part being shown */}
                         {(overlayOn || myPart) && (
-                            <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-white/85">
-                                {overlayOn && <span className="rounded-full border border-sky-300/40 bg-black/70 px-2 py-0.5">팀 공유 + 내 필기</span>}
-                                {myPart && <span className="rounded-full border border-white/20 bg-black/70 px-2 py-0.5">내 파트 · {PART_LABELS[myPart]}</span>}
+                            <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-foreground/85">
+                                {overlayOn && <span className="rounded-full border border-sky-300/40 bg-background/70 px-2 py-0.5">팀 공유 + 내 필기</span>}
+                                {myPart && <span className="rounded-full border border-foreground/20 bg-background/70 px-2 py-0.5">내 파트 · {PART_LABELS[myPart]}</span>}
                             </div>
                         )}
 
@@ -1569,9 +1570,9 @@ export default function LiveStageScoreViewer({
                                             onPageChange(leaderPage);
                                         }
                                     }}
-                                    className="tap-target inline-flex items-center gap-2 rounded-full border-2 border-amber-400 bg-black/90 px-3.5 py-2 text-xs font-black text-amber-300 shadow-[0_0_24px_rgba(251,191,36,0.4)] backdrop-blur-md transition hover:bg-amber-400/20 active:scale-95 animate-in fade-in slide-in-from-bottom-2 duration-200"
+                                    className="tap-target inline-flex items-center gap-2 rounded-full border-2 border-brand bg-background/90 px-3.5 py-2 text-xs font-black text-brand shadow-[0_0_24px_rgba(251,191,36,0.4)] backdrop-blur-md transition hover:bg-brand/20 active:scale-95 animate-in fade-in slide-in-from-bottom-2 duration-200"
                                 >
-                                    <Radio size={14} className="animate-pulse text-amber-400" />
+                                    <Radio size={14} className="animate-pulse text-brand" />
                                     <span>인도자 위치 ({leaderPage}p) 복귀</span>
                                 </button>
                             </div>
@@ -1581,39 +1582,39 @@ export default function LiveStageScoreViewer({
                             <button
                                 type="button"
                                 onClick={() => setIsZenMode(false)}
-                                className="absolute top-4 right-4 z-40 tap-target inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/80 px-3.5 py-1.5 text-xs font-bold text-white/90 backdrop-blur-md shadow-2xl hover:bg-black hover:text-white transition active:scale-95 animate-in fade-in duration-200"
+                                className="absolute top-4 right-4 z-40 tap-target inline-flex items-center gap-1.5 rounded-full border border-foreground/20 bg-background/80 px-3.5 py-1.5 text-xs font-bold text-foreground/90 backdrop-blur-md shadow-2xl hover:bg-background hover:text-foreground transition active:scale-95 animate-in fade-in duration-200"
                                 title="무대 조작 메뉴 다시 보기"
                             >
-                                <Eye size={14} className="text-amber-300" />
+                                <Eye size={14} className="text-brand" />
                                 <span>메뉴 복원</span>
                             </button>
                         )}
                     </div>
                 ) : (
-                    <div className="flex h-full min-h-[22rem] flex-col items-center justify-center p-6 text-center text-white/70">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-400/30 bg-amber-400/10 text-amber-300 mb-4 shadow-[0_0_30px_rgba(251,191,36,0.15)]">
+                    <div className="flex h-full min-h-[22rem] flex-col items-center justify-center p-6 text-center text-foreground/70">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-brand/30 bg-brand/10 text-brand mb-4 shadow-[0_0_30px_rgba(251,191,36,0.15)]">
                             <Music2 size={28} />
                         </div>
-                        <h4 className="text-base font-black text-white/95">
+                        <h4 className="text-base font-black text-foreground/95">
                             {loaded ? '등록된 악보가 없습니다' : '악보를 불러오는 중…'}
                         </h4>
-                        <p className="mt-1.5 text-xs text-white/50 max-w-sm leading-relaxed">
+                        <p className="mt-1.5 text-xs text-foreground/50 max-w-sm leading-relaxed">
                             콘티 작업 공간에서 악보 PDF나 이미지를 등록하거나, 지금 바로 무대 뷰어와 베지에 필기 엔진을 체험해볼 수 있는 샘플 찬양 악보를 생성할 수 있습니다.
                         </p>
                         <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
                             <button
                                 type="button"
                                 onClick={() => void loadSampleSheet()}
-                                className="tap-target inline-flex items-center gap-2 rounded-xl border border-amber-400/50 bg-amber-400/20 px-4 py-2 text-xs font-black text-amber-200 hover:bg-amber-400/30 transition shadow-lg active:scale-95"
+                                className="tap-target inline-flex items-center gap-2 rounded-xl border border-brand/50 bg-brand/20 px-4 py-2 text-xs font-black text-brand hover:bg-brand/30 transition shadow-lg active:scale-95"
                             >
-                                <Sparkles size={14} className="text-amber-300" />
+                                <Sparkles size={14} className="text-brand" />
                                 <span>⚡ 체험용 샘플 악보 2장 생성</span>
                             </button>
                             {onSwitchToBpmMode && (
                                 <button
                                     type="button"
                                     onClick={onSwitchToBpmMode}
-                                    className="tap-target inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-bold text-white/70 hover:bg-white/10 transition"
+                                    className="tap-target inline-flex items-center gap-1.5 rounded-xl border border-foreground/10 bg-foreground/5 px-3.5 py-2 text-xs font-bold text-foreground/70 hover:bg-foreground/10 transition"
                                 >
                                     <Radio size={14} />
                                     <span>BPM 전광판 뷰</span>
@@ -1627,23 +1628,23 @@ export default function LiveStageScoreViewer({
             {/* Leader's Sermon & Speech Note HUD (Collapsible) */}
             {showLeaderNotes && (
                 <div
-                    className={`mt-2 w-full p-3.5 rounded-2xl bg-[#0a0f0e]/95 border border-amber-400/40 text-xs shadow-2xl space-y-2 backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2 duration-150 transition-all ${
+                    className={`mt-2 w-full p-3.5 rounded-2xl bg-background/95 border border-brand/40 text-xs shadow-2xl space-y-2 backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2 duration-150 transition-all ${
                         isZenMode ? 'hidden' : 'block'
                     }`}
                 >
-                    <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                        <span className="font-black text-amber-300 flex items-center gap-1.5">
+                    <div className="flex items-center justify-between border-b border-foreground/10 pb-1.5">
+                        <span className="font-black text-brand flex items-center gap-1.5">
                             <span>📖</span> 인도자 곡간 멘트 & 말씀 메모
                         </span>
                         <button
                             type="button"
                             onClick={() => setShowLeaderNotes(false)}
-                            className="text-white/40 hover:text-white transition text-xs"
+                            className="text-foreground/40 hover:text-foreground transition text-xs"
                         >
                             닫기 ✕
                         </button>
                     </div>
-                    <div className="space-y-1.5 text-white/80 text-[11px] leading-relaxed">
+                    <div className="space-y-1.5 text-foreground/80 text-[11px] leading-relaxed">
                         {directionNotes.map((note, index) => (
                             <p key={`${index}-${note}`}>
                                 <strong className="text-emerald-300">디렉팅 메모:</strong> {note}
@@ -1652,11 +1653,11 @@ export default function LiveStageScoreViewer({
                         {transitionNote ? (
                             <p>
                                 <strong className="text-rose-300">곡 전환:</strong> {transitionNote}
-                                {nextSongTitle ? <span className="text-white/50"> → {nextSongTitle}</span> : null}
+                                {nextSongTitle ? <span className="text-foreground/50"> → {nextSongTitle}</span> : null}
                             </p>
                         ) : null}
                         {directionNotes.length === 0 && !transitionNote ? (
-                            <p className="text-white/50">이 곡에 등록된 디렉팅 메모나 곡 전환 메모가 없어요. 콘티 편집에서 추가할 수 있어요.</p>
+                            <p className="text-foreground/50">이 곡에 등록된 디렉팅 메모나 곡 전환 메모가 없어요. 콘티 편집에서 추가할 수 있어요.</p>
                         ) : null}
                     </div>
                 </div>
@@ -1665,13 +1666,13 @@ export default function LiveStageScoreViewer({
             {/* Stage Feedback & Quick Cue Hub (Non-verbal Stage Communication) */}
             {cueTools ? (
             <div
-                className={`mt-2 p-2.5 sm:p-3 rounded-2xl bg-gradient-to-r from-[#0a0f0e] via-[#0d1413] to-[#121a18] border border-white/10 shadow-lg space-y-2.5 transition-all duration-300 ${
+                className={`mt-2 p-2.5 sm:p-3 rounded-2xl bg-gradient-to-r from-[#0a0f0e] via-[#0d1413] to-[#121a18] border border-foreground/10 shadow-lg space-y-2.5 transition-all duration-300 ${
                     isZenMode ? 'translate-y-4 opacity-0 pointer-events-none h-0 p-0 m-0 overflow-hidden' : 'opacity-100'
                 }`}
             >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[11px] font-black text-amber-300 flex items-center gap-1.5">
+                        <span className="text-[11px] font-black text-brand flex items-center gap-1.5">
                             <span>📡</span> 실시간 무대 무음 큐
                         </span>
                         {lastSentDeliveryLabel ? (
@@ -1684,7 +1685,7 @@ export default function LiveStageScoreViewer({
                         <button
                             type="button"
                             onClick={() => setShowDiagnosticsModal(true)}
-                            className="tap-target px-2.5 py-1 rounded-xl text-[10px] font-bold border border-white/15 bg-white/5 hover:bg-white/10 text-white/80 transition"
+                            className="tap-target px-2.5 py-1 rounded-xl text-[10px] font-bold border border-foreground/15 bg-foreground/5 hover:bg-foreground/10 text-foreground/80 transition"
                         >
                             ⚡ 상태 점검
                         </button>
@@ -1693,8 +1694,8 @@ export default function LiveStageScoreViewer({
                             onClick={() => setShowLeaderNotes((prev) => !prev)}
                             className={`tap-target px-2.5 py-1 rounded-xl text-[10px] font-bold border transition ${
                                 showLeaderNotes
-                                    ? 'bg-amber-400 text-black border-amber-400'
-                                    : 'bg-white/5 hover:bg-white/10 text-amber-200 border-amber-400/30'
+                                    ? 'bg-brand text-brand-foreground border-brand'
+                                    : 'bg-foreground/5 hover:bg-foreground/10 text-brand border-brand/30'
                             }`}
                         >
                             📖 말씀 메모
@@ -1709,8 +1710,8 @@ export default function LiveStageScoreViewer({
                         onClick={() => setActiveCueTab('all')}
                         className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition shrink-0 ${
                             activeCueTab === 'all'
-                                ? 'bg-white/20 text-white shadow-xs'
-                                : 'text-white/50 hover:text-white/80'
+                                ? 'bg-foreground/20 text-foreground shadow-xs'
+                                : 'text-foreground/50 hover:text-foreground/80'
                         }`}
                     >
                         전체 (12)
@@ -1720,8 +1721,8 @@ export default function LiveStageScoreViewer({
                         onClick={() => setActiveCueTab('tempo')}
                         className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition shrink-0 ${
                             activeCueTab === 'tempo'
-                                ? 'bg-amber-400 text-black shadow-xs font-black'
-                                : 'text-amber-200/60 hover:text-amber-200'
+                                ? 'bg-brand text-brand-foreground shadow-xs font-black'
+                                : 'text-brand/60 hover:text-brand'
                         }`}
                     >
                         ⚡ 템포·박자
@@ -1731,7 +1732,7 @@ export default function LiveStageScoreViewer({
                         onClick={() => setActiveCueTab('sound')}
                         className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition shrink-0 ${
                             activeCueTab === 'sound'
-                                ? 'bg-rose-400 text-black shadow-xs font-black'
+                                ? 'bg-rose-400 text-brand-foreground shadow-xs font-black'
                                 : 'text-rose-200/60 hover:text-rose-200'
                         }`}
                     >
@@ -1742,7 +1743,7 @@ export default function LiveStageScoreViewer({
                         onClick={() => setActiveCueTab('flow')}
                         className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition shrink-0 ${
                             activeCueTab === 'flow'
-                                ? 'bg-emerald-400 text-black shadow-xs font-black'
+                                ? 'bg-emerald-400 text-brand-foreground shadow-xs font-black'
                                 : 'text-emerald-200/60 hover:text-emerald-200'
                         }`}
                     >
@@ -1756,35 +1757,35 @@ export default function LiveStageScoreViewer({
                         <button
                             type="button"
                             onClick={() => handleSendStageCue('🐇 [템포 주의] 빨라지고 있습니다. 차분하게 가라앉혀요!')}
-                            className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/25 border border-amber-400/30 hover:border-amber-400/60 text-left transition-all active:scale-95 shadow group"
+                            className="p-2 rounded-xl bg-brand/10 hover:bg-brand/25 border border-brand/30 hover:border-brand/60 text-left transition-all active:scale-95 shadow group"
                         >
-                            <div className="text-xs font-black text-amber-300 group-hover:text-amber-100 flex items-center justify-between">
+                            <div className="text-xs font-black text-brand group-hover:text-brand flex items-center justify-between">
                                 <span>🐇 빨라요</span>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-200">템포</span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand/20 text-brand">템포</span>
                             </div>
-                            <div className="text-[10px] text-white/60 mt-1 truncate">차분히 템포 홀드</div>
+                            <div className="text-[10px] text-foreground/60 mt-1 truncate">차분히 템포 홀드</div>
                         </button>
                         <button
                             type="button"
                             onClick={() => handleSendStageCue('🐢 [템포 주의] 템포가 처지고 있습니다. 살짝만 밀어주세요!')}
-                            className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/25 border border-amber-400/30 hover:border-amber-400/60 text-left transition-all active:scale-95 shadow group"
+                            className="p-2 rounded-xl bg-brand/10 hover:bg-brand/25 border border-brand/30 hover:border-brand/60 text-left transition-all active:scale-95 shadow group"
                         >
-                            <div className="text-xs font-black text-amber-300 group-hover:text-amber-100 flex items-center justify-between">
+                            <div className="text-xs font-black text-brand group-hover:text-brand flex items-center justify-between">
                                 <span>🐢 느려요</span>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-200">템포</span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand/20 text-brand">템포</span>
                             </div>
-                            <div className="text-[10px] text-white/60 mt-1 truncate">살짝 템포 푸시</div>
+                            <div className="text-[10px] text-foreground/60 mt-1 truncate">살짝 템포 푸시</div>
                         </button>
                         <button
                             type="button"
                             onClick={() => handleSendStageCue('🥁 [드럼 박자] 드럼 4박 카운트 또는 1박 다운비트 확실히 잡아주세요!')}
-                            className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/25 border border-amber-400/30 hover:border-amber-400/60 text-left transition-all active:scale-95 shadow group"
+                            className="p-2 rounded-xl bg-brand/10 hover:bg-brand/25 border border-brand/30 hover:border-brand/60 text-left transition-all active:scale-95 shadow group"
                         >
-                            <div className="text-xs font-black text-amber-300 group-hover:text-amber-100 flex items-center justify-between">
+                            <div className="text-xs font-black text-brand group-hover:text-brand flex items-center justify-between">
                                 <span>🥁 드럼 박자</span>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-200">박자</span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand/20 text-brand">박자</span>
                             </div>
-                            <div className="text-[10px] text-white/60 mt-1 truncate">비트 카운트·다운비트</div>
+                            <div className="text-[10px] text-foreground/60 mt-1 truncate">비트 카운트·다운비트</div>
                         </button>
                         <button
                             type="button"
@@ -1795,7 +1796,7 @@ export default function LiveStageScoreViewer({
                                 <span>⚠️ 박자 밀림</span>
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-400/20 text-rose-200">싱크</span>
                             </div>
-                            <div className="text-[10px] text-white/60 mt-1 truncate">1박 정렬 필요</div>
+                            <div className="text-[10px] text-foreground/60 mt-1 truncate">1박 정렬 필요</div>
                         </button>
                     </div>
                 )}
@@ -1816,8 +1817,8 @@ export default function LiveStageScoreViewer({
                                     }}
                                     className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition shrink-0 ${
                                         soundTarget === tgt
-                                            ? 'bg-rose-400 text-black border-rose-400'
-                                            : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                                            ? 'bg-rose-400 text-brand-foreground border-rose-400'
+                                            : 'bg-foreground/5 border-foreground/10 text-foreground/60 hover:bg-foreground/10'
                                     }`}
                                 >
                                     {tgt}
@@ -1835,7 +1836,7 @@ export default function LiveStageScoreViewer({
                                     <span>🔊 볼륨 업</span>
                                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-400/20 text-rose-200">{soundTarget}</span>
                                 </div>
-                                <div className="text-[10px] text-white/60 mt-1 truncate">사운드 레벨 증가</div>
+                                <div className="text-[10px] text-foreground/60 mt-1 truncate">사운드 레벨 증가</div>
                             </button>
                             <button
                                 type="button"
@@ -1846,7 +1847,7 @@ export default function LiveStageScoreViewer({
                                     <span>🔉 볼륨 다운</span>
                                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-400/20 text-rose-200">{soundTarget}</span>
                                 </div>
-                                <div className="text-[10px] text-white/60 mt-1 truncate">사운드 레벨 감소</div>
+                                <div className="text-[10px] text-foreground/60 mt-1 truncate">사운드 레벨 감소</div>
                             </button>
                             <button
                                 type="button"
@@ -1857,7 +1858,7 @@ export default function LiveStageScoreViewer({
                                     <span>🎤 보컬 UP</span>
                                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-400/20 text-rose-200">{soundTarget}</span>
                                 </div>
-                                <div className="text-[10px] text-white/60 mt-1 truncate">보컬 명료도 확보</div>
+                                <div className="text-[10px] text-foreground/60 mt-1 truncate">보컬 명료도 확보</div>
                             </button>
                             <button
                                 type="button"
@@ -1868,7 +1869,7 @@ export default function LiveStageScoreViewer({
                                     <span>🎚️ 모니터 체크</span>
                                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/20 text-sky-200">{soundTarget}</span>
                                 </div>
-                                <div className="text-[10px] text-white/60 mt-1 truncate">인이어 밸런스</div>
+                                <div className="text-[10px] text-foreground/60 mt-1 truncate">인이어 밸런스</div>
                             </button>
                         </div>
                     </div>
@@ -1886,7 +1887,7 @@ export default function LiveStageScoreViewer({
                                 <span>🔁 한 번 더</span>
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-400/20 text-indigo-200">반복</span>
                             </div>
-                            <div className="text-[10px] text-white/60 mt-1 truncate">후렴 즉시 반복</div>
+                            <div className="text-[10px] text-foreground/60 mt-1 truncate">후렴 즉시 반복</div>
                         </button>
                         <button
                             type="button"
@@ -1897,7 +1898,7 @@ export default function LiveStageScoreViewer({
                                 <span>🎹 기도 BGM</span>
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-200">전환</span>
                             </div>
-                            <div className="text-[10px] text-white/60 mt-1 truncate">피아노 단독 유지</div>
+                            <div className="text-[10px] text-foreground/60 mt-1 truncate">피아노 단독 유지</div>
                         </button>
                         <button
                             type="button"
@@ -1908,7 +1909,7 @@ export default function LiveStageScoreViewer({
                                 <span>🛑 엔딩 컷</span>
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-400/20 text-rose-200">종료</span>
                             </div>
-                            <div className="text-[10px] text-white/60 mt-1 truncate">심벌 히트 후 멈춤</div>
+                            <div className="text-[10px] text-foreground/60 mt-1 truncate">심벌 히트 후 멈춤</div>
                         </button>
                         <button
                             type="button"
@@ -1919,7 +1920,7 @@ export default function LiveStageScoreViewer({
                                 <span>📶 통신 점검</span>
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/20 text-sky-200">점검</span>
                             </div>
-                            <div className="text-[10px] text-white/60 mt-1 truncate">전체 기기 핑 확인</div>
+                            <div className="text-[10px] text-foreground/60 mt-1 truncate">전체 기기 핑 확인</div>
                         </button>
                     </div>
                 )}
@@ -1930,20 +1931,20 @@ export default function LiveStageScoreViewer({
             {showDiagnosticsModal && (
                 <>
                     <div
-                        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md animate-in fade-in"
+                        className="fixed inset-0 z-50 bg-background/80 backdrop-blur-md animate-in fade-in"
                         onClick={() => setShowDiagnosticsModal(false)}
                     />
-                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-md rounded-3xl border border-white/20 bg-[#0a0f0e] p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-4 text-white">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-md rounded-3xl border border-foreground/20 bg-background p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-4 text-foreground">
+                        <div className="flex items-center justify-between border-b border-foreground/10 pb-3">
                             <div className="flex items-center gap-2.5">
-                                <div className="flex size-9 items-center justify-center rounded-xl bg-amber-400/20 text-amber-300">
+                                <div className="flex size-9 items-center justify-center rounded-xl bg-brand/20 text-brand">
                                     <Activity size={18} />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-black text-white">
+                                    <h3 className="text-sm font-black text-foreground">
                                         무대 실시간 상태 점검 및 진단
                                     </h3>
-                                    <p className="text-[11px] text-white/60">
+                                    <p className="text-[11px] text-foreground/60">
                                         네트워크 품질, 기기 수신, 큐 전송 상태
                                     </p>
                                 </div>
@@ -1951,7 +1952,7 @@ export default function LiveStageScoreViewer({
                             <button
                                 type="button"
                                 onClick={() => setShowDiagnosticsModal(false)}
-                                className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
+                                className="rounded-full p-1.5 text-foreground/50 hover:bg-foreground/10 hover:text-foreground"
                             >
                                 <X size={16} />
                             </button>
@@ -1959,36 +1960,36 @@ export default function LiveStageScoreViewer({
 
                         {/* Status Grid */}
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block">실시간 연결 상태</span>
+                            <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3 space-y-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/50 block">실시간 연결 상태</span>
                                 <div className="flex items-center gap-2">
-                                    <span className={`size-2.5 rounded-full ${realtimeStatus === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                                    <span className="font-black text-white">
+                                    <span className={`size-2.5 rounded-full ${realtimeStatus === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-brand'}`} />
+                                    <span className="font-black text-foreground">
                                         {realtimeStatus === 'connected' ? '정상 연결됨' : '대기 / 로컬 연결'}
                                     </span>
                                 </div>
-                                <p className="text-[10px] text-white/60">
+                                <p className="text-[10px] text-foreground/60">
                                     {realtimeStatus === 'connected' ? '초저지연 Web Broadcast' : '브라우저 간 통신 대기'}
                                 </p>
                             </div>
 
-                            <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block">접속 기기 수</span>
+                            <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3 space-y-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/50 block">접속 기기 수</span>
                                 <div className="flex items-center gap-1.5">
-                                    <span className="text-lg font-black text-amber-300">{participantCount}</span>
-                                    <span className="text-xs text-white/70">대 온라인</span>
+                                    <span className="text-lg font-black text-brand">{participantCount}</span>
+                                    <span className="text-xs text-foreground/70">대 온라인</span>
                                 </div>
-                                <p className="text-[10px] text-white/60">인도자, 악기, 미디어</p>
+                                <p className="text-[10px] text-foreground/60">인도자, 악기, 미디어</p>
                             </div>
                         </div>
 
                         {/* Recent Delivery Status */}
-                        <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block">최근 큐 전달 확인 (ACK)</span>
+                        <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3 space-y-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/50 block">최근 큐 전달 확인 (ACK)</span>
                             <p className="text-xs font-black text-emerald-300">
                                 {lastSentDeliveryLabel ?? '아직 전송된 큐가 없습니다.'}
                             </p>
-                            <p className="text-[10px] text-white/60">
+                            <p className="text-[10px] text-foreground/60">
                                 큐 전송 시 각 팀원 기기에서 수신 확인 신호가 실시간 반환됩니다.
                             </p>
                         </div>
@@ -2002,7 +2003,7 @@ export default function LiveStageScoreViewer({
                                     handleSendStageCue('📶 [통신 점검] 무대 실시간 상태 점검 핑 신호 수신 확인!');
                                     setShowDiagnosticsModal(false);
                                 }}
-                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500/25 to-emerald-500/25 hover:from-amber-500/35 hover:to-emerald-500/35 border border-amber-400/40 py-2.5 text-xs font-black text-amber-200 transition active:scale-95 shadow"
+                                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand/25 to-emerald-500/25 hover:from-brand/35 hover:to-emerald-500/35 border border-brand/40 py-2.5 text-xs font-black text-brand transition active:scale-95 shadow"
                             >
                                 <Radio size={14} />
                                 <span>전체 기기에 통신 점검 신호 보내기</span>
@@ -2034,12 +2035,12 @@ export default function LiveStageScoreViewer({
                         }}
                         disabled={!canTurnPage || (page <= 1 && !hasPrevSong)}
                         title={page <= 1 && hasPrevSong && prevSongTitle ? `이전 곡: ${prevSongTitle}` : '이전 페이지'}
-                        className="tap-target inline-flex items-center gap-1 rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/10 disabled:opacity-30 transition"
+                        className="tap-target inline-flex items-center gap-1 rounded-xl border border-foreground/15 bg-foreground/5 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-foreground/10 disabled:opacity-30 transition"
                     >
                         <ChevronLeft size={16} />
                         <span>{page <= 1 && hasPrevSong ? (prevSongTitle ? `이전: ${prevSongTitle}` : '이전 곡') : '이전'}</span>
                     </button>
-                    <span className="text-xs font-black text-white/90">
+                    <span className="text-xs font-black text-foreground/90">
                         {isDualPage && secondPage ? `${page}-${page + 1}` : page} / {totalPages || 1}p
                     </span>
                     <button
@@ -2055,7 +2056,7 @@ export default function LiveStageScoreViewer({
                             }
                         }}
                         disabled={!canTurnPage || (page >= totalPages && !hasNextSong)}
-                        className="tap-target inline-flex items-center gap-1 rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/10 disabled:opacity-30 transition"
+                        className="tap-target inline-flex items-center gap-1 rounded-xl border border-foreground/15 bg-foreground/5 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-foreground/10 disabled:opacity-30 transition"
                     >
                         <span>{page >= totalPages && hasNextSong ? `다음 곡` : `다음`}</span>
                         <ChevronRight size={16} />
@@ -2072,7 +2073,7 @@ export default function LiveStageScoreViewer({
                                 triggerHaptic([15, 30]);
                                 onNextSong();
                             }}
-                            className="tap-target inline-flex items-center gap-1 rounded-xl border border-amber-400/50 bg-amber-400/20 px-3 py-1.5 text-xs font-black text-amber-200 hover:bg-amber-400/30 transition animate-pulse"
+                            className="tap-target inline-flex items-center gap-1 rounded-xl border border-brand/50 bg-brand/20 px-3 py-1.5 text-xs font-black text-brand hover:bg-brand/30 transition animate-pulse"
                         >
                             <span>다음 곡: {nextSongTitle}{nextSongKey ? ` · ${nextSongKey}` : ''}</span>
                             <ChevronsRight size={15} />
@@ -2089,7 +2090,7 @@ export default function LiveStageScoreViewer({
                         <button
                             type="button"
                             onClick={() => setShowRecentCuesDrawer(true)}
-                            className="tap-target inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-400/20 transition max-w-[130px] sm:max-w-xs truncate"
+                            className="tap-target inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-1 text-[11px] font-bold text-brand hover:bg-brand/20 transition max-w-[130px] sm:max-w-xs truncate"
                             title="최근 무대 신호 내역 (단축키 H)"
                         >
                             <History size={12} className="shrink-0" />
@@ -2101,18 +2102,18 @@ export default function LiveStageScoreViewer({
                     <button
                         type="button"
                         onClick={() => setShowPedalShortcutsModal(true)}
-                        className="tap-target hidden sm:inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-white/70 hover:bg-white/10 hover:text-white transition"
+                        className="tap-target hidden sm:inline-flex items-center gap-1 rounded-full border border-foreground/10 bg-foreground/5 px-2.5 py-1 text-[11px] font-bold text-foreground/70 hover:bg-foreground/10 hover:text-foreground transition"
                         title="페달 및 키보드 단축키 안내"
                     >
                         <Keyboard size={12} />
                         <span>단축키 안내</span>
                     </button>
 
-                    <div className="hidden md:flex items-center gap-2 text-[11px] text-white/60">
+                    <div className="hidden md:flex items-center gap-2 text-[11px] text-foreground/60">
                         <span>
                             {sheetSource === 'published' ? '팀 공유본' : '내 필기본'}
                         </span>
-                        <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-medium">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-foreground/10 bg-foreground/5 px-2 py-0.5 font-medium">
                             {stepper.sectionMode && stepper.available ? '🦶 페달로 섹션 이동' : '⌨️ 페달 넘김 가능'}
                         </span>
                     </div>
@@ -2125,18 +2126,18 @@ export default function LiveStageScoreViewer({
                 {showFloatingCueDial && (
                     <>
                         <div
-                            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs animate-in fade-in duration-100"
+                            className="fixed inset-0 z-40 bg-background/40 backdrop-blur-xs animate-in fade-in duration-100"
                             onClick={() => setShowFloatingCueDial(false)}
                         />
-                        <div className="relative z-50 mb-2 w-56 rounded-2xl border border-amber-400/40 bg-[#0a0f0e]/95 p-2 shadow-[0_15px_40px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in slide-in-from-bottom-2 duration-150 space-y-1.5">
-                            <div className="flex items-center justify-between border-b border-white/10 px-2 py-1">
-                                <span className="text-[11px] font-black text-amber-300 flex items-center gap-1">
+                        <div className="relative z-50 mb-2 w-56 rounded-2xl border border-brand/40 bg-background/95 p-2 shadow-[0_15px_40px_rgba(0,0,0,0.9)] backdrop-blur-2xl animate-in slide-in-from-bottom-2 duration-150 space-y-1.5">
+                            <div className="flex items-center justify-between border-b border-foreground/10 px-2 py-1">
+                                <span className="text-[11px] font-black text-brand flex items-center gap-1">
                                     <Zap size={12} /> 1-터치 빠른 신호
                                 </span>
                                 <button
                                     type="button"
                                     onClick={() => setShowFloatingCueDial(false)}
-                                    className="text-white/40 hover:text-white text-xs"
+                                    className="text-foreground/40 hover:text-foreground text-xs"
                                 >
                                     <X size={12} />
                                 </button>
@@ -2148,7 +2149,7 @@ export default function LiveStageScoreViewer({
                                         handleSendStageCue('🐇 [템포 주의] 빨라지고 있습니다. 차분하게 가라앉혀요!');
                                         setShowFloatingCueDial(false);
                                     }}
-                                    className="w-full text-left flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/20 transition active:scale-95"
+                                    className="w-full text-left flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-brand bg-brand/10 hover:bg-brand/20 border border-brand/20 transition active:scale-95"
                                 >
                                     <span>🐇</span>
                                     <span>빨라요 (템포 홀드)</span>
@@ -2159,7 +2160,7 @@ export default function LiveStageScoreViewer({
                                         handleSendStageCue('🐢 [템포 주의] 템포가 처지고 있습니다. 살짝만 밀어주세요!');
                                         setShowFloatingCueDial(false);
                                     }}
-                                    className="w-full text-left flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/20 transition active:scale-95"
+                                    className="w-full text-left flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-brand bg-brand/10 hover:bg-brand/20 border border-brand/20 transition active:scale-95"
                                 >
                                     <span>🐢</span>
                                     <span>느려요 (템포 푸시)</span>
@@ -2221,12 +2222,12 @@ export default function LiveStageScoreViewer({
                     }}
                     className={`tap-target flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-black shadow-[0_6px_25px_rgba(0,0,0,0.8)] backdrop-blur-xl border transition-all active:scale-90 ${
                         showFloatingCueDial
-                            ? 'bg-amber-400 text-black border-amber-300 ring-2 ring-amber-400/50'
-                            : 'bg-[#0a0f0e]/90 text-amber-300 border-amber-400/40 hover:bg-amber-400/20'
+                            ? 'bg-brand text-brand-foreground border-brand ring-2 ring-brand/50'
+                            : 'bg-background/90 text-brand border-brand/40 hover:bg-brand/20'
                     }`}
                     title="빠른 무대 신호 다이얼 (단축키 B)"
                 >
-                    <Zap size={14} className={showFloatingCueDial ? 'text-black' : 'text-amber-400 animate-pulse'} />
+                    <Zap size={14} className={showFloatingCueDial ? 'text-brand-foreground' : 'text-brand animate-pulse'} />
                     <span>신호 (B)</span>
                 </button>
             </div>
@@ -2236,29 +2237,29 @@ export default function LiveStageScoreViewer({
             {showRecentCuesDrawer && (
                 <>
                     <div
-                        className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs animate-in fade-in"
+                        className="fixed inset-0 z-50 bg-background/70 backdrop-blur-xs animate-in fade-in"
                         onClick={() => setShowRecentCuesDrawer(false)}
                     />
-                    <div className="fixed left-1/2 bottom-4 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-lg rounded-3xl border border-white/20 bg-[#0a0f0e]/95 p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in slide-in-from-bottom duration-150 space-y-3 text-white">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                    <div className="fixed left-1/2 bottom-4 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-lg rounded-3xl border border-foreground/20 bg-background/95 p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in slide-in-from-bottom duration-150 space-y-3 text-foreground">
+                        <div className="flex items-center justify-between border-b border-foreground/10 pb-2">
                             <div className="flex items-center gap-2">
-                                <History size={16} className="text-amber-300" />
-                                <h3 className="text-xs font-black text-white">최근 무대 신호 기록</h3>
-                                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/60">
+                                <History size={16} className="text-brand" />
+                                <h3 className="text-xs font-black text-foreground">최근 무대 신호 기록</h3>
+                                <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[10px] text-foreground/60">
                                     {recentCues.length}건
                                 </span>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setShowRecentCuesDrawer(false)}
-                                className="rounded-full p-1 text-white/50 hover:bg-white/10 hover:text-white"
+                                className="rounded-full p-1 text-foreground/50 hover:bg-foreground/10 hover:text-foreground"
                             >
                                 <X size={14} />
                             </button>
                         </div>
 
                         {recentCues.length === 0 ? (
-                            <div className="py-6 text-center text-xs text-white/40">
+                            <div className="py-6 text-center text-xs text-foreground/40">
                                 아직 전송되거나 수신된 신호가 없습니다.
                             </div>
                         ) : (
@@ -2266,18 +2267,18 @@ export default function LiveStageScoreViewer({
                                 {recentCues.map((cue) => (
                                     <div
                                         key={cue.id}
-                                        className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs hover:bg-white/10 transition"
+                                        className="flex items-center justify-between gap-2 rounded-xl border border-foreground/10 bg-foreground/5 p-2.5 text-xs hover:bg-foreground/10 transition"
                                     >
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-bold text-amber-300/80">
+                                                <span className="text-[10px] font-bold text-brand/80">
                                                     {cue.role ?? '팀 신호'}
                                                 </span>
-                                                <span className="text-[10px] text-white/40">
+                                                <span className="text-[10px] text-foreground/40">
                                                     {cue.time}
                                                 </span>
                                             </div>
-                                            <p className="font-semibold text-white/95 mt-0.5 truncate">
+                                            <p className="font-semibold text-foreground/95 mt-0.5 truncate">
                                                 {cue.message}
                                             </p>
                                         </div>
@@ -2287,7 +2288,7 @@ export default function LiveStageScoreViewer({
                                                 handleSendStageCue(cue.message);
                                                 setShowRecentCuesDrawer(false);
                                             }}
-                                            className="tap-target px-2 py-1 rounded-lg bg-white/10 hover:bg-amber-400 hover:text-black text-[10px] font-bold text-white/80 shrink-0 transition"
+                                            className="tap-target px-2 py-1 rounded-lg bg-foreground/10 hover:bg-brand hover:text-brand-foreground text-[10px] font-bold text-foreground/80 shrink-0 transition"
                                             title="이 신호 다시 보내기"
                                         >
                                             재전송
@@ -2297,12 +2298,12 @@ export default function LiveStageScoreViewer({
                             </div>
                         )}
 
-                        <div className="pt-1 flex items-center justify-between text-[11px] text-white/50 border-t border-white/10">
+                        <div className="pt-1 flex items-center justify-between text-[11px] text-foreground/50 border-t border-foreground/10">
                             <span>단축키: H로 열기/닫기</span>
                             <button
                                 type="button"
                                 onClick={() => setRecentCues([])}
-                                className="text-[10px] text-white/40 hover:text-white/70"
+                                className="text-[10px] text-foreground/40 hover:text-foreground/70"
                             >
                                 기록 지우기
                             </button>
@@ -2315,20 +2316,20 @@ export default function LiveStageScoreViewer({
             {showPedalShortcutsModal && (
                 <>
                     <div
-                        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md animate-in fade-in"
+                        className="fixed inset-0 z-50 bg-background/80 backdrop-blur-md animate-in fade-in"
                         onClick={() => setShowPedalShortcutsModal(false)}
                     />
-                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-md rounded-3xl border border-white/20 bg-[#0a0f0e] p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-4 text-white">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-md rounded-3xl border border-foreground/20 bg-background p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl animate-in zoom-in-95 duration-150 space-y-4 text-foreground">
+                        <div className="flex items-center justify-between border-b border-foreground/10 pb-3">
                             <div className="flex items-center gap-2.5">
-                                <div className="flex size-9 items-center justify-center rounded-xl bg-amber-400/20 text-amber-300">
+                                <div className="flex size-9 items-center justify-center rounded-xl bg-brand/20 text-brand">
                                     <Keyboard size={18} />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-black text-white">
+                                    <h3 className="text-sm font-black text-foreground">
                                         무대 단축키 & 블루투스 페달 안내
                                     </h3>
-                                    <p className="text-[11px] text-white/60">
+                                    <p className="text-[11px] text-foreground/60">
                                         손대지 않고 쾌적하게 조작하는 무대 가이드
                                     </p>
                                 </div>
@@ -2336,29 +2337,29 @@ export default function LiveStageScoreViewer({
                             <button
                                 type="button"
                                 onClick={() => setShowPedalShortcutsModal(false)}
-                                className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
+                                className="rounded-full p-1.5 text-foreground/50 hover:bg-foreground/10 hover:text-foreground"
                             >
                                 <X size={16} />
                             </button>
                         </div>
 
                         <div className="space-y-2 text-xs">
-                            <div className="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">
-                                <span className="text-[11px] font-black text-amber-300 block">🦶 블루투스 풋 페달</span>
-                                <div className="space-y-1 text-white/80 text-[11px]">
+                            <div className="rounded-2xl border border-foreground/10 bg-foreground/5 p-3 space-y-2">
+                                <span className="text-[11px] font-black text-brand block">🦶 블루투스 풋 페달</span>
+                                <div className="space-y-1 text-foreground/80 text-[11px]">
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono bg-white/10 px-1.5 py-0.5 rounded">PageUp / ArrowUp</span>
+                                        <span className="font-mono bg-foreground/10 px-1.5 py-0.5 rounded">PageUp / ArrowUp</span>
                                         <span>이전 페이지 (1페이지에서 누르면 이전 곡)</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono bg-white/10 px-1.5 py-0.5 rounded">PageDown / Space / Right</span>
+                                        <span className="font-mono bg-foreground/10 px-1.5 py-0.5 rounded">PageDown / Space / Right</span>
                                         <span>다음 페이지 (끝페이지에서 누르면 다음 곡)</span>
                                     </div>
                                 </div>
                                 {stepper.available && (
-                                    <div className="space-y-1.5 border-t border-white/10 pt-2 text-[11px] text-white/80">
+                                    <div className="space-y-1.5 border-t border-foreground/10 pt-2 text-[11px] text-foreground/80">
                                         <div className="flex items-center justify-between gap-2">
-                                            <span className="font-bold text-white">페달 동작</span>
+                                            <span className="font-bold text-foreground">페달 동작</span>
                                             <span className="inline-flex gap-1" role="group" aria-label="페달 동작">
                                                 {([false, true] as const).map((on) => (
                                                     <button
@@ -2366,41 +2367,41 @@ export default function LiveStageScoreViewer({
                                                         type="button"
                                                         aria-pressed={stepper.sectionMode === on}
                                                         onClick={() => stepper.setSectionMode(on)}
-                                                        className="rounded-lg border border-white/15 px-2 py-0.5 font-bold aria-pressed:bg-amber-400 aria-pressed:text-black"
+                                                        className="rounded-lg border border-foreground/15 px-2 py-0.5 font-bold aria-pressed:bg-brand aria-pressed:text-brand-foreground"
                                                     >
                                                         {on ? '섹션 이동' : '페이지 넘김'}
                                                     </button>
                                                 ))}
                                             </span>
                                         </div>
-                                        <p className="text-white/60">
+                                        <p className="text-foreground/60">
                                             섹션 이동: 악보에 얹은 송폼 순서대로 다음 섹션의 마디 표시로 넘어가고, 그 표시가 있는 페이지를 엽니다. 송폼 끝에서는 다시 페이지를 넘깁니다.
                                         </p>
                                     </div>
                                 )}
                             </div>
 
-                            <div className="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">
+                            <div className="rounded-2xl border border-foreground/10 bg-foreground/5 p-3 space-y-2">
                                 <span className="text-[11px] font-black text-emerald-300 block">⌨️ 무대 키보드 단축키</span>
-                                <div className="space-y-1.5 text-white/80 text-[11px]">
+                                <div className="space-y-1.5 text-foreground/80 text-[11px]">
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono bg-amber-400/20 text-amber-200 px-2 py-0.5 rounded font-black">T</span>
+                                        <span className="font-mono bg-brand/20 text-brand px-2 py-0.5 rounded font-black">T</span>
                                         <span>탭 템포 (연타하여 박자/BPM 즉시 측정)</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono bg-white/10 px-2 py-0.5 rounded font-black">Z</span>
+                                        <span className="font-mono bg-foreground/10 px-2 py-0.5 rounded font-black">Z</span>
                                         <span>무대 몰입 모드 (상단/하단 메뉴 숨김 토글)</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono bg-white/10 px-2 py-0.5 rounded font-black">B</span>
+                                        <span className="font-mono bg-foreground/10 px-2 py-0.5 rounded font-black">B</span>
                                         <span>플로팅 빠른 신호 다이얼 (1-터치 큐 열기)</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono bg-white/10 px-2 py-0.5 rounded font-black">M</span>
+                                        <span className="font-mono bg-foreground/10 px-2 py-0.5 rounded font-black">M</span>
                                         <span>곡 진행 메모 열기 및 편집 (엔터로 저장)</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono bg-white/10 px-2 py-0.5 rounded font-black">H</span>
+                                        <span className="font-mono bg-foreground/10 px-2 py-0.5 rounded font-black">H</span>
                                         <span>최근 무대 신호 내역 (History) 열람</span>
                                     </div>
                                 </div>
@@ -2410,7 +2411,7 @@ export default function LiveStageScoreViewer({
                         <button
                             type="button"
                             onClick={() => setShowPedalShortcutsModal(false)}
-                            className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-black text-white transition active:scale-95"
+                            className="w-full py-2 rounded-xl bg-foreground/10 hover:bg-foreground/20 text-xs font-black text-foreground transition active:scale-95"
                         >
                             확인 완료
                         </button>

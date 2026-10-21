@@ -121,19 +121,19 @@ export default function SongFormScoreOverlay({
             <div
                 className={`rounded-xl border backdrop-blur-xl px-2.5 py-1.5 shadow-xl transition-all ${
                     isDarkInverted
-                        ? 'border-amber-400/40 bg-black/85 text-amber-100'
-                        : 'border-white/10 bg-neutral-900/90 text-white'
+                        ? 'border-brand/40 bg-card/85 text-brand'
+                        : 'border-foreground/10 bg-card/90 text-foreground'
                 }`}
             >
-                <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1 border-b border-white/10 text-[11px]">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1 border-b border-foreground/10 text-[11px]">
                     <div className="flex items-center gap-1.5">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-md bg-amber-400/20 text-amber-300 font-bold text-[10px]">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-md bg-brand/20 text-brand font-bold text-[10px]">
                             <Layers size={11} />
                         </span>
-                        <span className="font-black text-amber-300 tracking-wider">
+                        <span className="font-black text-brand tracking-wider">
                             송폼 로드맵
                         </span>
-                        <span className="text-[10px] text-white/50">
+                        <span className="text-[10px] text-foreground/50">
                             {displayMode === 'first_page_only' ? '(1p 상단 오버레이)' : '(전 페이지 고정)'}
                         </span>
                     </div>
@@ -143,7 +143,7 @@ export default function SongFormScoreOverlay({
                             <button
                                 type="button"
                                 onClick={handleCreateDefaultSongForm}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 text-[10px] font-bold transition"
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-brand/20 hover:bg-brand/30 text-brand text-[10px] font-bold transition"
                                 title="표준 송폼(Intro-V-C-B-O) 저장"
                             >
                                 <Sparkles size={10} />
@@ -156,7 +156,7 @@ export default function SongFormScoreOverlay({
                                 <button
                                     type="button"
                                     onClick={() => setShowModeSelector((prev) => !prev)}
-                                    className="tap-target inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white/70 hover:bg-white/10 transition"
+                                    className="tap-target inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-foreground/70 hover:bg-foreground/10 transition"
                                     title="송폼 오버레이 표시 위치 설정"
                                 >
                                     <Eye size={10} />
@@ -169,8 +169,8 @@ export default function SongFormScoreOverlay({
                                             className="fixed inset-0 z-40"
                                             onClick={() => setShowModeSelector(false)}
                                         />
-                                        <div className="absolute right-0 top-full mt-1 z-50 w-44 rounded-xl border border-white/15 bg-black/95 p-1.5 shadow-2xl backdrop-blur-2xl space-y-1 text-left">
-                                            <div className="px-2 py-1 text-[10px] font-bold text-white/50 border-b border-white/10">
+                                        <div className="absolute right-0 top-full mt-1 z-50 w-44 rounded-xl border border-foreground/15 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl space-y-1 text-left">
+                                            <div className="px-2 py-1 text-[10px] font-bold text-foreground/50 border-b border-foreground/10">
                                                 악보 위 송폼 표시
                                             </div>
                                             <button
@@ -181,8 +181,8 @@ export default function SongFormScoreOverlay({
                                                 }}
                                                 className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
                                                     displayMode === 'first_page_only'
-                                                        ? 'bg-amber-400/20 font-black text-amber-300'
-                                                        : 'text-white/70 hover:bg-white/10'
+                                                        ? 'bg-brand/20 font-black text-brand'
+                                                        : 'text-foreground/70 hover:bg-foreground/10'
                                                 }`}
                                             >
                                                 <span>1페이지에만 표시</span>
@@ -196,8 +196,8 @@ export default function SongFormScoreOverlay({
                                                 }}
                                                 className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
                                                     displayMode === 'all_pages'
-                                                        ? 'bg-amber-400/20 font-black text-amber-300'
-                                                        : 'text-white/70 hover:bg-white/10'
+                                                        ? 'bg-brand/20 font-black text-brand'
+                                                        : 'text-foreground/70 hover:bg-foreground/10'
                                                 }`}
                                             >
                                                 <span>모든 페이지에 표시</span>
@@ -212,7 +212,7 @@ export default function SongFormScoreOverlay({
                                                 className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
                                                     (displayMode as string) === 'hidden'
                                                         ? 'bg-rose-400/20 font-black text-rose-300'
-                                                        : 'text-white/70 hover:bg-white/10'
+                                                        : 'text-foreground/70 hover:bg-foreground/10'
                                                 }`}
                                             >
                                                 <span>숨김</span>
@@ -228,7 +228,7 @@ export default function SongFormScoreOverlay({
                             <button
                                 type="button"
                                 onClick={() => onDisplayModeChange('hidden')}
-                                className="text-white/40 hover:text-white p-0.5 rounded transition"
+                                className="text-foreground/40 hover:text-foreground p-0.5 rounded transition"
                                 title="송폼 오버레이 닫기"
                             >
                                 <X size={12} />
@@ -250,10 +250,10 @@ export default function SongFormScoreOverlay({
                                     onClick={() => onSelectSection?.(sec.label)}
                                     className={`tap-target group flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs transition-all active:scale-95 ${
                                         isActive
-                                            ? 'bg-amber-400 text-neutral-950 font-black shadow-[0_0_14px_rgba(251,191,36,0.9)] ring-2 ring-white scale-105 z-10'
+                                            ? 'bg-brand text-brand-foreground font-black shadow-sm ring-2 ring-foreground/15 scale-105 z-10'
                                             : isPast
-                                            ? 'bg-white/5 text-white/40 border border-white/5 line-through opacity-70'
-                                            : 'bg-white/10 hover:bg-white/20 text-white/90 border border-white/10'
+                                            ? 'bg-foreground/5 text-foreground/40 border border-foreground/5 line-through opacity-70'
+                                            : 'bg-foreground/10 hover:bg-foreground/20 text-foreground/90 border border-foreground/10'
                                     }`}
                                     title={`클릭하여 ${sec.cleanLabel} 섹션으로 이동`}
                                 >
@@ -269,10 +269,10 @@ export default function SongFormScoreOverlay({
                                         size={11}
                                         className={`shrink-0 ${
                                             isPast
-                                                ? 'text-white/20'
+                                                ? 'text-foreground/20'
                                                 : isActive
-                                                ? 'text-amber-300 font-bold'
-                                                : 'text-white/30'
+                                                ? 'text-brand font-bold'
+                                                : 'text-foreground/30'
                                         }`}
                                     />
                                 )}
