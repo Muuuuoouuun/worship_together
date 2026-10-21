@@ -34,6 +34,7 @@ test('abbreviateSectionLabel maps saved song form labels to chips', () => {
     assert.equal(abbreviateSectionLabel('브릿지'), 'B');
     assert.equal(abbreviateSectionLabel('Interlude'), '간주');
     assert.equal(abbreviateSectionLabel('Ending'), 'O');
+    assert.equal(abbreviateSectionLabel('Vamp x4'), 'Vamp×4');
     assert.equal(abbreviateSectionLabel('자유 찬양 및 기도 인도'), '자유 찬양 및 기도 인');
     assert.ok(isValidSongFormSections([abbreviateSectionLabel('자유 찬양 및 기도 인도 시간 x2')]));
 });
@@ -42,6 +43,7 @@ test('chip colors group sections by role', () => {
     assert.equal(songFormChipColor('C×2'), songFormChipColor('C'));
     assert.notEqual(songFormChipColor('PC'), songFormChipColor('C'));
     assert.notEqual(songFormChipColor('V1'), songFormChipColor('B'));
+    assert.equal(songFormChipColor('Vamp×4'), songFormChipColor('Tag'));
 });
 
 test('layout keeps one row when it fits and wraps before a chip that would cross the page edge', () => {

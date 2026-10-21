@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "public/pdf.worker.min.mjs",
+    // 개발·빌드 전에 scripts/prepare-pdf-worker.mjs 가 복사하는 PDF.js 자료 (.gitignore 대상)
+    "public/pdfjs/**",
   ]),
 ]);
 

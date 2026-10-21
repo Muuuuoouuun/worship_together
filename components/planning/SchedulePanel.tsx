@@ -613,30 +613,28 @@ const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, u
     const [showingAbsentForm, setShowingAbsentForm] = useState(false);
     const [copiedPersonal, setCopiedPersonal] = useState(false);
     const [sendingInvite, setSendingInvite] = useState(false);
+    /** 겹치는 시간에 이 자리 말고 다른 자리(같은 일정의 다른 역할 포함)에 이미 배치된 사람 — lib/planning 의 available 과 같은 규칙이라 배정·지원·확정이 실패합니다. */
+    const placedElsewhere = useCallback((memberId: string) => allEvents.some(other =>
+        !other.cancelled &&
+        Date.parse(other.startsAt) < Date.parse(event.endsAt) &&
+        Date.parse(event.startsAt) < Date.parse(other.endsAt) &&
+        other.slots.some(s => s.id !== slot.id && s.memberId === memberId && s.attendance !== 'absent')
+    ), [allEvents, event, slot.id]);
 
     const recommendedCandidates = useMemo(() => {
         if (!isVacantOrAbsent || !manager || event.cancelled) return [];
-        const evStart = Date.parse(event.startsAt);
-        const evEnd = Date.parse(event.endsAt);
         const candidates = members.filter(m => {
             if (m.userId === slot.memberId) return false;
             const roleMatches = m.role === slot.role || (slot.role === 'vocal' && m.role === 'leader') || m.role === 'member';
             if (!roleMatches) return false;
-            const hasClash = allEvents.some(other =>
-                other.id !== event.id &&
-                !other.cancelled &&
-                Date.parse(other.startsAt) < evEnd &&
-                evStart < Date.parse(other.endsAt) &&
-                other.slots.some(s => s.memberId === m.userId && s.attendance !== 'absent')
-            );
-            return !hasClash;
+            return !placedElsewhere(m.userId);
         });
         return candidates.map(m => ({
             userId: m.userId,
             name: m.name,
             count: workloadMap.get(m.userId) ?? 0,
         })).sort((a, b) => a.count - b.count);
-    }, [isVacantOrAbsent, manager, event, members, slot, allEvents, workloadMap]);
+    }, [isVacantOrAbsent, manager, event, members, slot, placedElsewhere, workloadMap]);
 
     const handleCopyPersonal = async () => {
         if (!slot.memberId) return;
@@ -663,7 +661,7 @@ const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, u
     const showInvite = manager && pendingMember && live;
     const showPersonal = manager && pendingMember;
     const showRequest = live && (manager || assigned);
-    const showVolunteer = live && !assigned && needsHelp && members.some(m => m.userId === userId);
+    const showVolunteer = live && !assigned && needsHelp && members.some(m => m.userId === userId) && (volunteered || !placedElsewhere(userId));
     const showTools = showInvite || showPersonal || showRequest;
     const showMine = live && assigned;
     const hasBody = showTools || recommendedCandidates.length > 0 || showMine || showVolunteer || slot.volunteers.length > 0;
@@ -886,7 +884,8 @@ const SlotCard = memo(function SlotCard({ slot, event, alerts, members, names, u
                                         type="button"
                                         size="xs"
                                         className="ml-auto"
-                                        disabled={actions.disabled || !names.has(mid)}
+                                        disabled={actions.disabled || !names.has(mid) || placedElsewhere(mid)}
+                                        title={!names.has(mid) ? '팀을 나간 사람은 확정할 수 없습니다' : placedElsewhere(mid) ? '같은 시간대 다른 자리에 이미 배치되어 있습니다' : undefined}
                                         onClick={() => void actions.send({ type: 'slot.accept', eventId: event.id, slotId: slot.id, memberId: mid })}
                                     >
                                         담당자로 확정

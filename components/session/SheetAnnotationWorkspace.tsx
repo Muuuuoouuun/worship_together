@@ -1,13 +1,15 @@
 'use client';
 
 import { createClientId } from '@/lib/clientId';
-import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react';
-import { BookOpen, ChevronRight, Delete, Download, Eraser, FileUp, Hand, Highlighter, Keyboard, ListMusic, Maximize2, Minimize2, Moon, Pencil, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { BookOpen, ChevronLeft, ChevronRight, Copy, Delete, Download, Eraser, FileUp, Hand, Highlighter, ImageDown, Keyboard, ListMusic, Maximize2, Minimize2, Moon, MoveUpRight, Music2, Pencil, Printer, Redo2, RotateCw, Share2, Sparkles, Square, Sun, SunDim, Trash2, Type, Undo2, X } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { fieldClass } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { getSheetMarkPath } from '@/components/session/sheetMarkPath';
 import { usePageTurner } from '@/hooks/usePageTurner';
+import { useMarkViewParts } from '@/hooks/useMarkPartPrefs';
+import { useSongFormStepper } from '@/hooks/useSongFormStepper';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import {
@@ -15,22 +17,37 @@ import {
     HIGHLIGHTER_COLORS,
     importSheetPages,
     readSheet,
+    rekeySheet,
     rotateSheetPage,
     saveSheet,
     sheetKey,
     SHEET_COLORS,
     validateSheet,
+    WORSHIP_STAMP_GROUPS,
     WORSHIP_STAMP_PRESETS,
     isPointNearMark,
+    appendStrokePoint,
+    lineMarkPath,
+    pointsToSvgPath,
+    snapLineEnd,
     type SheetDocument,
     type SheetMark,
+    type SheetMarkShape,
     type SheetPage,
 } from '@/lib/sheetAnnotations';
+import { renderSheetPageImage, sheetFileStem } from '@/lib/sheetRender';
+import { marksForParts, togglePartInSelection, withMarkPart, type SheetPart } from '@/lib/markParts';
+import { canRedo, canUndo, EMPTY_HISTORY, recordSheetChange, redoPage, undoPage, type SheetHistory } from '@/lib/markHistory';
+import { keyInterval, keyLabel, LEAD_SHEET_KEYS, LEAD_SHEETS, type LeadSheetKey } from '@/lib/leadSheet';
+import { chartKeyNote, type ChartSettings } from '@/lib/chordChart';
+import { applyChordChart } from '@/lib/chordChartSheet';
 import {
     abbreviateSectionLabel,
+    formatSongFormText,
     isSongFormTint,
     layoutSectionMarker,
     layoutSongFormMarkup,
+    parseSongFormText,
     songFormChipColor,
     songFormRowHeight,
     splitRepeat,
@@ -47,6 +64,9 @@ import {
 import { readSongForm } from '@/lib/songFormStorage';
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
 import SongFormMarkup, { SongFormMarkupPlaceholder, SongFormSectionMarker } from './SongFormMarkup';
+import SheetInkLayer from './SheetInkLayer';
+import ChordChartPanel from './ChordChartPanel';
+import MarkPartPicker, { MarkPartFilter } from './MarkPartPicker';
 
 type Props = {
     teamId: string;
@@ -63,7 +83,19 @@ type SongFormDrag = {
     offset: [number, number];
     bounds: { maxX: number; height: number };
     anchor: [number, number];
+    /** Section markers line up with each other while dragged. */
+    snaps: boolean;
+    /** x (viewBox units) of the marker this one lines up with, drawn as a guide. */
+    guideX: number | null;
 };
+
+/** A marker within this many screen pixels of another's left edge lines up with it. */
+const SNAP_PX = 8;
+const NUDGE_STEP = 2.5;
+const NUDGE_STEP_LARGE = 10;
+const ARROW_STEPS: Readonly<Record<string, [number, number]>> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+const isTypingTarget = (target: EventTarget | null) =>
+    target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
 
 const isSongFormMark = (mark: SheetMark) => mark.kind === 'songform' || mark.kind === 'section';
 
@@ -83,6 +115,63 @@ const chipOn = 'bg-primary text-primary-foreground';
 /** 내 필기 / 팀 공유본: the shared Segmented look (white chip on a gray track), kept as pressed buttons. */
 const segment = 'inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-xs';
 const scrollRow = 'no-scrollbar flex items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible';
+const LINE_SHAPE_OPTIONS: ReadonlyArray<{ shape: SheetMarkShape; label: string; title: string }> = [
+    { shape: 'arrow', label: '화살표 →', title: '되돌아갈 곳이나 다음 진행을 가리킵니다' },
+    { shape: 'line', label: '직선 ─', title: '' },
+    { shape: 'cresc', label: '크레센도 <', title: '점점 크게' },
+    { shape: 'decresc', label: '디크레센도 >', title: '점점 작게' },
+];
+
+/** Print view: every page burned with its marks, one per sheet of paper. Hidden on screen. */
+const PRINT_CSS = `
+#sheet-print-root { display: none; }
+@media print {
+  @page { margin: 8mm; }
+  body > *:not(#sheet-print-root) { display: none !important; }
+  #sheet-print-root { display: block !important; }
+  .sheet-print-page { height: 100vh; display: flex; align-items: center; justify-content: center; break-after: page; page-break-after: always; }
+  .sheet-print-page:last-child { break-after: auto; page-break-after: auto; }
+  .sheet-print-page img { max-width: 100%; max-height: 100%; object-fit: contain; }
+}`;
+
+/** Saves a blob under a file name. The link is attached while clicking; detached links lose the name in Chromium. */
+function downloadFile(blob: Blob, name: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** One semitone up or down through the key list (C → D♭ → D …). */
+const stepKey = (key: LeadSheetKey, direction: 1 | -1) => LEAD_SHEET_KEYS[(LEAD_SHEET_KEYS.indexOf(key) + direction + 12) % 12];
+function scoreKeyNote(score: NonNullable<SheetDocument['score']>) {
+    const original = LEAD_SHEETS[score.id]?.key ?? 'C';
+    if (original === score.key) return `원키 ${keyLabel(original)} · 키를 바꾸면 음표·코드·조표를 새로 그립니다`;
+    const { semitones } = keyInterval(original, score.key);
+    return `원키 ${keyLabel(original)}에서 ${semitones > 0 ? `${semitones}반음 위` : `${-semitones}반음 아래`}`;
+}
+
+/** The key the key row shows and changes: the engraved sample's, else the chord chart's. */
+function sheetKeyInfo(doc: SheetDocument): { key: LeadSheetKey; note: string } | null {
+    if (doc.score) return { key: doc.score.key, note: scoreKeyNote(doc.score) };
+    return doc.chart ? { key: doc.chart.key, note: chartKeyNote(doc.chart) } : null;
+}
+
+const noSubscribe = () => () => {};
+/** Whether this device can hand an image file to another app (Web Share level 2, e.g. KakaoTalk on phones). */
+function canShareImageFiles() {
+    try {
+        return typeof navigator !== 'undefined' && typeof navigator.canShare === 'function' && navigator.canShare({ files: [new File([''], 'sheet.jpg', { type: 'image/jpeg' })] });
+    } catch {
+        return false;
+    }
+}
+
+const button = pill;
 
 function SheetAnnotationWorkspace({
     teamId,
@@ -96,20 +185,35 @@ function SheetAnnotationWorkspace({
     const [draft, setDraft] = useState<SheetDocument | null>(null);
     const [published, setPublished] = useState<SheetDocument | null>(null);
     const [view, setView] = useState<'draft' | 'published'>('draft');
-    const [tool, setTool] = useState<'move' | 'pen' | 'highlighter' | 'eraser' | 'stamp' | 'text' | 'rect' | 'songform'>('move');
+    const [tool, setTool] = useState<'move' | 'pen' | 'highlighter' | 'eraser' | 'stamp' | 'text' | 'rect' | 'line' | 'songform'>('move');
+    const [lineShape, setLineShape] = useState<SheetMarkShape>('arrow');
+    const [lineWidth, setLineWidth] = useState(3);
+    const [rectShape, setRectShape] = useState<'box' | 'ellipse'>('box');
+    /** Print / image export: burn the marks in, or output the clean sheet. */
+    const [exportMarks, setExportMarks] = useState(true);
+    const [printImages, setPrintImages] = useState<string[] | null>(null);
+    const canShareFiles = useSyncExternalStore(noSubscribe, canShareImageFiles, () => false);
     const [stamp, setStamp] = useState<string>(WORSHIP_STAMP_PRESETS[0]);
     const [color, setColor] = useState(SHEET_COLORS[0]);
     const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_COLORS[0]);
     const [penWidth, setPenWidth] = useState<number>(3);
     const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
     const [textFontSize, setTextFontSize] = useState<number>(20);
-    const [redoStack, setRedoStack] = useState<SheetMark[]>([]);
+    /** 누구에게: the part new marks are for (null = everyone). */
+    const [markPart, setMarkPart] = useState<SheetPart | null>(null);
+    /** 보기: parts shown besides the marks for everyone (null = all parts). Kept per device. */
+    const { visible: viewParts, setVisible: setViewParts } = useMarkViewParts();
+    /** Per-page undo/redo of the draft's marks. */
+    const [history, setHistory] = useState<SheetHistory>(EMPTY_HISTORY);
     const [textModal, setTextModal] = useState<{ isOpen: boolean; x: number; y: number; text: string } | null>(null);
     const [rectStart, setRectStart] = useState<[number, number] | null>(null);
     const [songFormDrag, setSongFormDrag] = useState<SongFormDrag | null>(null);
     const [pendingSongFormAnchor, setPendingSongFormAnchor] = useState<{ page: number; point: [number, number] } | null>(null);
     const [songFormMode, setSongFormMode] = useState<'band' | 'section'>('band');
     const [armedSection, setArmedSection] = useState<string | null>(null);
+    /** The band or marker arrow keys move (송폼 tool). */
+    const [selectedSongFormId, setSelectedSongFormId] = useState<string | null>(null);
+    const [importProgress, setImportProgress] = useState<string | null>(null);
     /** While following the leader (no page control), marking up another page opens it locally only. */
     const [editPage, setEditPage] = useState<number | null>(null);
     const [songFormLook, setSongFormLook] = useState({ fontSize: SONG_FORM_DEFAULT_FONT_SIZE, tint: false });
@@ -120,6 +224,7 @@ function SheetAnnotationWorkspace({
     const [stroke, setStroke] = useState<SheetMark | null>(null);
     const [status, setStatus] = useState('악보 불러오는 중…');
     const [busy, setBusy] = useState(false);
+    const [showChordChart, setShowChordChart] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [zoom, setZoom] = useState(1);
     const [isDarkInverted, setIsDarkInverted] = useState(false);
@@ -135,6 +240,11 @@ function SheetAnnotationWorkspace({
     const lastEraserCheckRef = useRef<number>(0);
     const sectionRef = useRef<HTMLElement | null>(null);
     const songFormDragRef = useRef<SongFormDrag | null>(null);
+    const songFormTextRef = useRef<HTMLInputElement | null>(null);
+    /** The stroke being drawn; pointer moves update its attributes directly instead of re-rendering the page. */
+    const liveRef = useRef<SVGPathElement | SVGRectElement | SVGEllipseElement | null>(null);
+    const removeMarkRef = useRef<(id: string) => void>(() => {});
+    const lazySaveRef = useRef<number | null>(null);
 
     const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen();
     const { isActive: isWakeLockActive, isSupported: isWakeLockSupported, toggle: toggleWakeLock } = useScreenWakeLock(true);
@@ -142,10 +252,13 @@ function SheetAnnotationWorkspace({
     const draftKey = sheetKey(teamId, songId);
     const publishedKey = sheetKey(teamId, songId, true);
     const shown = view === 'draft' ? draft : published;
+    const keyInfo = shown ? sheetKeyInfo(shown) : null;
     const isEditingOtherPage = !canTurnPage && editPage !== null && editPage !== livePage && editPage <= (shown?.pages.length ?? 0);
     const page = isEditingOtherPage && editPage !== null ? editPage : livePage;
     const activePage = shown?.pages[page - 1];
     const pageRatio = activePage ? activePage.height / activePage.width : 1;
+    /** Print and image export draw only what the 보기 filter shows. */
+    const exportFilter = viewParts ? (marks: readonly SheetMark[]) => marksForParts(marks, viewParts) : undefined;
     const pageSongFormMarks = (view === 'draft' && activePage?.marks.filter(isSongFormMark)) || [];
     const songFormSections = pageSongFormMarks.find((m) => m.kind === 'songform')?.sections ?? [];
     const pageSectionMarkers = pageSongFormMarks.filter((m) => m.kind === 'section');
@@ -153,22 +266,115 @@ function SheetAnnotationWorkspace({
     const songFormFontSize = pageSongFormMarks[0] ? (pageSongFormMarks[0].fontSize ?? SONG_FORM_DEFAULT_FONT_SIZE) : songFormLook.fontSize;
     const songFormTint = pageSongFormMarks[0] ? isSongFormTint(pageSongFormMarks[0].opacity) : songFormLook.tint;
     const isSongFormEditing = tool === 'songform' && view === 'draft';
+    const selectedSongFormMark = isSongFormEditing ? (pageSongFormMarks.find((m) => m.id === selectedSongFormId) ?? null) : null;
+    const stepper = useSongFormStepper({ pages: shown?.pages, page, canTurnPage, onPageChange, resetKey: `${songId}:${view}` });
+
+    /** Moves the pedal along the song form; false when section mode doesn't apply, so pages turn instead. */
+    function stepSection(direction: 1 | -1): boolean {
+        const stop = stepper.step(direction);
+        if (!stop) return false;
+        setStatus(
+            stop.page === null
+                ? `지금 ${stop.label} · 이 섹션은 마디 표시가 없어 페이지는 그대로입니다.`
+                : `지금 ${stop.label}${stop.sharedWith ? ` · ${stop.sharedWith} 구간` : ''} · ${stop.page}p`
+        );
+        return true;
+    }
 
     usePageTurner({
         onNext: () => {
+            if (stepSection(1)) return;
             const step = isDualPage ? 2 : 1;
             if (canTurnPage && shown && page + step <= shown.pages.length + (isDualPage ? 1 : 0)) {
                 onPageChange(Math.min(shown.pages.length, page + step));
             }
         },
         onPrev: () => {
+            if (stepSection(-1)) return;
             const step = isDualPage ? 2 : 1;
             if (canTurnPage && page > 1) {
                 onPageChange(Math.max(1, page - step));
             }
         },
-        enabled: canTurnPage && Boolean(shown?.pages.length),
+        // While a band or marker is selected, arrow keys move it instead of turning pages.
+        enabled: canTurnPage && Boolean(shown?.pages.length) && !selectedSongFormMark,
     });
+
+    // Ctrl/⌘+Z undoes and Ctrl/⌘+Shift+Z or Ctrl+Y redoes, outside text fields.
+    useEffect(() => {
+        if (view !== 'draft') return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (isTypingTarget(event.target) || !(event.metaKey || event.ctrlKey) || event.altKey || busy) return;
+            const key = event.key.toLowerCase();
+            if (key === 'z' && !event.shiftKey) {
+                event.preventDefault();
+                undo();
+            } else if ((key === 'z' && event.shiftKey) || (key === 'y' && !event.metaKey)) {
+                event.preventDefault();
+                redo();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    });
+
+    // 송폼 tool: arrow keys nudge the selected band or marker (Shift for bigger steps), Delete removes a marker.
+    useEffect(() => {
+        if (!selectedSongFormMark) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+            const arrow = ARROW_STEPS[event.key];
+            if (arrow) {
+                event.preventDefault();
+                const step = event.shiftKey ? NUDGE_STEP_LARGE : NUDGE_STEP;
+                nudgeSongFormMark(selectedSongFormMark.id, arrow[0] * step, arrow[1] * step);
+            } else if (event.key === 'Escape') {
+                setSelectedSongFormId(null);
+            } else if ((event.key === 'Delete' || event.key === 'Backspace') && selectedSongFormMark.kind === 'section') {
+                event.preventDefault();
+                removeMark(selectedSongFormMark.id);
+                setSelectedSongFormId(null);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    });
+
+    // The ink layer is memoized; it gets a stable eraser callback that reaches the current page.
+    useEffect(() => {
+        removeMarkRef.current = removeMark;
+    });
+    const eraseMark = useCallback((id: string) => removeMarkRef.current(id), []);
+
+    // Print once the burned page images have decoded; clean up when the print dialog closes.
+    useEffect(() => {
+        if (!printImages) return;
+        let cancelled = false;
+        const images = Array.from(document.querySelectorAll<HTMLImageElement>('#sheet-print-root img'));
+        void Promise.all(images.map((image) => image.decode().catch(() => undefined))).then(() => {
+            if (!cancelled) window.print();
+        });
+        const done = () => setPrintImages(null);
+        window.addEventListener('afterprint', done, { once: true });
+        return () => {
+            cancelled = true;
+            window.removeEventListener('afterprint', done);
+            printImages.forEach((url) => URL.revokeObjectURL(url));
+        };
+    }, [printImages]);
+
+    // A save held back during a burst of nudges still lands if the song changes or the view closes.
+    useEffect(() => {
+        const key = draftKey;
+        return () => {
+            if (lazySaveRef.current === null) return;
+            window.clearTimeout(lazySaveRef.current);
+            lazySaveRef.current = null;
+            const doc = documentRef.current;
+            // Behind any write still queued, so an older copy can't land after this one.
+            if (doc) writeQueue.current = writeQueue.current.catch(() => {}).then(() => saveSheet(key, doc));
+        };
+    }, [draftKey]);
 
     useEffect(() => {
         let active = true;
@@ -181,6 +387,7 @@ function SheetAnnotationWorkspace({
                 if (!active) return;
                 documentRef.current = local;
                 setDraft(local);
+                setHistory(EMPTY_HISTORY);
                 setPublished(shared);
                 setLoaded(true);
                 setStatus(local ? '이 기기에 저장된 악보' : 'PDF 또는 이미지를 추가해주세요.');
@@ -212,15 +419,38 @@ function SheetAnnotationWorkspace({
         onPageCountChange?.(shown?.pages.length ?? 0);
     }, [shown?.pages.length, onPageCountChange]);
 
-    function persist(next: SheetDocument) {
+    /**
+     * `lazy` holds the write until edits pause (arrow-key nudges), so a held key doesn't rewrite the sheet every step;
+     * those nudges also undo as one move. Undo and redo pass `record: false` because they set the history themselves.
+     */
+    function persist(next: SheetDocument, lazy = false, record = true) {
+        const prev = documentRef.current;
+        const now = Date.now();
+        if (record) setHistory((current) => recordSheetChange(current, prev, next, now, lazy));
         documentRef.current = next;
         setDraft(next);
         setStatus('저장 중…');
+        if (lazySaveRef.current !== null) {
+            window.clearTimeout(lazySaveRef.current);
+            lazySaveRef.current = null;
+        }
+        if (lazy) {
+            lazySaveRef.current = window.setTimeout(() => {
+                lazySaveRef.current = null;
+                if (documentRef.current) queueSave(documentRef.current);
+            }, 400);
+            return;
+        }
+        queueSave(next);
+    }
+
+    function queueSave(next: SheetDocument) {
         writeQueue.current = writeQueue.current
             .catch(() => {})
             .then(() => saveSheet(draftKey, next));
         void writeQueue.current.then(
-            () => setStatus('내 필기 저장됨 · 전체 공유 전'),
+            // Keeps a message set after the edit (e.g. which words became custom chips).
+            () => setStatus((current) => (current === '저장 중…' ? '내 필기 저장됨 · 전체 공유 전' : current)),
             () => setStatus('기기 저장 실패 · 공유 파일로 내려받아 보관해주세요.')
         );
     }
@@ -246,7 +476,11 @@ function SheetAnnotationWorkspace({
                 const ordered = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
                 const pages: SheetPage[] = [];
                 for (const item of ordered) {
-                    pages.push(...(await importSheetPages(item)));
+                    pages.push(
+                        ...(await importSheetPages(item, (done, total) =>
+                            setImportProgress(total > 1 ? `${item.name} · ${done}/${total}페이지 처리 중…` : null)
+                        ))
+                    );
                     if (existingCount + pages.length > 20) throw new Error('한 곡에 최대 20페이지를 추가할 수 있습니다.');
                 }
                 persist({
@@ -263,20 +497,27 @@ function SheetAnnotationWorkspace({
             setStatus(error instanceof Error ? error.message : '파일을 불러오지 못했습니다.');
         } finally {
             setBusy(false);
+            setImportProgress(null);
         }
     }
 
     function addMark(mark: SheetMark) {
         const current = documentRef.current;
         if (!current?.pages[page - 1] || current.pages[page - 1].marks.length >= 2000) return;
-        setRedoStack([]); // New action resets redo stack
+        const placed = withMarkPart(mark, markPart);
         persist({
             ...current,
             updatedAt: new Date().toISOString(),
             pages: current.pages.map((item, index) =>
-                index === page - 1 ? { ...item, marks: [...item.marks, mark] } : item
+                index === page - 1 ? { ...item, marks: [...item.marks, placed] } : item
             ),
         });
+    }
+
+    /** A new mark must not vanish from the view it was drawn in, so a filter that hides the part widens to it. */
+    function chooseMarkPart(part: SheetPart | null) {
+        setMarkPart(part);
+        if (part && viewParts && !viewParts.has(part)) setViewParts(togglePartInSelection(viewParts, part));
     }
 
     function removeMark(markId: string) {
@@ -304,15 +545,17 @@ function SheetAnnotationWorkspace({
         return currentPageMarks().find((m) => m.kind === 'songform') ?? null;
     }
 
-    function replacePageMarks(marks: SheetMark[]) {
+    function replacePageMarks(marks: SheetMark[], lazy = false) {
         const current = documentRef.current;
         if (!current?.pages[page - 1]) return;
-        setRedoStack([]);
-        persist({
-            ...current,
-            updatedAt: new Date().toISOString(),
-            pages: current.pages.map((item, index) => (index === page - 1 ? { ...item, marks } : item)),
-        });
+        persist(
+            {
+                ...current,
+                updatedAt: new Date().toISOString(),
+                pages: current.pages.map((item, index) => (index === page - 1 ? { ...item, marks } : item)),
+            },
+            lazy
+        );
     }
 
     function writeSongForm(sections: string[]) {
@@ -382,6 +625,37 @@ function SheetAnnotationWorkspace({
         writeSongForm((currentSongFormMark()?.sections ?? []).filter((_, i) => i !== index));
     }
 
+    function applySongFormText(text: string) {
+        const { sections, custom } = parseSongFormText(text);
+        if (!sections.length) {
+            setStatus('송폼을 텍스트로 입력해주세요. 예: I - V1 - C - V2 - C - B - C×2 - O');
+            return;
+        }
+        writeSongForm(sections);
+        const extra = custom.length ? ` 칩에 없는 말은 그대로 칩으로 넣었습니다: ${custom.slice(0, 3).join(', ')}${custom.length > 3 ? ' …' : ''}` : '';
+        setStatus(`텍스트로 송폼 ${sections.length}칸을 얹었습니다.${extra}`);
+    }
+
+    async function copySongFormText() {
+        try {
+            await navigator.clipboard.writeText(`${title}\n${formatSongFormText(songFormSections)}`);
+            setStatus('송폼을 텍스트로 복사했습니다. 단톡방에 붙여 넣으세요.');
+        } catch {
+            songFormTextRef.current?.select();
+            setStatus('복사하지 못했습니다. 선택된 텍스트 칸을 직접 복사해주세요.');
+        }
+    }
+
+    function nudgeSongFormMark(id: string, dx: number, dy: number) {
+        const marks = currentPageMarks();
+        const target = marks.find((m) => m.id === id);
+        if (!target) return;
+        const [x, y] = target.points[0];
+        const anchor = anchorWithin([x + dx, y * pageRatio + dy], [0, 0], songFormBounds(target));
+        if (anchor[0] === x && anchor[1] === y) return;
+        replacePageMarks(marks.map((m) => (m.id === id ? { ...m, points: [anchor] } : m)), true);
+    }
+
     function importSavedSongForm() {
         const saved = readSongForm(songId, teamId);
         if (!saved?.sections.length) {
@@ -409,9 +683,27 @@ function SheetAnnotationWorkspace({
     function startSongFormDrag(event: PointerEvent<SVGSVGElement>, mark: SheetMark, pointVb: [number, number], offset: [number, number]) {
         event.currentTarget.setPointerCapture(event.pointerId);
         const bounds = songFormBounds(mark);
-        const drag = { id: mark.id, offset, bounds, anchor: anchorWithin(pointVb, offset, bounds) };
+        const drag = { id: mark.id, offset, bounds, anchor: anchorWithin(pointVb, offset, bounds), snaps: mark.kind === 'section', guideX: null };
         songFormDragRef.current = drag;
         setSongFormDrag(drag);
+        setSelectedSongFormId(mark.id);
+    }
+
+    /** Lines a dragged marker's left edge up with the nearest other marker on the page (Alt places freely). */
+    function snapSectionMarker(drag: SongFormDrag, free: boolean) {
+        drag.guideX = null;
+        const width = rectRef.current?.width;
+        if (!drag.snaps || free || !width) return;
+        const tolerance = (SNAP_PX * 1000) / width;
+        let best: number | null = null;
+        for (const mark of currentPageMarks()) {
+            if (mark.kind !== 'section' || mark.id === drag.id) continue;
+            const x = mark.points[0][0];
+            if (x <= drag.bounds.maxX && Math.abs(x - drag.anchor[0]) < tolerance && (best === null || Math.abs(x - drag.anchor[0]) < Math.abs(best - drag.anchor[0]))) best = x;
+        }
+        if (best === null) return;
+        drag.anchor = [best, drag.anchor[1]];
+        drag.guideX = best;
     }
 
     /** 송폼 tool: press a band/marker to drag it; tap empty space to move the band (띠) or place a marker (마디 섹션). */
@@ -428,6 +720,7 @@ function SheetAnnotationWorkspace({
         if (songFormMode === 'section') {
             if (!armedSection) {
                 setStatus('먼저 섹션 칩을 고른 뒤 악보를 눌러주세요.');
+                setSelectedSongFormId(null);
                 rectRef.current = null;
                 return;
             }
@@ -451,6 +744,7 @@ function SheetAnnotationWorkspace({
         const rowHeight = songFormRowHeight(songFormFontSize);
         if (!band) {
             setPendingSongFormAnchor({ page, point: anchorWithin(pointVb, [0, rowHeight / 2], { maxX: SONG_FORM_MAX_ANCHOR_X, height: rowHeight }) });
+            setSelectedSongFormId(null);
             rectRef.current = null;
             return;
         }
@@ -478,7 +772,7 @@ function SheetAnnotationWorkspace({
 
         if (tool === 'eraser') {
             const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
-            const currentMarks = documentRef.current?.pages[page - 1]?.marks ?? [];
+            const currentMarks = marksForParts(documentRef.current?.pages[page - 1]?.marks ?? [], viewParts);
             const ratio = activePage ? activePage.height / activePage.width : 1;
             const hit = currentMarks.find((m) => isPointNearMark(x, y, m, ratio));
             if (hit) {
@@ -522,7 +816,17 @@ function SheetAnnotationWorkspace({
                 color,
                 strokeWidth: 3,
                 opacity: 0.18,
+                ...(rectShape === 'ellipse' ? { shape: 'ellipse' as const } : {}),
             };
+            strokeRef.current = mark;
+            setStroke(mark);
+            return;
+        }
+
+        if (tool === 'line') {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            const pt = position(event.clientX, event.clientY, event.currentTarget);
+            const mark: SheetMark = { id: createClientId(), kind: 'line', points: [pt, pt], color, strokeWidth: lineWidth, shape: lineShape };
             strokeRef.current = mark;
             setStroke(mark);
             return;
@@ -547,6 +851,7 @@ function SheetAnnotationWorkspace({
             const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
             const drag = songFormDragRef.current;
             drag.anchor = anchorWithin([x, y * pageRatio], drag.offset, drag.bounds);
+            snapSectionMarker(drag, event.altKey);
             if (!rafRef.current) {
                 rafRef.current = requestAnimationFrame(() => {
                     rafRef.current = null;
@@ -561,7 +866,7 @@ function SheetAnnotationWorkspace({
             if (now - lastEraserCheckRef.current < 25) return;
             lastEraserCheckRef.current = now;
             const [x, y] = position(event.clientX, event.clientY, event.currentTarget);
-            const currentMarks = documentRef.current?.pages[page - 1]?.marks ?? [];
+            const currentMarks = marksForParts(documentRef.current?.pages[page - 1]?.marks ?? [], viewParts);
             const ratio = activePage ? activePage.height / activePage.width : 1;
             const hit = currentMarks.find((m) => isPointNearMark(x, y, m, ratio));
             if (hit) {
@@ -570,23 +875,52 @@ function SheetAnnotationWorkspace({
             return;
         }
 
-        if (tool === 'rect' && rectStart && strokeRef.current) {
-            const currentPt = position(event.clientX, event.clientY, event.currentTarget);
-            strokeRef.current.points = [rectStart, currentPt];
-            setStroke({ ...strokeRef.current });
+        const live = strokeRef.current;
+        if (!live || !event.isPrimary) return;
+        const pt = position(event.clientX, event.clientY, event.currentTarget);
+        if (live.kind === 'rect') {
+            if (!rectStart) return;
+            live.points = [rectStart, pt];
+        } else if (live.kind === 'line') {
+            live.points = [live.points[0], event.shiftKey ? snapLineEnd(live.points[0], pt, pageRatio) : pt];
+        } else if (live.points.length >= 5000 || !appendStrokePoint(live.points, pt)) {
             return;
         }
-
-        if (!strokeRef.current || !event.isPrimary) return;
-        if (strokeRef.current.points.length >= 5000) return;
-        const pt = position(event.clientX, event.clientY, event.currentTarget);
-        strokeRef.current.points.push(pt);
         if (!rafRef.current) {
             rafRef.current = requestAnimationFrame(() => {
                 rafRef.current = null;
-                if (strokeRef.current) setStroke({ ...strokeRef.current, points: [...strokeRef.current.points] });
+                paintLiveStroke();
             });
         }
+    }
+
+    /** Writes the live stroke's geometry straight to its SVG element: no React render while drawing. */
+    function paintLiveStroke() {
+        const element = liveRef.current;
+        const mark = strokeRef.current;
+        if (!element || !mark) return;
+        if (mark.kind === 'pen' || mark.kind === 'highlighter') element.setAttribute('d', pointsToSvgPath(mark.points, pageRatio));
+        else if (mark.kind === 'line') element.setAttribute('d', lineMarkPath(mark, pageRatio));
+        else if (mark.kind === 'rect') {
+            const box = liveBox(mark);
+            if (mark.shape === 'ellipse') {
+                element.setAttribute('cx', String(box.x + box.width / 2));
+                element.setAttribute('cy', String(box.y + box.height / 2));
+                element.setAttribute('rx', String(box.width / 2));
+                element.setAttribute('ry', String(box.height / 2));
+            } else {
+                element.setAttribute('x', String(box.x));
+                element.setAttribute('y', String(box.y));
+                element.setAttribute('width', String(box.width));
+                element.setAttribute('height', String(box.height));
+            }
+        }
+    }
+
+    function liveBox(mark: SheetMark) {
+        const [p1, p2] = mark.points;
+        const end = p2 ?? p1;
+        return { x: Math.min(p1[0], end[0]), y: Math.min(p1[1], end[1]) * pageRatio, width: Math.abs(end[0] - p1[0]), height: Math.abs(end[1] - p1[1]) * pageRatio };
     }
 
     function pointerUp() {
@@ -611,6 +945,14 @@ function SheetAnnotationWorkspace({
             strokeRef.current = null;
             setStroke(null);
             setRectStart(null);
+            return;
+        }
+        if (strokeRef.current?.kind === 'line') {
+            const [p1, p2] = strokeRef.current.points;
+            if (Math.hypot(p2[0] - p1[0], (p2[1] - p1[1]) * pageRatio) > 8) addMark(strokeRef.current);
+            strokeRef.current = null;
+            setStroke(null);
+            rectRef.current = null;
             return;
         }
         if (strokeRef.current) addMark(strokeRef.current);
@@ -642,35 +984,20 @@ function SheetAnnotationWorkspace({
 
     function undo() {
         const current = documentRef.current;
-        if (!current) return;
-        const pageMarks = current.pages[page - 1]?.marks ?? [];
-        if (!pageMarks.length) return;
-        const lastMark = pageMarks[pageMarks.length - 1];
-        setRedoStack((prev) => [...prev, lastMark]);
-        persist({
-            ...current,
-            updatedAt: new Date().toISOString(),
-            pages: current.pages.map((item, index) =>
-                index === page - 1 ? { ...item, marks: item.marks.slice(0, -1) } : item
-            ),
-        });
-        setStatus('마지막 필기가 취소되었습니다.');
+        const result = current && undoPage(history, current, page - 1);
+        if (!result) return;
+        setHistory(result.history);
+        persist(result.doc, false, false);
+        setStatus('되돌렸습니다. (Ctrl+Z · 다시 실행은 Ctrl+Shift+Z)');
     }
 
     function redo() {
-        if (!redoStack.length) return;
-        const markToRestore = redoStack[redoStack.length - 1];
-        setRedoStack((prev) => prev.slice(0, -1));
         const current = documentRef.current;
-        if (!current?.pages[page - 1]) return;
-        persist({
-            ...current,
-            updatedAt: new Date().toISOString(),
-            pages: current.pages.map((item, index) =>
-                index === page - 1 ? { ...item, marks: [...item.marks, markToRestore] } : item
-            ),
-        });
-        setStatus('필기를 다시 실행했습니다.');
+        const result = current && redoPage(history, current, page - 1);
+        if (!result) return;
+        setHistory(result.history);
+        persist(result.doc, false, false);
+        setStatus('다시 실행했습니다.');
     }
 
     async function handleRotatePage() {
@@ -684,7 +1011,7 @@ function SheetAnnotationWorkspace({
                 updatedAt: new Date().toISOString(),
                 pages: current.pages.map((p, idx) => (idx === page - 1 ? rotated : p)),
             });
-            setStatus(`${page}페이지가 90도 회전되었습니다.`);
+            setStatus(`${page}페이지를 90도 돌렸습니다. 필기도 함께 돌렸습니다.`);
         } catch {
             setStatus('페이지 회전에 실패했습니다.');
         } finally {
@@ -716,14 +1043,19 @@ function SheetAnnotationWorkspace({
     function clearPageMarks() {
         const current = documentRef.current;
         if (!current || !current.pages[page - 1]?.marks.length) return;
-        if (typeof window !== 'undefined' && !window.confirm('현재 페이지의 모든 필기를 지우시겠습니까?')) {
+        // Marks the 보기 filter hides are not on screen, so clearing leaves them.
+        const pageMarks = current.pages[page - 1].marks;
+        const shownMarks = new Set(marksForParts(pageMarks, viewParts));
+        if (!shownMarks.size) return;
+        const question = viewParts ? '현재 페이지에 보이는 필기를 지우시겠습니까? 숨겨진 파트의 필기는 남습니다.' : '현재 페이지의 모든 필기를 지우시겠습니까?';
+        if (typeof window !== 'undefined' && !window.confirm(question)) {
             return;
         }
         persist({
             ...current,
             updatedAt: new Date().toISOString(),
             pages: current.pages.map((item, index) =>
-                index === page - 1 ? { ...item, marks: [] } : item
+                index === page - 1 ? { ...item, marks: pageMarks.filter((m) => !shownMarks.has(m)) } : item
             ),
         });
     }
@@ -747,158 +1079,202 @@ function SheetAnnotationWorkspace({
 
     function download() {
         if (!published) return;
-        const url = URL.createObjectURL(new Blob([JSON.stringify(published)], { type: 'application/json' }));
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${title.replace(/[<>:"/\\|?*]/g, '_')}-공유악보.json`;
-        link.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadFile(new Blob([JSON.stringify(published)], { type: 'application/json' }), `${title.replace(/[<>:"/\\|?*]/g, '_')}-공유악보.json`);
         setStatus('공유 파일을 내려받았습니다. 팀원에게 전달 후 공유 파일 열기로 확인해주세요.');
     }
 
-    function renderMark(mark: SheetMark) {
-        const point = mark.points[0];
-        const ratio = activePage ? activePage.height / activePage.width : 1;
-
-        if (mark.kind === 'stamp') {
-            return (
-                <text
-                    key={mark.id}
-                    x={Math.min(point[0], 780)}
-                    y={Math.max(point[1] * ratio, 25)}
-                    fill={mark.color}
-                    fontSize="25"
-                    fontWeight="800"
-                    stroke="white"
-                    strokeWidth="3"
-                    paintOrder="stroke"
-                    className={tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : ''}
-                    onClick={(e) => {
-                        if (tool === 'eraser') {
-                            e.stopPropagation();
-                            removeMark(mark.id);
-                        }
-                    }}
-                >
-                    {mark.text}
-                </text>
-            );
+    async function loadSampleSheet() {
+        setBusy(true);
+        setImportProgress('체험용 샘플 악보를 그리는 중…');
+        try {
+            persist(await createSampleSheetDocument(title));
+            setView('draft');
+            if (canTurnPage) onPageChange(1);
+            setStatus('체험용 샘플 악보 2장을 불러왔습니다. 위의 ‘키’에서 바꾸면 새 키로 다시 그려집니다.');
+        } catch {
+            setStatus('샘플 악보를 그리지 못했습니다. 다시 시도해주세요.');
+        } finally {
+            setBusy(false);
+            setImportProgress(null);
         }
-
-        if (mark.kind === 'highlighter') {
-            return (
-                <path
-                    key={mark.id}
-                    d={getSheetMarkPath(mark, ratio)}
-                    fill="none"
-                    stroke={mark.color}
-                    strokeWidth={mark.strokeWidth || 16}
-                    strokeLinecap="square"
-                    strokeLinejoin="round"
-                    style={{ mixBlendMode: 'multiply', opacity: mark.opacity ?? 0.45 }}
-                    className={tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : ''}
-                    onClick={(e) => {
-                        if (tool === 'eraser') {
-                            e.stopPropagation();
-                            removeMark(mark.id);
-                        }
-                    }}
-                />
-            );
-        }
-
-        if (mark.kind === 'text') {
-            const fSize = mark.fontSize ?? 20;
-            return (
-                <g key={mark.id} className={tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : ''}>
-                    <rect
-                        x={Math.min(point[0], 900) - 4}
-                        y={Math.max(point[1] * ratio, 20) - fSize}
-                        width={(mark.text?.length ?? 3) * (fSize * 0.65) + 8}
-                        height={fSize + 6}
-                        rx="4"
-                        fill="rgba(0, 0, 0, 0.75)"
-                    />
-                    <text
-                        x={Math.min(point[0], 900)}
-                        y={Math.max(point[1] * ratio, 20) - 2}
-                        fill={mark.color}
-                        fontSize={fSize}
-                        fontWeight="800"
-                        fontFamily="monospace, sans-serif"
-                        onClick={(e) => {
-                            if (tool === 'eraser') {
-                                e.stopPropagation();
-                                removeMark(mark.id);
-                            }
-                        }}
-                    >
-                        {mark.text}
-                    </text>
-                </g>
-            );
-        }
-
-        if (mark.kind === 'rect') {
-            if (mark.points.length < 2) return null;
-            const [p1, p2] = mark.points;
-            const minX = Math.min(p1[0], p2[0]);
-            const maxX = Math.max(p1[0], p2[0]);
-            const minY = Math.min(p1[1], p2[1]) * ratio;
-            const maxY = Math.max(p1[1], p2[1]) * ratio;
-            return (
-                <rect
-                    key={mark.id}
-                    x={minX}
-                    y={minY}
-                    width={maxX - minX}
-                    height={maxY - minY}
-                    fill={mark.color}
-                    fillOpacity={mark.opacity ?? 0.15}
-                    stroke={mark.color}
-                    strokeWidth={mark.strokeWidth || 3}
-                    rx="6"
-                    className={tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : ''}
-                    onClick={(e) => {
-                        if (tool === 'eraser') {
-                            e.stopPropagation();
-                            removeMark(mark.id);
-                        }
-                    }}
-                />
-            );
-        }
-
-        return (
-            <path
-                key={mark.id}
-                d={getSheetMarkPath(mark, ratio)}
-                fill="none"
-                stroke={mark.color}
-                strokeWidth={mark.strokeWidth || 2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className={tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : ''}
-                onClick={(e) => {
-                    if (tool === 'eraser') {
-                        e.stopPropagation();
-                        removeMark(mark.id);
-                    }
-                }}
-            />
-        );
     }
 
-    function renderSongFormMark(mark: SheetMark, interactive: boolean) {
+    /** Draws the chord chart pages from text, or redraws them; marks on existing chart pages stay. */
+    async function createChordChart(settings: ChartSettings) {
+        setBusy(true);
+        setImportProgress('코드 악보를 그리는 중…');
+        try {
+            const had = Boolean(documentRef.current?.chart);
+            const next = await applyChordChart(documentRef.current, settings, title);
+            persist(next);
+            setView('draft');
+            setShowChordChart(false);
+            const first = next.pages.findIndex((p) => p.chartPage === 0) + 1;
+            if (canTurnPage && first > 0 && !had) onPageChange(first);
+            const count = next.pages.filter((p) => p.chartPage !== undefined).length;
+            setStatus(`코드 악보 ${count}장을 ${had ? '다시 그렸습니다. 필기는 그대로입니다.' : '만들었습니다. 위의 ‘키’에서 바꾸면 코드가 새 키로 다시 그려집니다.'}`);
+        } catch (error) {
+            setStatus(error instanceof Error ? error.message : '코드 악보를 그리지 못했습니다. 다시 시도해주세요.');
+        } finally {
+            setBusy(false);
+            setImportProgress(null);
+        }
+    }
+
+    /** Redraws the app-drawn pages (engraved sample, chord chart) in another key; marks stay put. */
+    async function changeScoreKey(key: LeadSheetKey) {
+        const current = documentRef.current;
+        const from = current ? sheetKeyInfo(current)?.key : undefined;
+        if (!current || !from || from === key) return;
+        setBusy(true);
+        setImportProgress(`${keyLabel(key)} 키로 악보를 다시 그리는 중…`);
+        try {
+            persist(await rekeySheet(current, key));
+            setStatus(`${keyLabel(from)} → ${keyLabel(key)} 키로 바꿨습니다. 음표·코드·조표를 새로 그렸고 필기는 그대로입니다.`);
+        } catch {
+            setStatus('악보를 새 키로 그리지 못했습니다. 다시 시도해주세요.');
+        } finally {
+            setBusy(false);
+            setImportProgress(null);
+        }
+    }
+
+    async function printSheet() {
+        const pages = shown?.pages;
+        if (!pages?.length) return;
+        setBusy(true);
+        try {
+            const urls: string[] = [];
+            for (const [index, item] of pages.entries()) {
+                setImportProgress(`인쇄할 악보 ${index + 1}/${pages.length}페이지 만드는 중…`);
+                urls.push(URL.createObjectURL(await renderSheetPageImage(item, { withMarks: exportMarks, marksFilter: exportFilter })));
+            }
+            setPrintImages(urls);
+            setStatus(`${pages.length}페이지를 인쇄 창으로 보냈습니다. ‘PDF로 저장’을 고르면 PDF 파일로 남습니다.`);
+        } catch (error) {
+            setStatus(error instanceof Error ? error.message : '인쇄용 악보를 만들지 못했습니다.');
+        } finally {
+            setBusy(false);
+            setImportProgress(null);
+        }
+    }
+
+    /** The page on screen as a JPEG file, marks burned in unless turned off. */
+    async function currentPageFile(): Promise<File | null> {
+        if (!activePage) return null;
+        const blob = await renderSheetPageImage(activePage, { withMarks: exportMarks, marksFilter: exportFilter });
+        return new File([blob], `${sheetFileStem(title)}-${page}p.jpg`, { type: 'image/jpeg' });
+    }
+
+    async function saveCurrentPageImage() {
+        setBusy(true);
+        try {
+            const file = await currentPageFile();
+            if (!file) return;
+            downloadFile(file, file.name);
+            setStatus(`${page}페이지를 이미지로 저장했습니다${exportMarks ? ' (필기 포함)' : ''}.`);
+        } catch (error) {
+            setStatus(error instanceof Error ? error.message : '이미지를 만들지 못했습니다.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function shareCurrentPageImage() {
+        setBusy(true);
+        try {
+            const file = await currentPageFile();
+            if (!file) return;
+            await navigator.share({ files: [file], title: `${title} ${page}p` });
+            setStatus('악보 이미지를 공유했습니다.');
+        } catch (error) {
+            if (!(error instanceof DOMException && error.name === 'AbortError')) setStatus('공유하지 못했습니다. 이미지 저장으로 내려받아 보내주세요.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    function renderLiveStroke(ratio: number) {
+        if (!stroke) return null;
+        if (stroke.kind === 'pen' || stroke.kind === 'highlighter') {
+            const isHighlighter = stroke.kind === 'highlighter';
+            return (
+                <path
+                    ref={(element) => {
+                        liveRef.current = element;
+                    }}
+                    d={pointsToSvgPath(stroke.points, ratio)}
+                    fill="none"
+                    stroke={stroke.color}
+                    strokeWidth={stroke.strokeWidth || (isHighlighter ? 16 : 2.5)}
+                    strokeLinecap={isHighlighter ? 'square' : 'round'}
+                    strokeLinejoin="round"
+                    style={isHighlighter ? { mixBlendMode: 'multiply', opacity: stroke.opacity ?? 0.45 } : undefined}
+                    pointerEvents="none"
+                />
+            );
+        }
+        if (stroke.kind === 'line') {
+            return (
+                <path
+                    ref={(element) => {
+                        liveRef.current = element;
+                    }}
+                    d={lineMarkPath(stroke, ratio)}
+                    fill="none"
+                    stroke={stroke.color}
+                    strokeWidth={stroke.strokeWidth || 3}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    pointerEvents="none"
+                />
+            );
+        }
+        if (stroke.kind === 'rect') {
+            const box = liveBox(stroke);
+            return stroke.shape === 'ellipse' ? (
+                <ellipse
+                    ref={(element) => {
+                        liveRef.current = element;
+                    }}
+                    cx={box.x + box.width / 2}
+                    cy={box.y + box.height / 2}
+                    rx={box.width / 2}
+                    ry={box.height / 2}
+                    fill="none"
+                    stroke={stroke.color}
+                    strokeWidth={stroke.strokeWidth || 3}
+                    pointerEvents="none"
+                />
+            ) : (
+                <rect
+                    ref={(element) => {
+                        liveRef.current = element;
+                    }}
+                    {...box}
+                    fill={stroke.color}
+                    fillOpacity={stroke.opacity ?? 0.15}
+                    stroke={stroke.color}
+                    strokeWidth={stroke.strokeWidth || 3}
+                    rx="6"
+                    pointerEvents="none"
+                />
+            );
+        }
+        return null;
+    }
+
+    function renderSongFormMark(mark: SheetMark, interactive: boolean, ratio: number) {
         const drag = interactive && songFormDrag?.id === mark.id ? songFormDrag : null;
         const editing = interactive && isSongFormEditing;
         const shared = {
             anchor: drag?.anchor ?? mark.points[0],
-            ratio: pageRatio,
+            ratio,
             fontSize: mark.fontSize,
             opacity: mark.opacity,
             dragging: Boolean(drag),
             selected: editing,
+            focused: editing && selectedSongFormMark?.id === mark.id,
             className: tool === 'eraser' ? 'cursor-pointer hover:opacity-40 transition' : '',
             onClick: (e: ReactMouseEvent<SVGGElement>) => {
                 if (tool === 'eraser') {
@@ -912,40 +1288,46 @@ function SheetAnnotationWorkspace({
                 key={mark.id}
                 {...shared}
                 label={mark.text ?? ''}
+                current={stepper.active && stepper.stop?.markId === mark.id}
                 onRemove={editing ? () => removeMark(mark.id) : undefined}
             />
         ) : (
-            <SongFormMarkup key={mark.id} {...shared} sections={mark.sections ?? []} onRemoveChip={editing ? removeSongFormChip : undefined} />
+            <SongFormMarkup
+                key={mark.id}
+                {...shared}
+                sections={mark.sections ?? []}
+                currentIndex={stepper.active && stepper.route?.bandId === mark.id ? stepper.index : null}
+                onRemoveChip={editing ? removeSongFormChip : undefined}
+            />
         );
     }
 
-    function renderMarkList(marks: SheetMark[], currentStroke?: SheetMark | null, interactive = true) {
-        const highlighters = marks.filter((m) => m.kind === 'highlighter');
-        const rects = marks.filter((m) => m.kind === 'rect');
-        const pens = marks.filter((m) => m.kind === 'pen');
-        const stamps = marks.filter((m) => m.kind === 'stamp');
-        const texts = marks.filter((m) => m.kind === 'text');
+    function renderMarkList(marks: SheetMark[], interactive: boolean, ratio: number) {
         const songForms = marks.filter((m) => m.kind === 'songform');
         const sectionMarkers = marks.filter((m) => m.kind === 'section');
 
         return (
             <>
-                {highlighters.map(renderMark)}
-                {currentStroke?.kind === 'highlighter' ? renderMark(currentStroke) : null}
-                {rects.map(renderMark)}
-                {currentStroke?.kind === 'rect' ? renderMark(currentStroke) : null}
-                {pens.map(renderMark)}
-                {currentStroke?.kind === 'pen' ? renderMark(currentStroke) : null}
-                {stamps.map(renderMark)}
-                {currentStroke?.kind === 'stamp' ? renderMark(currentStroke) : null}
-                {texts.map(renderMark)}
-                {currentStroke?.kind === 'text' ? renderMark(currentStroke) : null}
-                {songForms.map((mark) => renderSongFormMark(mark, interactive))}
-                {sectionMarkers.map((mark) => renderSongFormMark(mark, interactive))}
+                <SheetInkLayer marks={marksForParts(marks, viewParts)} ratio={ratio} partBadges erasable={interactive && tool === 'eraser'} onErase={eraseMark} />
+                {interactive ? renderLiveStroke(ratio) : null}
+                {songForms.map((mark) => renderSongFormMark(mark, interactive, ratio))}
+                {sectionMarkers.map((mark) => renderSongFormMark(mark, interactive, ratio))}
+                {interactive && songFormDrag?.guideX != null ? (
+                    <line
+                        x1={songFormDrag.guideX}
+                        x2={songFormDrag.guideX}
+                        y1={0}
+                        y2={1000 * ratio}
+                        stroke="#2563eb"
+                        strokeWidth={1.5}
+                        strokeDasharray="6 6"
+                        pointerEvents="none"
+                    />
+                ) : null}
                 {interactive && isSongFormEditing && songFormMode === 'band' && !songForms.length ? (
                     <SongFormMarkupPlaceholder
                         anchor={pendingSongFormAnchor?.page === page ? pendingSongFormAnchor.point : SONG_FORM_DEFAULT_ANCHOR}
-                        ratio={pageRatio}
+                        ratio={ratio}
                         fontSize={songFormFontSize}
                     />
                 ) : null}
@@ -1002,18 +1384,17 @@ function SheetAnnotationWorkspace({
                     type="button"
                     className={pill}
                     disabled={busy || !loaded}
-                    onClick={() => {
-                        const sampleDoc = createSampleSheetDocument(title);
-                        persist(sampleDoc);
-                        setView('draft');
-                        if (canTurnPage) onPageChange(1);
-                        setStatus('체험용 샘플 악보 2장을 불러왔습니다.');
-                    }}
+                    onClick={() => void loadSampleSheet()}
                 >
                     <Sparkles size={16} className="text-brand" />
                     체험용 샘플 악보 불러오기
                 </button>
+                <button type="button" className={button} disabled={busy || !loaded} aria-expanded={showChordChart} onClick={() => setShowChordChart((open) => !open)}>
+                    <Music2 size={16} />
+                    코드 악보 만들기
+                </button>
             </div>
+            {showChordChart && <ChordChartPanel initial={draft?.chart ?? null} busy={busy} onCreate={(settings) => void createChordChart(settings)} onClose={() => setShowChordChart(false)} />}
             <div className="inline-flex max-w-full gap-1 rounded-full bg-muted p-1" role="group" aria-label="필기 버전">
                 <button
                     type="button"
@@ -1032,6 +1413,13 @@ function SheetAnnotationWorkspace({
                     팀 공유본 {published ? `· ${published.pages.length}p` : '없음'}
                 </button>
             </div>
+            {shown?.pages.length ? (
+                <MarkPartFilter
+                    visible={viewParts}
+                    onChange={setViewParts}
+                    hiddenCount={activePage ? activePage.marks.length - marksForParts(activePage.marks, viewParts).length : 0}
+                />
+            ) : null}
             {showTools && view === 'draft' && (
                 <div className="space-y-3 border-y border-border py-3 animate-in fade-in duration-150">
                     <div className={scrollRow} role="group" aria-label="필기 도구">
@@ -1053,6 +1441,9 @@ function SheetAnnotationWorkspace({
                         <button type="button" className={pill} aria-pressed={tool === 'rect'} onClick={() => setTool('rect')}>
                             <Square size={16} /> 구역 박스
                         </button>
+                        <button type="button" className={pill} aria-pressed={tool === 'line'} onClick={() => setTool('line')}>
+                            <MoveUpRight size={16} /> 선·화살표
+                        </button>
                         <button type="button" className={pill} aria-pressed={tool === 'eraser'} onClick={() => setTool('eraser')}>
                             <Eraser size={16} /> 지우개
                         </button>
@@ -1068,8 +1459,12 @@ function SheetAnnotationWorkspace({
                                 }}
                                 className="bg-transparent font-medium text-foreground focus:outline-hidden"
                             >
-                                {WORSHIP_STAMP_PRESETS.map((label) => (
-                                    <option key={label} value={label}>{label}</option>
+                                {WORSHIP_STAMP_GROUPS.map((group) => (
+                                    <optgroup key={group.name} label={group.name}>
+                                        {group.stamps.map((label) => (
+                                            <option key={label} value={label}>{label}</option>
+                                        ))}
+                                    </optgroup>
                                 ))}
                             </select>
                             <button
@@ -1083,10 +1478,10 @@ function SheetAnnotationWorkspace({
                         </div>
 
                         <span className="mx-0.5 h-6 w-px shrink-0 bg-border" aria-hidden />
-                        <button type="button" className={pill} disabled={!activePage?.marks.length || busy} onClick={undo} title="실행 취소">
+                        <button type="button" className={pill} disabled={!canUndo(history, page - 1) || busy} onClick={undo} title="실행 취소">
                             <Undo2 size={16} /> 되돌리기
                         </button>
-                        <button type="button" className={pill} disabled={!redoStack.length || busy} onClick={redo} title="다시 실행">
+                        <button type="button" className={pill} disabled={!canRedo(history, page - 1) || busy} onClick={redo} title="다시 실행">
                             <Redo2 size={16} /> 다시 실행
                         </button>
                         <button
@@ -1231,6 +1626,23 @@ function SheetAnnotationWorkspace({
                                         )}
                                     </div>
                                 )}
+                                {selectedSongFormMark && (
+                                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                        <span className="w-12 shrink-0 font-medium text-muted-foreground">선택</span>
+                                        <span
+                                            className="rounded-lg px-2 py-1 font-black text-white"
+                                            style={{ backgroundColor: songFormChipColor(selectedSongFormMark.text ?? 'I') }}
+                                        >
+                                            {selectedSongFormMark.kind === 'section' ? selectedSongFormMark.text : '송폼 띠'}
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                            방향키로 조금씩 옮기고 Shift는 크게{selectedSongFormMark.kind === 'section' ? ', Delete로 지웁니다' : ''}. 마디 표시는 끌면 다른 표시와 세로줄이 맞춰집니다(Alt는 자유).
+                                        </span>
+                                        <button type="button" className={button} onClick={() => setSelectedSongFormId(null)}>
+                                            선택 해제
+                                        </button>
+                                    </div>
+                                )}
                                 <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="송폼 크기와 스타일">
                                     <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">모양</span>
                                     {SONG_FORM_SIZES.map((size) => (
@@ -1286,6 +1698,43 @@ function SheetAnnotationWorkspace({
                                                 곡 송폼 불러오기
                                             </button>
                                         </div>
+                                        <form
+                                            className="flex flex-wrap items-center gap-1.5"
+                                            aria-label="송폼 텍스트로 입력"
+                                            onSubmit={(event) => {
+                                                event.preventDefault();
+                                                applySongFormText(String(new FormData(event.currentTarget).get('songFormText') ?? ''));
+                                            }}
+                                        >
+                                            <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">텍스트</span>
+                                            <input
+                                                // Re-fills from the band whenever it changes; typing doesn't change the band until 적용.
+                                                key={formatSongFormText(songFormSections)}
+                                                ref={songFormTextRef}
+                                                name="songFormText"
+                                                type="text"
+                                                defaultValue={formatSongFormText(songFormSections)}
+                                                placeholder="I - V1 - C - V2 - C - B - C×2 - O"
+                                                aria-label="송폼 텍스트"
+                                                title="띄어쓰기, -, →로 칸을 나눕니다. 전주·1절·후렴·브릿지 같은 말과 ×2·x2·2번도 알아듣습니다."
+                                                autoComplete="off"
+                                                spellCheck={false}
+                                                disabled={busy || !activePage}
+                                                className="min-w-0 flex-1 basis-48 rounded-xl border border-primary/15 bg-background/80 px-3 py-2 text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+                                            />
+                                            <button type="submit" className={button} disabled={busy || !activePage}>
+                                                적용
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={button}
+                                                disabled={busy || !songFormSections.length}
+                                                title="곡 제목과 송폼을 한 줄 텍스트로 복사합니다"
+                                                onClick={() => void copySongFormText()}
+                                            >
+                                                <Copy size={16} /> 복사
+                                            </button>
+                                        </form>
                                         <ol
                                             aria-label="현재 페이지 송폼 순서"
                                             className="flex min-h-11 flex-wrap items-center gap-1 rounded-2xl border border-dashed border-border bg-background px-2 py-1.5"
@@ -1314,6 +1763,57 @@ function SheetAnnotationWorkspace({
                                         </ol>
                                     </>
                                 )}
+                            </div>
+                        )}
+
+                        {tool === 'line' && (
+                            <>
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label="선 모양">
+                                    <span className="font-medium text-muted-foreground">모양:</span>
+                                    {LINE_SHAPE_OPTIONS.map((option) => (
+                                        <button
+                                            key={option.shape}
+                                            type="button"
+                                            title={option.title || undefined}
+                                            aria-pressed={lineShape === option.shape}
+                                            onClick={() => setLineShape(option.shape)}
+                                            className="rounded-lg bg-muted px-2 py-0.5 text-xs font-bold transition hover:bg-muted/80 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-xs" role="group" aria-label="선 굵기">
+                                    <span className="font-medium text-muted-foreground">굵기:</span>
+                                    {[2, 3, 5].map((width) => (
+                                        <button
+                                            key={width}
+                                            type="button"
+                                            aria-pressed={lineWidth === width}
+                                            onClick={() => setLineWidth(width)}
+                                            className="rounded-lg bg-muted px-2 py-0.5 text-xs font-bold transition hover:bg-muted/80 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+                                        >
+                                            {width === 2 ? '얇게' : width === 3 ? '보통' : '굵게'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+
+                        {tool === 'rect' && (
+                            <div className="flex items-center gap-1.5 text-xs" role="group" aria-label="구역 표시 모양">
+                                <span className="font-medium text-muted-foreground">모양:</span>
+                                {(['box', 'ellipse'] as const).map((shape) => (
+                                    <button
+                                        key={shape}
+                                        type="button"
+                                        aria-pressed={rectShape === shape}
+                                        onClick={() => setRectShape(shape)}
+                                        className="rounded-lg bg-muted px-2 py-0.5 text-xs font-bold transition hover:bg-muted/80 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+                                    >
+                                        {shape === 'box' ? '박스 ▢' : '동그라미 ◯'}
+                                    </button>
+                                ))}
                             </div>
                         )}
 
@@ -1399,7 +1899,7 @@ function SheetAnnotationWorkspace({
                                     </button>
                                 ))}
                             </div>
-                        ) : tool === 'pen' || tool === 'stamp' || tool === 'text' || tool === 'rect' ? (
+                        ) : tool === 'pen' || tool === 'stamp' || tool === 'text' || tool === 'rect' || tool === 'line' ? (
                             <div className="flex items-center gap-1">
                                 <span className="mr-1 text-xs font-medium text-muted-foreground">색상:</span>
                                 {SHEET_COLORS.map((value, i) => (
@@ -1419,6 +1919,10 @@ function SheetAnnotationWorkspace({
                                 ))}
                             </div>
                         ) : null}
+
+                        {(tool === 'pen' || tool === 'highlighter' || tool === 'stamp' || tool === 'text' || tool === 'rect' || tool === 'line') && (
+                            <MarkPartPicker value={markPart} onChange={chooseMarkPart} />
+                        )}
                     </div>
 
                     <p className="text-xs text-muted-foreground">
@@ -1437,7 +1941,11 @@ function SheetAnnotationWorkspace({
                                     : tool === 'text'
                                         ? '악보 원하는 위치를 클릭하여 코드(Capo 2, F#m7)나 연주 메모를 입력하세요.'
                                         : tool === 'rect'
-                                            ? '마우스/손가락을 대각선으로 드래그하여 특정 마디나 섹션에 하이라이트 박스를 치세요.'
+                                            ? rectShape === 'ellipse'
+                                                ? '대각선으로 끌어 음표나 마디에 동그라미를 칩니다.'
+                                                : '마우스/손가락을 대각선으로 드래그하여 특정 마디나 섹션에 하이라이트 박스를 치세요.'
+                                            : tool === 'line'
+                                                ? '시작점에서 끝점까지 끕니다. Shift를 누르면 가로·세로·45°로 곧게 맞춰집니다. 크레센도는 끝으로 갈수록 벌어집니다.'
                                             : tool === 'eraser'
                                                 ? '지우고 싶은 필기, 텍스트, 스탬프를 터치하거나 드래그하여 지웁니다.'
                                                 : `악보 위를 누르면 ‘${stamp}’ 스탬프가 놓입니다.`}
@@ -1562,10 +2070,91 @@ function SheetAnnotationWorkspace({
                     )}
                 </div>
             </div>
+            {keyInfo && (
+                <div className="flex flex-wrap items-center gap-2" role="group" aria-label="악보 키">
+                    <span className="text-xs font-bold text-muted-foreground">키</span>
+                    {view === 'draft' ? (
+                        <>
+                            <button
+                                type="button"
+                                className={button}
+                                disabled={busy}
+                                aria-label="반음 내리기"
+                                onClick={() => void changeScoreKey(stepKey(keyInfo.key, -1))}
+                            >
+                                ▼ 반음
+                            </button>
+                            <select
+                                aria-label="악보 키 고르기"
+                                value={keyInfo.key}
+                                disabled={busy}
+                                onChange={(e) => void changeScoreKey(e.target.value as LeadSheetKey)}
+                                className="tap-target rounded-xl border border-primary/15 bg-background/80 px-3 py-2 text-sm font-bold"
+                            >
+                                {LEAD_SHEET_KEYS.map((key) => (
+                                    <option key={key} value={key}>
+                                        {keyLabel(key)}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type="button"
+                                className={button}
+                                disabled={busy}
+                                aria-label="반음 올리기 (키업)"
+                                onClick={() => void changeScoreKey(stepKey(keyInfo.key, 1))}
+                            >
+                                ▲ 키업
+                            </button>
+                        </>
+                    ) : (
+                        <span className="text-sm font-bold">{keyLabel(keyInfo.key)}</span>
+                    )}
+                    <span className="text-xs text-muted-foreground">{keyInfo.note}</span>
+                </div>
+            )}
             {shown?.pages.length ? (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                     <Keyboard size={14} className="shrink-0" aria-hidden />
-                    <span>블루투스 페달 또는 키보드 방향키(←, →), PageUp/Down으로 {isDualPage ? '2페이지씩' : '악보를'} 넘길 수 있습니다.</span>
+                    <span>
+                        {stepper.active
+                            ? '페달·방향키가 송폼 순서대로 섹션을 넘기고, 섹션 표시가 있는 페이지로 자동으로 넘어갑니다. 송폼 끝에서는 다시 페이지를 넘깁니다.'
+                            : `블루투스 페달 또는 키보드 방향키(←, →), PageUp/Down으로 ${isDualPage ? '2페이지씩' : '악보를'} 넘길 수 있습니다.`}
+                    </span>
+                    {stepper.available && (
+                        <span className="inline-flex items-center gap-1" role="group" aria-label="페달 동작">
+                            <button
+                                type="button"
+                                aria-pressed={!stepper.sectionMode}
+                                onClick={() => stepper.setSectionMode(false)}
+                                className="rounded-lg border border-primary/15 px-2 py-1 font-semibold aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+                            >
+                                페이지 넘김
+                            </button>
+                            <button
+                                type="button"
+                                aria-pressed={stepper.sectionMode}
+                                title={canTurnPage ? '송폼 순서대로 섹션 표시를 따라갑니다' : '리더를 따라가는 중에는 페이지를 넘길 수 없어 섹션 이동도 쉬어 갑니다'}
+                                onClick={() => stepper.setSectionMode(true)}
+                                className="rounded-lg border border-primary/15 px-2 py-1 font-semibold aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+                            >
+                                섹션 이동
+                            </button>
+                        </span>
+                    )}
+                    {stepper.active && (
+                        <span className="inline-flex items-center gap-1">
+                            <button type="button" className={button} aria-label="이전 섹션" onClick={() => stepSection(-1) || setStatus('송폼의 첫 섹션입니다.')}>
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span className="min-w-20 text-center font-semibold text-foreground" aria-live="polite">
+                                {stepper.stop ? `${stepper.stop.label} · ${(stepper.index ?? 0) + 1}/${stepper.total}` : `${stepper.total}개 섹션`}
+                            </span>
+                            <button type="button" className={button} aria-label="다음 섹션" onClick={() => stepSection(1) || setStatus('송폼의 마지막 섹션입니다.')}>
+                                <ChevronRight size={16} />
+                            </button>
+                        </span>
+                    )}
                 </div>
             ) : null}
             <div
@@ -1633,7 +2222,7 @@ function SheetAnnotationWorkspace({
                                     onPointerUp={pointerUp}
                                     onPointerCancel={cancelPointer}
                                 >
-                                    {renderMarkList(activePage.marks, stroke)}
+                                    {renderMarkList(activePage.marks, true, pageRatio)}
                                 </svg>
                                 <span className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
                                     {page}p
@@ -1660,7 +2249,7 @@ function SheetAnnotationWorkspace({
                                     viewBox={`0 0 1000 ${(1000 * shown.pages[page].height) / shown.pages[page].width}`}
                                     preserveAspectRatio="none"
                                 >
-                                    {renderMarkList(shown.pages[page].marks, null, false)}
+                                    {renderMarkList(shown.pages[page].marks, false, shown.pages[page].height / shown.pages[page].width)}
                                 </svg>
                                 <span className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
                                     {page + 1}p
@@ -1706,7 +2295,7 @@ function SheetAnnotationWorkspace({
                             onPointerUp={pointerUp}
                             onPointerCancel={cancelPointer}
                         >
-                            {renderMarkList(activePage.marks, stroke)}
+                            {renderMarkList(activePage.marks, true, pageRatio)}
                         </svg>
                     </div>
                 ) : (
@@ -1745,8 +2334,42 @@ function SheetAnnotationWorkspace({
                     </button>
                 )}
             </div>
+            {shown?.pages.length ? (
+                <div className="flex flex-wrap items-center gap-2" role="group" aria-label="악보 출력">
+                    <span className="text-xs font-bold text-muted-foreground">출력</span>
+                    <button className={button} disabled={busy} onClick={() => void printSheet()} title="모든 페이지를 인쇄합니다. 인쇄 창에서 ‘PDF로 저장’을 고르면 PDF 파일이 됩니다.">
+                        <Printer size={16} /> 인쇄 · PDF ({shown.pages.length}p)
+                    </button>
+                    <button className={button} disabled={busy || !activePage} onClick={() => void saveCurrentPageImage()}>
+                        <ImageDown size={16} /> {page}p 이미지 저장
+                    </button>
+                    {canShareFiles && (
+                        <button className={button} disabled={busy || !activePage} onClick={() => void shareCurrentPageImage()} title="카카오톡 등 다른 앱으로 이 페이지 이미지를 보냅니다">
+                            <Share2 size={16} /> {page}p 이미지 공유
+                        </button>
+                    )}
+                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                        <input type="checkbox" checked={exportMarks} onChange={(e) => setExportMarks(e.target.checked)} className="size-4 accent-primary" />
+                        필기·송폼 포함
+                    </label>
+                    <span className="text-xs text-muted-foreground">{view === 'published' ? '팀 공유본' : '내 필기'} 기준{viewParts ? ' · 보기 필터 적용' : ''}</span>
+                </div>
+            ) : null}
+            {printImages &&
+                createPortal(
+                    <div id="sheet-print-root" aria-hidden>
+                        <style>{PRINT_CSS}</style>
+                        {printImages.map((src, index) => (
+                            <div key={src} className="sheet-print-page">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={src} alt={`${title} ${index + 1}페이지`} />
+                            </div>
+                        ))}
+                    </div>,
+                    document.body
+                )}
             <p role="status" className="text-sm font-medium text-muted-foreground">
-                {busy ? '파일 처리 중…' : status}
+                {busy ? (importProgress ?? '파일 처리 중…') : status}
             </p>
 
             {/* Text & Chord Input Dialog */}

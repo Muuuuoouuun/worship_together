@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Select, searchFieldClass } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { LibrarySong } from '@/lib/libraryPrototypeStorage';
-import { COMMON_KEYS, saveSetlistDetails, type SongSetlistOverride } from '@/lib/setlistDetailsStorage';
+import { COMMON_KEYS, TRANSITION_NOTE_MAX_LENGTH, saveSetlistDetails, type SongSetlistOverride } from '@/lib/setlistDetailsStorage';
 import { createClientId } from '@/lib/clientId';
 import {
     ArrowDown,
@@ -352,6 +352,21 @@ export default function SetlistComposer({
                                                     />
                                                 </label>
                                             </div>
+
+                                            {/* 다음 곡으로 넘어갈 때의 메모 (마지막 곡은 넘어갈 곡이 없습니다) */}
+                                            {index < order.length - 1 && (
+                                                <label className="mt-2 block text-[11px] font-semibold text-muted-foreground">
+                                                    다음 곡으로 넘어갈 때 메모
+                                                    <input
+                                                        type="text"
+                                                        maxLength={TRANSITION_NOTE_MAX_LENGTH}
+                                                        value={override.transitionNote ?? ''}
+                                                        onChange={(e) => updateOverride(id, { transitionNote: e.target.value })}
+                                                        placeholder="예: 기도 후 바로 E로 전조, 피아노만 남기고 다음 곡 인트로"
+                                                        className="mt-1 block w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-2 focus-visible:outline-ring"
+                                                    />
+                                                </label>
+                                            )}
                                         </li>
                                     );
                                 })}

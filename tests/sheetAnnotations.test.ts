@@ -6,6 +6,8 @@ import {
     distanceToSegment,
     isPointNearMark,
     createSampleSheetDocument,
+    WORSHIP_STAMP_GROUPS,
+    WORSHIP_STAMP_PRESETS,
     type SheetDocument,
     type SheetMark,
 } from '../lib/sheetAnnotations';
@@ -159,14 +161,18 @@ test('isPointNearMark accurately detects hits on line segments and stamps', () =
     assert.equal(isPointNearMark(600, 600, stampMark, 1.0), false);
 });
 
-test('createSampleSheetDocument produces a valid 2-page document with sample markings', () => {
-    const doc = createSampleSheetDocument('은혜로다');
+test('createSampleSheetDocument produces a valid 2-page document with sample markings', async () => {
+    const doc = await createSampleSheetDocument('은혜로다', 'D');
     assert.equal(doc.version, 1);
     assert.equal(doc.title, '은혜로다');
     assert.equal(doc.pages.length, 2);
     assert.ok(doc.pages[0].marks.length >= 2);
+    assert.deepEqual(doc.score, { id: 'sample', key: 'D' });
+    assert.deepEqual(doc.pages.map((p) => p.scorePage), [0, 1]);
     const validated = validateSheet(doc);
     assert.equal(validated.pages.length, 2);
+    assert.throws(() => validateSheet({ ...doc, score: { id: 'sample', key: 'H' } }));
+    assert.throws(() => validateSheet({ ...doc, pages: [{ ...doc.pages[0], scorePage: 5 }] }));
 });
 
 test('validateSheet and isPointNearMark accept text and rect marks', () => {
@@ -218,3 +224,18 @@ test('validateSheet and isPointNearMark accept text and rect marks', () => {
 
 
 
+
+test('stamp groups list every preset once, each short enough to save', () => {
+    const flat = WORSHIP_STAMP_GROUPS.flatMap((group) => group.stamps);
+    assert.deepEqual([...WORSHIP_STAMP_PRESETS], flat);
+    assert.equal(new Set(flat).size, flat.length);
+    for (const text of flat) {
+        const doc: SheetDocument = {
+            version: 1,
+            title: '은혜로다',
+            updatedAt: new Date().toISOString(),
+            pages: [{ image: 'data:image/png;base64,iVBORw0KGgo=', width: 1200, height: 1600, marks: [{ id: 's', kind: 'stamp', color: '#2563eb', text, points: [[100, 100]] }] }],
+        };
+        assert.doesNotThrow(() => validateSheet(doc), text);
+    }
+});

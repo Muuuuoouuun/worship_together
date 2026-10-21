@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyPlanningCommand, planningForViewer } from '../lib/planning';
 import { emptyPlanningState, type PlanningCommand, type PlanningState } from '../types/planning';
 import type { TeamMember } from '../types/team';
-import { actorFromBody, buildPlanningView, classifyNotice, groupOf, pickServices } from '../components/conti/planningBridge';
+import { actorFromBody, buildPlanningView, buildRoleMatrix, classifyNotice, groupOf, pickServices } from '../components/conti/planningBridge';
 import type { ContiSetlist } from '../components/conti/model';
 
 const members: TeamMember[] = [
@@ -105,7 +105,7 @@ test('참석 확정·불참·대체 요청이 배치 상태와 요청 목록에 
 
     state = send(state, 'u-guitar2', { type: 'slot.volunteer', eventId, slotId: slots.guitar });
     const after = view(state, 'u-lead');
-    assert.deepEqual(after.services[0].assignments.find((item) => item.role === 'guitar')!.volunteers, [{ id: 'u-guitar2', name: '최요셉', member: true }]);
+    assert.deepEqual(after.services[0].assignments.find((item) => item.role === 'guitar')!.volunteers, [{ id: 'u-guitar2', name: '최요셉', member: true, placed: false }]);
     assert.equal(view(state, 'u-guitar2').requests.find((item) => item.source === 'alert')!.volunteered, true);
     assert.equal(after.services[0].assignments.find((item) => item.role === 'guitar')!.volunteers.length, 1);
     assert.equal(view(state, 'u-guitar2').services[0].assignments.find((item) => item.role === 'guitar')!.volunteered, true);
@@ -151,11 +151,13 @@ test('알림을 종류·행위자·새 소식 여부로 분류하고 콘티 코�
     assert.equal(invite.group, '오늘');
     assert.ok(!invite.message.includes('\n'), '여러 줄 본문은 한 줄로 합친다');
 
-    const decline = keysView.notices.find((item) => item.kind === 'decline')!;
+    assert.equal(keysView.notices.some((item) => item.kind === 'decline'), false, '다른 악기 팀원에게는 결석 알림이 가지 않는다');
+
+    const leaderView = view(state, 'u-lead');
+    const decline = leaderView.notices.find((item) => item.kind === 'decline')!;
     assert.equal(decline.actor, '한믿음');
     assert.equal(decline.quote, '시험/학업');
 
-    const leaderView = view(state, 'u-lead');
     const request = leaderView.notices.find((item) => item.kind === 'request')!;
     assert.equal(request.category, 'request');
     assert.equal(request.quote, '브릿지 몇 번 반복하나요?');
@@ -227,4 +229,115 @@ test('겹치는 시간의 다른 일정에 배치된 사람에게는 지원 버�
     assert.equal(vocal('u-vocal').canVolunteer, true, '어디에도 배치되지 않은 이소망은 지원할 수 있다');
     assert.throws(() => send(state, 'u-guitar2', { type: 'slot.volunteer', eventId, slotId: slots.vocal }), /겹치는 일정/);
     assert.doesNotThrow(() => send(state, 'u-vocal', { type: 'slot.volunteer', eventId, slotId: slots.vocal }));
+});
+
+test('여러 주일의 자리를 역할·순번으로 맞춰 한 장의 배치표로 만든다', () => {
+    const { state: base, eventId } = seed();
+    let state = send(base, 'u-lead', {
+        type: 'event.save',
+        input: { title: '주일 2부 예배', kind: 'worship', startsAt: '2026-10-25T11:00:00+09:00', endsAt: '2026-10-25T12:10:00+09:00', location: '본당 3층', notes: '' },
+    });
+    const nextId = state.events.find((event) => event.startsAt.startsWith('2026-10-25'))!.id;
+    for (const [role, memberId] of [['guitar', 'u-guitar2'], ['guitar', 'u-guitar'], ['vocal', 'u-vocal']] as const) {
+        state = send(state, 'u-lead', { type: 'slot.save', eventId: nextId, role, memberId });
+    }
+
+    const services = view(state, 'u-lead').services;
+    assert.deepEqual(services.map((service) => service.eventId), [eventId, nextId]);
+    const rows = buildRoleMatrix(services);
+    assert.deepEqual(rows.map((row) => row.label), ['인도자', '보컬', '건반', '기타 1', '기타 2'], '역할 순서대로, 두 자리인 역할은 번호를 붙인다');
+    assert.deepEqual(rows.map((row) => row.cells.map((cell) => cell?.memberName ?? (cell ? '빈자리' : null))), [
+        ['김찬양', null],
+        ['빈자리', '이소망'],
+        ['정다윗', null],
+        ['한믿음', '최요셉'],
+        [null, '한믿음'],
+    ], '그 예배에 없는 자리는 null');
+});
+
+test('펑크가 나면 그 예배 인도자·악기장에게 알리고 같은 악기 팀원에게 대체를 부탁한다', () => {
+    const { state: base, eventId, slots } = seed();
+    assert.throws(() => send(base, 'u-keys', { type: 'partLead.set', part: 'band', memberIds: ['u-keys'] }), /인도자 또는 팀 관리자/);
+    assert.throws(() => send(base, 'u-lead', { type: 'partLead.set', part: 'band', memberIds: ['someone-else'] }), /이 팀의 팀원만/);
+    let state = send(base, 'u-lead', { type: 'partLead.set', part: 'band', memberIds: ['u-keys'] });
+    state = send(state, 'u-lead', { type: 'partLead.set', part: 'vocal', memberIds: ['u-vocal'] });
+    assert.deepEqual(state.notifications.find((item) => item.title === '악기장으로 등록되었어요')!.recipientIds, ['u-keys']);
+
+    state = send(state, 'u-guitar', { type: 'attendance.set', eventId, slotId: slots.guitar, attendance: 'absent', reason: '시험/학업', autoRequestSubstitute: true });
+    const titled = (title: string) => state.notifications.find((item) => item.title === title)!;
+    assert.deepEqual(titled('결석 · 대체 인원이 필요해요').recipientIds.sort(), ['u-keys', 'u-lead'], '그 예배 인도자 + 악기장 (싱어 담당·다른 팀원은 제외)');
+    const ask = titled('기타 대체 가능하신가요?');
+    assert.deepEqual(ask.recipientIds, ['u-guitar2'], '같은 악기로 등록된 팀원 중 이 예배에 없는 사람');
+    assert.equal(ask.urgent, true);
+    assert.match(ask.body, /한믿음 · 사유: 시험\/학업/);
+    assert.deepEqual(titled('대체 인원 후보가 있어요').recipientIds.sort(), ['u-keys', 'u-lead']);
+    assert.match(titled('대체 인원 후보가 있어요').body, /추천: 최요셉/);
+
+    const leads = view(state, 'u-vocal').partLeads;
+    assert.deepEqual(leads.map((group) => [group.label, group.members.map((member) => member.name)]), [['악기장', ['정다윗']], ['싱어 담당', ['이소망']]]);
+    const guitarFor = (userId: string) => view(state, userId).services[0].assignments.find((item) => item.role === 'guitar')!;
+    assert.equal(guitarFor('u-keys').canHandle, true, '악기장은 기타 자리를 다룰 수 있다');
+    assert.equal(guitarFor('u-vocal').canHandle, false, '싱어 담당은 악기 자리를 다룰 수 없다');
+
+    state = send(state, 'u-guitar2', { type: 'slot.volunteer', eventId, slotId: slots.guitar });
+    assert.deepEqual(state.notifications[0].recipientIds.sort(), ['u-keys', 'u-lead'], '지원 소식도 인도자·악기장에게');
+    const accept = { type: 'slot.accept', eventId, slotId: slots.guitar, memberId: 'u-guitar2' } as const;
+    assert.throws(() => send(state, 'u-vocal', accept), /인도자 또는 팀 관리자/);
+    state = send(state, 'u-keys', accept);
+    assert.equal(state.events.find((event) => event.id === eventId)!.slots.find((slot) => slot.id === slots.guitar)!.memberId, 'u-guitar2');
+});
+
+test('보컬 펑크는 싱어 담당에게, 불가일·겹치는 일정인 팀원에게는 대체를 부탁하지 않는다', () => {
+    const { state: base, eventId, slots } = seed();
+    let state = send(base, 'u-lead', { type: 'partLead.set', part: 'vocal', memberIds: ['u-guitar2'] });
+    state = send(state, 'u-lead', { type: 'slot.save', eventId, slotId: slots.vocal, role: 'vocal', memberId: 'u-vocal' });
+    state = send(state, 'u-vocal', { type: 'attendance.set', eventId, slotId: slots.vocal, attendance: 'absent', reason: '' });
+    assert.deepEqual(state.notifications.find((item) => item.title.startsWith('결석'))!.recipientIds.sort(), ['u-guitar2', 'u-lead']);
+    assert.equal(state.notifications.some((item) => item.title === '보컬 대체 가능하신가요?'), false, '보컬로 등록된 다른 팀원이 없으면 부탁 알림도 없다');
+
+    const { state: other, eventId: id2, slots: slots2 } = seed();
+    let blocked = send(other, 'u-guitar2', { type: 'member.blockDate', date: '2026-10-18', reason: '가족 행사' });
+    blocked = send(blocked, 'u-guitar', { type: 'attendance.set', eventId: id2, slotId: slots2.guitar, attendance: 'absent', reason: '' });
+    assert.equal(blocked.notifications.some((item) => item.title === '기타 대체 가능하신가요?'), false, '불가일로 등록한 팀원은 제외');
+    assert.deepEqual(blocked.notifications.find((item) => item.title.startsWith('결석'))!.recipientIds, ['u-lead'], '악기장이 없으면 그 예배 인도자에게');
+});
+
+test('대체 부탁을 받은 팀원은 지원하거나 어렵다고 답하고, 모두 어려우면 팀 전체에 다시 요청한다', () => {
+    const { state: base, eventId, slots } = seed();
+    let state = send(base, 'u-lead', { type: 'partLead.set', part: 'band', memberIds: ['u-keys'] });
+    state = send(state, 'u-guitar', { type: 'attendance.set', eventId, slotId: slots.guitar, attendance: 'absent', reason: '시험/학업' });
+    const guitarSlot = () => state.events.find((event) => event.id === eventId)!.slots.find((slot) => slot.id === slots.guitar)!;
+    assert.deepEqual(guitarSlot().asked, ['u-guitar2'], '부탁한 사람을 자리에 남긴다');
+    assert.equal(state.notifications.find((item) => item.title === '기타 대체 가능하신가요?')!.slotId, slots.guitar, '알림에 자리가 붙어 바로 응답할 수 있다');
+
+    const guitarFor = (userId: string) => view(state, userId).services[0].assignments.find((item) => item.slotId === slots.guitar)!;
+    const leaderSeat = guitarFor('u-lead');
+    assert.deepEqual(leaderSeat.keepers.map((keeper) => [keeper.label, keeper.name]), [['인도자', '김찬양'], ['악기장', '정다윗']]);
+    assert.equal(leaderSeat.asks.asked, 1);
+    assert.deepEqual(leaderSeat.options.map((option) => [option.name, option.blocker]), [['최요셉', null]]);
+    const askFor = (userId: string) => view(state, userId).notices.find((notice) => notice.ask?.slotId === slots.guitar)?.ask;
+    assert.deepEqual(askFor('u-guitar2'), { eventId, slotId: slots.guitar, roleLabel: '기타', open: true, canVolunteer: true, volunteered: false, passed: false, filledBy: null });
+    assert.equal(askFor('u-vocal'), undefined, '부탁받지 않은 사람에게는 응답 카드가 없다');
+
+    assert.throws(() => send(state, 'u-vocal', { type: 'slot.pass', eventId, slotId: slots.guitar }), /대체 부탁을 받은 자리만/);
+    state = send(state, 'u-guitar2', { type: 'slot.pass', eventId, slotId: slots.guitar });
+    assert.deepEqual(guitarSlot().passed, ['u-guitar2']);
+    assert.equal(askFor('u-guitar2')!.passed, true);
+    assert.equal(view(state, 'u-guitar2').notices.find((notice) => notice.title === '기타 대체 가능하신가요?')!.unread, false, '어렵다고 답하면 부탁 알림은 읽음');
+    assert.deepEqual(state.notifications.find((item) => item.title === '대체 부탁 · 모두 어려워요')!.recipientIds.sort(), ['u-keys', 'u-lead'], '부탁한 사람이 모두 어려우면 인도자·악기장에게');
+    assert.deepEqual(guitarFor('u-lead').asks.passedNames, ['최요셉']);
+
+    const askAll = { type: 'slot.askAll', eventId, slotId: slots.guitar } as const;
+    assert.throws(() => send(state, 'u-vocal', askAll), /인도자 또는 팀 관리자/);
+    state = send(state, 'u-keys', askAll);
+    assert.deepEqual(state.notifications[0].recipientIds, ['u-vocal'], '이 예배에 없고, 이미 부탁·거절하지 않은 팀원에게만');
+    assert.equal(state.notifications[0].title, '대체 인원을 구해요');
+    assert.equal(askFor('u-vocal')!.canVolunteer, true);
+    assert.throws(() => send(state, 'u-keys', askAll), /더 부탁할 팀원이 없습니다/);
+
+    state = send(state, 'u-guitar2', { type: 'slot.volunteer', eventId, slotId: slots.guitar });
+    assert.deepEqual(guitarSlot().passed, [], '마음을 바꿔 지원하면 거절 기록을 지운다');
+    state = send(state, 'u-keys', { type: 'slot.accept', eventId, slotId: slots.guitar, memberId: 'u-guitar2' });
+    assert.equal(guitarSlot().asked, undefined, '자리가 채워지면 부탁 기록을 지운다');
+    assert.equal(askFor('u-vocal'), undefined);
 });

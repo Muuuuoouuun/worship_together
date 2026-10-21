@@ -42,6 +42,10 @@ interface WorshipPulseViewProps {
     deviceCaption: string;
     accentPicker: ReactNode;
     onReturnToStart: () => void;
+    /** 이번 주 Key 표기 (예: 'Key D (원키 C)'). 비어 있으면 곡의 key 만 보여줍니다. */
+    keyLabel?: string;
+    /** 이 곡에서 다음 곡으로 넘어갈 때의 메모 */
+    transitionNote?: string | null;
 }
 
 function useSecondTick(enabled: boolean) {
@@ -77,6 +81,8 @@ export default function WorshipPulseView({
     deviceCaption,
     accentPicker,
     onReturnToStart,
+    keyLabel,
+    transitionNote,
 }: WorshipPulseViewProps) {
     const tempoBpm = isUsableBpm(bpm) ? bpm : null;
     const phaseRef = useStageBeatPhase<HTMLElement>(metronomeActive ? tempoBpm : null);
@@ -109,7 +115,7 @@ export default function WorshipPulseView({
             <div className="relative flex items-center justify-between gap-3">
                 <p className="min-w-0 truncate text-xs font-semibold tracking-[0.08em] text-(--stage-accent)">
                     진행 중 · {songIndex + 1} / {Math.max(1, songs.length)}곡
-                    {currentSong?.original_key ? ` · ${currentSong.original_key}` : ''}
+                    {keyLabel ? ` · ${keyLabel}` : currentSong?.original_key ? ` · ${currentSong.original_key}` : ''}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
                     <button
@@ -318,6 +324,13 @@ export default function WorshipPulseView({
                             <dd className="line-clamp-2 text-xs text-white/65">{deviceCaption}</dd>
                         </div>
                     </dl>
+
+                    {nextSong && transitionNote ? (
+                        <p className="rounded-2xl border border-(--stage-accent)/40 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold leading-snug text-[#FFF7E8]" data-testid="stage-transition-note">
+                            <span className="mr-1.5 text-xs font-semibold tracking-[0.04em] text-(--stage-accent)">곡 전환</span>
+                            {transitionNote}
+                        </p>
+                    ) : null}
 
                     <button
                         type="button"

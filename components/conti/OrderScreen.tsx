@@ -10,6 +10,7 @@ import {
     Check,
     ChevronDown,
     CirclePlay,
+    CornerDownRight,
     FileText,
     HandHeart,
     Headphones,
@@ -23,7 +24,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
-import { COMMON_KEYS } from '@/lib/setlistDetailsStorage';
+import { COMMON_KEYS, TRANSITION_NOTE_MAX_LENGTH } from '@/lib/setlistDetailsStorage';
 import {
     SECTION_NAMES,
     SECTION_PALETTE,
@@ -63,6 +64,7 @@ function draftFromSetlist(setlist: ContiSetlist): SetlistDraft {
             lead: song.lead ?? '',
             form: [...song.form],
             notes: song.notes.join('\n'),
+            transition: song.transitionNote ?? '',
             video: song.links.find((link) => link.kind === 'video')?.url ?? '',
             sheet: song.links.find((link) => link.kind === 'sheet')?.url ?? '',
             mr: song.links.find((link) => link.kind === 'mr')?.url ?? '',
@@ -451,6 +453,16 @@ function SongCard({ song, number, setlistId }: { song: ContiSong; number: number
                         </div>
                     )}
 
+                    {song.transitionNote && (
+                        <div className={cn('mt-3 rounded-2xl px-3.5 py-3', TONE_BLOCK.lilac)}>
+                            <p className={cn('flex items-center gap-1.5 text-[11px] font-semibold', TONE_ICON.lilac)}>
+                                <CornerDownRight size={13} aria-hidden="true" />
+                                다음 곡으로 넘어갈 때
+                            </p>
+                            <p className={cn('mt-1.5 text-[13px] leading-relaxed', ink)}>{song.transitionNote}</p>
+                        </div>
+                    )}
+
                     {song.comments.length > 0 && (
                         <ul aria-label="팀원 코멘트" className={cn('mt-3.5 space-y-3 border-t pt-3.5', line)}>
                             {song.comments.map((comment, index) => (
@@ -600,6 +612,18 @@ function SongEditCard({
                     onChange={(event) => onChange({ notes: event.target.value })}
                 />
             </Field>
+
+            {!isLast && (
+                <Field label="다음 곡으로 넘어갈 때 메모">
+                    <input
+                        className={field}
+                        value={value.transition}
+                        maxLength={TRANSITION_NOTE_MAX_LENGTH}
+                        placeholder="예: 기도 후 바로 E로 전조"
+                        onChange={(event) => onChange({ transition: event.target.value })}
+                    />
+                </Field>
+            )}
         </li>
     );
 }

@@ -88,7 +88,8 @@ interface Source extends LiveContiSource {
     planning: PlanningSource;
 }
 
-const feedSeenStorageKey = (teamId: string) => `worship:conti-feed-seen:v1:${encodeURIComponent(teamId)}`;
+/** 코멘트 소식을 읽은 시각. 로그인 없이 '보는 사람'을 바꿔도 각자 따로 기억합니다. (보는 사람별 값이 없으면 이전의 팀 단위 값을 씁니다) */
+const feedSeenStorageKey = (teamId: string, userId?: string) => `worship:conti-feed-seen:v1:${encodeURIComponent(teamId)}${userId ? `:${encodeURIComponent(userId)}` : ''}`;
 
 function readStored(key: string): string | null {
     try {
@@ -336,7 +337,8 @@ export function useLiveContiData(props: LiveContiInputs): LiveContiResult {
         if (!loaded?.ok) return EMPTY_PLANNING_VIEW;
         const userId = source.planning.kind === 'none' ? null : source.planning.userId;
         if (!userId) return { ...EMPTY_PLANNING_VIEW, ready: true };
-        const seen = feedSeenAt[planningTeamId] ?? readStored(feedSeenStorageKey(planningTeamId));
+        const seenKey = feedSeenStorageKey(planningTeamId, userId);
+        const seen = feedSeenAt[seenKey] ?? readStored(seenKey) ?? readStored(feedSeenStorageKey(planningTeamId));
         const built = buildPlanningView({ state: planning.state, members: planning.members, userId, today: loaded.value.today, now: new Date(minute), setlists: loaded.value.data.setlists, feedSeenAt: seen });
         return {
             ...built,
@@ -347,8 +349,8 @@ export function useLiveContiData(props: LiveContiInputs): LiveContiResult {
             actions: {
                 dispatch: planning.dispatch,
                 markFeedSeen: (at) => {
-                    writeStored(feedSeenStorageKey(planningTeamId), at);
-                    setFeedSeenAt((current) => ({ ...current, [planningTeamId]: at }));
+                    writeStored(seenKey, at);
+                    setFeedSeenAt((current) => ({ ...current, [seenKey]: at }));
                 },
             },
             planningHref: `/dashboard/planning?team=${encodeURIComponent(planningTeamId)}`,

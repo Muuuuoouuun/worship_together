@@ -13,6 +13,8 @@ export interface SongSetlistOverride {
     notes?: string[];
     /** 리드 싱어 이름 */
     lead?: string | null;
+    /** 이 곡에서 다음 곡으로 넘어갈 때의 메모 (예: '기도 후 바로 E로 전조'). 마지막 곡에서는 쓰이지 않습니다. */
+    transitionNote?: string | null;
 }
 
 export interface SetlistComment {
@@ -42,12 +44,31 @@ export const SETLIST_DETAILS_CHANGED_EVENT = 'worship:setlist-details-changed';
 
 const LIMITS = { notes: 20, noteLength: 200, comments: 300, commentLength: 300, name: 40 } as const;
 
+export const TRANSITION_NOTE_MAX_LENGTH = 120;
+
 export function getSetlistDetailsKey(teamId: string, setlistId: string): string {
     return `worship:setlist-details:v1:${encodeURIComponent(teamId)}:${encodeURIComponent(setlistId)}`;
 }
 
 function text(value: unknown, max: number): string | null {
     return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null;
+}
+
+/** 곡 전환 메모: 앞뒤 공백을 없애고 한 줄로 합쳐 120자까지만 남깁니다. 비면 null. */
+export function cleanTransitionNote(value: unknown): string | null {
+    return text(typeof value === 'string' ? value.replace(/\s+/g, ' ') : value, TRANSITION_NOTE_MAX_LENGTH);
+}
+
+/** 이번 주 BPM 으로 쓸 수 있는 값(20~300 정수)만 돌려줍니다. */
+export function validCustomBpm(value: unknown): number | null {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 20 && value <= 300 ? value : null;
+}
+
+/** 곡 하나의 디렉팅 메모. 줄 단위 특이사항이 있으면 그것을, 없으면 예전 한 줄 디렉팅 메모를 줄로 나눠 돌려줍니다. */
+export function directionNotesOf(override: SongSetlistOverride | undefined | null): string[] {
+    if (!override) return [];
+    if (override.notes) return override.notes;
+    return override.leaderNotes ? override.leaderNotes.split(/\r?\n/).map((note) => note.trim()).filter(Boolean) : [];
 }
 
 /** 저장된 값을 화면에서 믿고 쓸 수 있는 형태로 정리합니다. 형식이 맞지 않으면 null. */
@@ -60,7 +81,8 @@ export function sanitizeSetlistDetails(value: unknown, teamId: string, setlistId
     for (const [songId, entry] of Object.entries(raw.overrides as Record<string, unknown>)) {
         if (!entry || typeof entry !== 'object') continue;
         const item = entry as Record<string, unknown>;
-        const bpm = typeof item.customBpm === 'number' && Number.isInteger(item.customBpm) && item.customBpm >= 20 && item.customBpm <= 300 ? item.customBpm : null;
+        const bpm = validCustomBpm(item.customBpm);
+        const transitionNote = cleanTransitionNote(item.transitionNote);
         const notes = Array.isArray(item.notes)
             ? item.notes.map((note) => text(note, LIMITS.noteLength)).filter((note): note is string => Boolean(note)).slice(0, LIMITS.notes)
             : undefined;
@@ -71,6 +93,7 @@ export function sanitizeSetlistDetails(value: unknown, teamId: string, setlistId
             customBpm: bpm,
             ...(notes ? { notes } : {}),
             lead: text(item.lead, LIMITS.name),
+            ...(transitionNote ? { transitionNote } : {}),
         };
     }
 
@@ -134,6 +157,29 @@ export function readSetlistDetails(teamId: string, setlistId: string, legacy?: L
         return old && isLegacyMatch(old.updatedAt, legacy.createdAt) ? old : null;
     } catch {
         return null;
+    }
+}
+
+/**
+ * 저장된 값이 바뀌었는지 알아보는 표식입니다. 콘티 id 로 저장된 값이 있으면 그 원문,
+ * 없으면 예전 제목 키의 원문을 돌려줍니다. 읽을 수 없거나 아무것도 없으면 빈 문자열.
+ * (화면이 저장소 변화를 구독할 때 같은 값이면 다시 읽지 않도록 하는 용도)
+ */
+export function readSetlistDetailsStamp(
+    teamId: string,
+    setlistId: string,
+    legacyTitle?: string | null,
+    storage?: Pick<Storage, 'getItem'>,
+): string {
+    try {
+        const store = storage ?? (typeof window === 'undefined' ? null : window.localStorage);
+        if (!store) return '';
+        const byId = store.getItem(getSetlistDetailsKey(teamId, setlistId));
+        if (byId) return byId;
+        const old = legacyTitle ? store.getItem(getSetlistDetailsKey(teamId, legacyTitle)) : null;
+        return old ? `legacy:${old}` : '';
+    } catch {
+        return '';
     }
 }
 

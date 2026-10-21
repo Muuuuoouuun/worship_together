@@ -17,7 +17,11 @@ const FILTERS: { id: Filter; label: string }[] = [
     { id: 'done', label: '완료' },
 ];
 
-const QUICK_REPLIES = ['확인했어요', '반영할게요', '연습 때 이야기해요'];
+/** 받은 인도자·관리자와 요청을 남긴 사람은 할 말이 달라요 */
+const QUICK_REPLIES = {
+    resolver: ['확인했어요', '반영할게요', '연습 때 이야기해요'],
+    author: ['감사해요', '확인했어요', '연습 때 이야기해요'],
+};
 
 export default function RequestScreen() {
     const { planning } = useConti();
@@ -184,7 +188,7 @@ function RequestRow({ request, expanded, onToggle }: { request: RequestItem; exp
                         {request.canReply && !request.done && (
                             <>
                                 <div className="flex flex-wrap gap-1.5">
-                                    {QUICK_REPLIES.map((item) => (
+                                    {QUICK_REPLIES[request.canResolve ? 'resolver' : 'author'].map((item) => (
                                         <button key={item} type="button" disabled={busy} onClick={() => void reply(item)} className={pill}>
                                             {item}
                                         </button>

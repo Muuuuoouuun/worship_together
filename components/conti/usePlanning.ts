@@ -102,11 +102,10 @@ export function usePlanning(source: PlanningSource): PlanningConnection {
         lastPayload.current = '';
         setReady(source.kind === 'none');
         setError('');
-        if (source.kind === 'none') {
-            setState(emptyPlanningState());
-            setMembers([]);
-            return;
-        }
+        // 이전 팀의 소식·일정이 새 팀 화면(배지·이번 주)에 잠깐 섞여 보이지 않도록 비웁니다.
+        setState(emptyPlanningState());
+        setMembers(source.kind === 'local' ? source.members : []);
+        if (source.kind === 'none') return;
         void refresh();
         const visible = () => {
             if (document.visibilityState === 'visible') void refresh();
