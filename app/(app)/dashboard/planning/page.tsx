@@ -1,17 +1,19 @@
 import type { Metadata } from 'next';
 import PlanningWorkspace from '@/components/planning/PlanningWorkspace';
 import PageHeader from '@/components/ui/PageHeader';
-import { getCurrentUser } from '@/lib/auth';
-import { getTeamRepository } from '@/lib/server/teams';
+import { getViewer } from '@/lib/server/viewer';
 
 export const metadata: Metadata = {
     title: '일정·요청',
 };
 
 export default async function PlanningPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-    const [user, query] = await Promise.all([getCurrentUser(), searchParams]);
-    const teams = user ? getTeamRepository().list(user.id) : [];
+    const query = await searchParams;
     const value = (key: string, max: number) => (typeof query[key] === 'string' ? query[key].slice(0, max) : undefined);
+    // 온라인 팀은 지금 팀(팀 바꾸기 · ?team=)을 씁니다.
+    const viewer = await getViewer(value('team', 200));
+    const user = viewer?.user ?? null;
+    const teams = viewer?.teams ?? [];
     const title = value('setlistTitle', 120);
     return (
         <div className="space-y-6">
@@ -19,7 +21,7 @@ export default async function PlanningPage({ searchParams }: { searchParams: Pro
             <PlanningWorkspace
                 teams={teams}
                 userId={user?.id}
-                initialTeamId={value('team', 200)}
+                initialTeamId={viewer?.team?.id ?? value('team', 200)}
                 initialTab={value('tab', 20)}
                 initialSetlist={title ? { id: value('setlistId', 200) ?? '', title } : undefined}
             />

@@ -62,6 +62,9 @@ import {
     SONG_FORM_TINT_OPACITY,
 } from '@/lib/songFormMarkup';
 import { readSongForm } from '@/lib/songFormStorage';
+import { isOnlineTeam } from '@/lib/teamDocSync';
+
+const noopSubscribe = () => () => {};
 import SongFormScoreOverlay, { type SongFormOverlayDisplayMode } from './SongFormScoreOverlay';
 import SongFormMarkup, { SongFormMarkupPlaceholder, SongFormSectionMarker } from './SongFormMarkup';
 import SheetInkLayer from './SheetInkLayer';
@@ -250,6 +253,8 @@ function SheetAnnotationWorkspace({
     const { isActive: isWakeLockActive, isSupported: isWakeLockSupported, toggle: toggleWakeLock } = useScreenWakeLock(true);
 
     const draftKey = sheetKey(teamId, songId);
+    // 로그인한 온라인 팀이면 공유본이 팀원 모두에게 동기화됩니다 (첫 그림은 서버와 같게 false).
+    const onlineTeam = useSyncExternalStore(noopSubscribe, () => isOnlineTeam(teamId), () => false);
     const publishedKey = sheetKey(teamId, songId, true);
     const shown = view === 'draft' ? draft : published;
     const keyInfo = shown ? sheetKeyInfo(shown) : null;
@@ -1069,7 +1074,8 @@ function SheetAnnotationWorkspace({
             setPublished(draft);
             setView('published');
             channelRef.current?.postMessage('published');
-            setStatus('이 브라우저의 팀 공유본 갱신됨 · 다른 기기는 공유 파일을 전달해주세요.');
+            // 로그인한 온라인 팀이면 팀 동기화가 팀원 모두의 기기로 보냅니다 (lib/teamDocSync).
+            setStatus(isOnlineTeam(teamId) ? '팀 공유본을 저장했어요 · 팀원 모두의 기기와 예배 중 악보에 보여요.' : '이 브라우저의 팀 공유본 갱신됨 · 다른 기기는 공유 파일을 전달해주세요.');
         } catch {
             setStatus('공유본 저장 실패 · 다시 시도해주세요.');
         } finally {
@@ -1344,10 +1350,12 @@ function SheetAnnotationWorkspace({
             <div>
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <h3 className="text-[17px] font-semibold tracking-tight text-foreground">악보 · 필기</h3>
-                    <span className="text-xs text-muted-foreground">기기 저장 프로토타입</span>
+                    <span className="text-xs text-muted-foreground">{onlineTeam ? '팀원 모두와 공유' : '이 기기에 저장'}</span>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    내 필기를 저장한 뒤 전체 공유본으로 확정하세요. 다른 기기로는 악보와 필기가 담긴 공유 파일을 전달합니다.
+                    {onlineTeam
+                        ? '내 필기를 저장한 뒤 전체 공유본으로 확정하면 팀원 모두의 기기와 예배 중 악보에 보여요.'
+                        : '내 필기를 저장한 뒤 전체 공유본으로 확정하세요. 다른 기기로는 악보와 필기가 담긴 공유 파일을 전달합니다.'}
                 </p>
             </div>
             <div className="flex flex-wrap gap-2">

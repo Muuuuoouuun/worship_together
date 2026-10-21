@@ -6,7 +6,11 @@ import { TeamDocs } from './teamDocs';
 import { LiveRepository } from './liveRepository';
 import { getCurrentUser } from '@/lib/auth';
 
-const STORE_VERSION = 3;
+/**
+ * 저장소 코드가 바뀌면 올립니다 — 개발 서버가 예전 객체를 계속 쓰지 않게.
+ * (Next 는 라우트 핸들러와 서버 컴포넌트에서 이 모듈을 따로 읽으므로, 모듈마다 다른 표식이 아니라 같은 숫자여야 같은 객체를 나눠 씁니다.)
+ */
+const STORE_VERSION = 4;
 type Stores = { teams: TeamRepository; events: TeamEvents; docs: TeamDocs; live: LiveRepository; sweeper: ReturnType<typeof setInterval> };
 const globalStores = globalThis as unknown as { worshipStores?: Stores; worshipStoresVersion?: number; worshipTeamRepository?: TeamRepository };
 

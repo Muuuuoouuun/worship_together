@@ -41,7 +41,7 @@ export default function MobileNav() {
                 </div>
             </nav>
 
-            <Modal open={moreOpen} onOpenChange={setMoreOpen} title="더보기" description="나눔, 돌봄, 섬김, 그룹">
+            <Modal open={moreOpen} onOpenChange={setMoreOpen} title="더보기" description="나눔 · 돌봄 · 섬김 · 그룹은 준비 중이에요. 지금 할 수 있는 화면으로 이어 드려요.">
                 <ul className="divide-y divide-border/70">
                     {secondaryNavItems.map((item) => {
                         const active = isNavActive(pathname, item.href);

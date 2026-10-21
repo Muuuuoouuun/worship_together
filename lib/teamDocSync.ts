@@ -50,7 +50,12 @@ const SETLIST_DETAILS_CHANGED_EVENT = 'worship:setlist-details-changed';
 const SONG_FORM_CHANGED_EVENT = 'worship:song-form-changed';
 const SONG_LINKS_CHANGED_EVENT = 'worship:song-links-changed';
 
-type DocKind = 'library' | 'setlist-details' | 'song-form' | 'song-links';
+type DocKind = 'library' | 'setlist-details' | 'song-form' | 'song-links' | 'sheet';
+
+/** 팀 공유본 악보의 동기화 키. 브라우저에서는 IndexedDB 의 `${팀}:${곡}:published` 에 들어 있습니다. */
+export function sheetDocKey(teamId: string, songId: string): string {
+    return `worship-together:sheet:v1:${enc(teamId)}:${enc(songId)}`;
+}
 
 /** 서버 lib/server/teamDocs.ts 의 classifyDocKey 와 같은 규칙 */
 export function teamDocKind(teamId: string, key: string): DocKind | null {
@@ -59,7 +64,22 @@ export function teamDocKind(teamId: string, key: string): DocKind | null {
     if (key === `worship-together:song-links:v1:${team}`) return 'song-links';
     if (key.startsWith(`worship:setlist-details:v1:${team}:`) && key.length > `worship:setlist-details:v1:${team}:`.length) return 'setlist-details';
     if (key.startsWith(`worship-together:song-form:v1:${team}:`) && key.length > `worship-together:song-form:v1:${team}:`.length) return 'song-form';
+    if (key.startsWith(`worship-together:sheet:v1:${team}:`) && key.length > `worship-together:sheet:v1:${team}:`.length) return 'sheet';
     return null;
+}
+
+function sheetSongId(teamId: string, key: string): string {
+    return decodeURIComponent(key.slice(`worship-together:sheet:v1:${enc(teamId)}:`.length));
+}
+
+/** 이 기기의 사본 — 악보는 IndexedDB, 나머지는 브라우저 저장소 */
+async function readLocal(teamId: string, key: string): Promise<string | null> {
+    if (teamDocKind(teamId, key) === 'sheet') {
+        const { readSheet } = await import('./sheetAnnotations');
+        const doc = await readSheet(`${teamId}:${sheetSongId(teamId, key)}:published`).catch(() => null);
+        return doc ? JSON.stringify(doc) : null;
+    }
+    return storage()?.getItem(key) ?? null;
 }
 
 const base = new Map<string, string>();
@@ -121,6 +141,15 @@ function notify(detail: SyncNotice) {
 
 /** 다른 탭이 바꾼 것처럼 알려서, 저장소를 보는 화면들이 다시 읽게 합니다. */
 function announce(teamId: string, key: string, value: string | null) {
+    if (teamDocKind(teamId, key) === 'sheet') {
+        // 악보 화면 · 예배 중 악보는 곡별 채널로 공유본이 바뀐 것을 듣습니다.
+        try {
+            const channel = new BroadcastChannel(`sheet:${teamId}:${sheetSongId(teamId, key)}`);
+            channel.postMessage('published');
+            channel.close();
+        } catch { /* 다음에 곡을 열 때 읽음 */ }
+        return;
+    }
     try { window.dispatchEvent(new StorageEvent('storage', { key, newValue: value, storageArea: localStorage })); } catch { /* 오래된 브라우저 */ }
     const kind = teamDocKind(teamId, key);
     const rest = (prefix: string) => decodeURIComponent(key.slice(prefix.length));
@@ -135,7 +164,13 @@ function parse(json: string | null | undefined): unknown {
     try { return JSON.parse(json); } catch { return undefined; }
 }
 
-function writeLocal(teamId: string, key: string, json: string) {
+async function writeLocal(teamId: string, key: string, json: string) {
+    if (teamDocKind(teamId, key) === 'sheet') {
+        const { saveSheet, validateSheet } = await import('./sheetAnnotations');
+        try { await saveSheet(`${teamId}:${sheetSongId(teamId, key)}:published`, validateSheet(JSON.parse(json)), { fromSync: true }); } catch { return; }
+        announce(teamId, key, null);
+        return;
+    }
     if (storage()?.getItem(key) === json) return;
     try { storage()?.setItem(key, json); } catch { return; }
     announce(teamId, key, json);
@@ -160,16 +195,16 @@ async function pull(teamId: string) {
     const changedBy = new Set<string>();
     for (const doc of body.docs) {
         if (!teamDocKind(teamId, doc.key)) continue;
-        const local = storage()?.getItem(doc.key) ?? null;
+        const local = await readLocal(teamId, doc.key);
         const neverSynced = state.versions[doc.key] === undefined;
         const dirty = state.pending.includes(doc.key) || (neverSynced && local !== null);
         if (dirty && local !== null && local !== doc.json) {
             // 이 기기에서 아직 못 올린 변경이 있으면 합쳐서 다시 올립니다.
             const merged = JSON.stringify(mergeJson(parse(base.get(doc.key)), parse(local), parse(doc.json), neverSynced ? 'remote' : 'local'));
-            writeLocal(teamId, doc.key, merged);
+            await writeLocal(teamId, doc.key, merged);
             if (!state.pending.includes(doc.key)) state.pending.push(doc.key);
         } else {
-            writeLocal(teamId, doc.key, doc.json);
+            await writeLocal(teamId, doc.key, doc.json);
             state.pending = state.pending.filter((key) => key !== doc.key);
             if (local !== doc.json && !neverSynced) changedBy.add(doc.updatedByName);
         }
@@ -184,6 +219,13 @@ async function pull(teamId: string) {
             const key = store.key(index);
             if (key && teamDocKind(teamId, key) && state.versions[key] === undefined && !state.pending.includes(key)) state.pending.push(key);
         }
+        try {
+            const { listPublishedSheetSongIds } = await import('./sheetAnnotations');
+            for (const songId of await listPublishedSheetSongIds(teamId)) {
+                const key = sheetDocKey(teamId, songId);
+                if (state.versions[key] === undefined && !state.pending.includes(key)) state.pending.push(key);
+            }
+        } catch { /* 악보 저장소를 열 수 없는 브라우저 */ }
     }
     save(teamId, state);
     if (changedBy.size) notify({ teamId, kind: 'received', message: `${[...changedBy].join(', ')}님이 콘티를 바꿨어요` });
@@ -193,7 +235,7 @@ async function pull(teamId: string) {
 
 async function pushOne(teamId: string, key: string): Promise<'done' | 'retry' | 'offline'> {
     const state = load(teamId);
-    const json = storage()?.getItem(key) ?? null;
+    const json = await readLocal(teamId, key);
     if (json === null || (base.get(key) === json && state.versions[key] !== undefined)) return 'done';
     let response: Response;
     try {
@@ -219,12 +261,12 @@ async function pushOne(teamId: string, key: string): Promise<'done' | 'retry' | 
         base.set(key, body.conflict.json);
         fresh.versions[key] = body.conflict.version;
         save(teamId, fresh);
-        writeLocal(teamId, key, merged);
+        await writeLocal(teamId, key, merged);
         return 'retry';
     }
     // 권한이 없거나 받을 수 없는 자료: 서버 사본으로 되돌리고 알립니다.
     if (body.conflict) {
-        writeLocal(teamId, key, body.conflict.json);
+        await writeLocal(teamId, key, body.conflict.json);
         base.set(key, body.conflict.json);
         fresh.versions[key] = body.conflict.version;
         save(teamId, fresh);

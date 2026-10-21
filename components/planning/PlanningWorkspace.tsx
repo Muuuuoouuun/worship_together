@@ -36,18 +36,10 @@ const fieldLabel = 'mb-1 block text-[11px] font-medium text-muted-foreground';
 export default function PlanningWorkspace(props: Props) {
     return props.teams.length && props.userId ? <OnlinePlanning {...props} /> : <LocalPlanning {...props} />;
 }
+/** 로그인한 온라인 팀: 지금 팀(위의 팀 바꾸기)의 일정 · 요청 */
 function OnlinePlanning(props: Props) {
-    const [selected, setSelected] = useState(props.initialTeamId ?? props.teams[0].id);
-    const team = props.teams.find(item => item.id === selected) ?? props.teams[0];
-    const picker = (
-        <label className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">함께 준비할 팀</span>
-            <Select className={cn(pillSelect, 'h-9 w-auto max-w-56')} value={team.id} onChange={event => setSelected(event.target.value)}>
-                {props.teams.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </Select>
-        </label>
-    );
-    return <Board key={team.id} teamId={team.id} members={team.members} userId={props.userId!} online toolbar={picker} initialTab={props.initialTab} initialSetlist={team.id === props.initialTeamId ? props.initialSetlist : undefined} />;
+    const team = props.teams.find(item => item.id === props.initialTeamId) ?? props.teams[0];
+    return <Board key={team.id} teamId={team.id} members={team.members} userId={props.userId!} online initialTab={props.initialTab} initialSetlist={props.initialSetlist} />;
 }
 function LocalPlanning(props: Props) {
     const raw = useSyncExternalStore(subscribeToTeams, getTeamSnapshot, getTeamServerSnapshot);
@@ -152,7 +144,7 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
     return <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             {toolbar}
-            <p className="min-w-0 flex-1 basis-56 text-xs leading-5 text-muted-foreground">{online ? '팀에 함께 저장 · 새 알림 자동 확인' : '기기 저장 · 체험 중'}<br />앱을 닫은 상태의 푸시 알림은 지원하지 않습니다.</p>
+            <p className="min-w-0 flex-1 basis-56 text-xs leading-5 text-muted-foreground">{online ? '팀에 함께 저장 · 다른 팀원이 바꾸면 바로 보여요' : '기기 저장 · 체험 중'}<br />앱을 닫은 상태의 푸시 알림은 지원하지 않습니다.</p>
             <Button type="button" variant="outline" size="icon-sm" aria-label="새로고침" title="새로고침" className="ml-auto" onClick={() => void refresh()} disabled={busy}><RefreshCw size={16} aria-hidden="true" /></Button>
         </div>
         {toast && <div role="alert" className={cn('flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-3xl px-4 py-3.5', TONE_BLOCK.peach)}>

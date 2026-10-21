@@ -10,7 +10,7 @@ import { normalizeSessionState, type SessionDetail } from '@/types/session';
 import { readSongForm } from '@/lib/songFormStorage';
 import { buttonVariants } from '@/components/ui/button';
 import Notice from '@/components/ui/Notice';
-import { SessionSkeleton, TeamModeSkeleton } from './SessionLoadingSkeleton';
+import { TeamModeSkeleton } from './SessionLoadingSkeleton';
 
 import { readSetlistDetails } from '@/lib/setlistDetailsStorage';
 import { applyBpmOverrides, resolveStateBpm } from '@/lib/stageSongPlan';
@@ -32,12 +32,11 @@ function withSetlistBpm(detail: SessionDetail): SessionDetail {
     };
 }
 
-// 각 화면은 자기 모드만 내려받습니다 (준비 화면에 무대 화면 코드가, 무대 화면에 준비 화면 코드가 섞이지 않게).
-const SessionWorkspace = dynamic(() => import('./SessionWorkspace'), { loading: () => <SessionSkeleton /> });
-const WorshipTeamMode = dynamic(() => import('./WorshipTeamMode'), { loading: () => <TeamModeSkeleton /> });
+// 예배 중 화면은 서버 예배(/live)와 같은 화면(LiveScreen)을 이 기기 모드로 씁니다.
+const LocalLiveScreen = dynamic(() => import('@/components/live/LocalLiveScreen'), { loading: () => <TeamModeSkeleton /> });
 
-export default function ClientSessionLoader({ detail, setlistId, requestedTeamId, onlineTeamName, mode = 'workspace' }: {
-    detail: SessionDetail; setlistId?: string; requestedTeamId?: string; onlineTeamName?: string; mode?: 'workspace' | 'team';
+export default function ClientSessionLoader({ detail, setlistId, requestedTeamId, onlineTeamName }: {
+    detail: SessionDetail; setlistId?: string; requestedTeamId?: string; onlineTeamName?: string;
 }) {
     const [resolved, setResolved] = useState<SessionDetail | null>(null);
     const [error, setError] = useState('');
@@ -73,9 +72,9 @@ export default function ClientSessionLoader({ detail, setlistId, requestedTeamId
             </main>
         );
     }
-    if (!resolved) return mode === 'team' ? <TeamModeSkeleton /> : <SessionSkeleton />;
-    const { session, songs, team, setlist, currentState } = resolved;
-    const sessionHref = setlistId ? `/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(setlistId)}&team=${encodeURIComponent(session.team_id!)}` : `/session/${session.id}`;
-    const common = { session, songs, teamId: session.team_id!, initialState: currentState, teamName: team?.name ?? '예배팀', setlistTitle: setlist?.title ?? '라이브 예배' };
-    return mode === 'team' ? <WorshipTeamMode key={session.id} {...common} workspaceHref={sessionHref} setlistCreatedAt={setlist?.created_at ?? null} /> : <SessionWorkspace key={session.id} {...common} sessionHref={sessionHref} worshipDateLabel={setlist ? new Date(setlist.worship_date).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '일정 미정'} theme={setlist?.theme ?? null} />;
+    if (!resolved) return <TeamModeSkeleton />;
+    const here = setlistId
+        ? `/session/${DEMO_SESSION_ID}/team?setlist=${encodeURIComponent(setlistId)}&team=${encodeURIComponent(resolved.session.team_id!)}`
+        : `/session/${resolved.session.id}/team`;
+    return <LocalLiveScreen key={resolved.session.id} detail={resolved} loginHref={`/login?callbackUrl=${encodeURIComponent(here)}`} />;
 }

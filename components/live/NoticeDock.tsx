@@ -172,8 +172,9 @@ function NoticeCard({
 /** 앱 알림 줄. 알림이 있을 때만 열리고(높이 0 → 내용), 그동안 위의 가운데가 조금 작아집니다. */
 export function DockZone({ open, desktop, children }: { open: boolean; desktop: boolean; children: ReactNode }) {
     return (
-        <div className={cn('relative z-20 grid shrink-0 transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
-            <div className="flex min-h-0 flex-col justify-end">
+        // 열 너비를 화면 너비에 묶어 둡니다 (긴 설명이 한 줄로 늘어나 카드를 밀어내지 않게).
+        <div className={cn('relative z-20 grid shrink-0 grid-cols-[minmax(0,1fr)] transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+            <div className="flex min-h-0 min-w-0 flex-col justify-end">
                 <div className={cn(desktop ? 'mx-auto w-full max-w-[460px] px-6 pb-3' : 'px-3 pt-3')}>
                     <div className="relative">{children}</div>
                 </div>

@@ -30,7 +30,7 @@ export default function SidebarNav() {
             {primaryNavItems.map((item) => (
                 <NavLink key={item.href} item={item} active={isNavActive(pathname, item.href)} />
             ))}
-            <p className="mt-5 px-4 pb-2 text-[11px] font-medium text-muted-foreground">나눔과 돌봄</p>
+            <p className="mt-5 px-4 pb-2 text-[11px] font-medium text-muted-foreground">나눔과 돌봄 · 준비 중</p>
             {secondaryNavItems.map((item) => (
                 <NavLink key={item.href} item={item} active={isNavActive(pathname, item.href)} />
             ))}

@@ -10,7 +10,7 @@ import type { TeamEvents } from './teamEvents';
  * 문서 키는 브라우저 저장소 키를 그대로 쓰되, 이 팀의 키인지 · 어떤 종류인지 서버가 다시 확인합니다.
  */
 
-export type TeamDocKind = 'library' | 'setlist-details' | 'song-form' | 'song-links';
+export type TeamDocKind = 'library' | 'setlist-details' | 'song-form' | 'song-links' | 'sheet';
 
 export interface TeamDoc {
     key: string;
@@ -25,6 +25,9 @@ export type PutResult = { ok: true; version: number } | { ok: false; conflict: T
 
 const MAX_DOC_BYTES = 1_000_000;
 const MAX_TEAM_BYTES = 30_000_000;
+/** 팀 공유본 악보는 페이지 이미지가 들어 있어 따로 셉니다 */
+const MAX_SHEET_BYTES = 25_000_000;
+const MAX_TEAM_SHEET_BYTES = 500_000_000;
 
 export function classifyDocKey(teamId: string, key: string): TeamDocKind | null {
     if (typeof key !== 'string' || key.length > 400) return null;
@@ -33,6 +36,7 @@ export function classifyDocKey(teamId: string, key: string): TeamDocKind | null 
     if (key === `worship-together:song-links:v1:${team}`) return 'song-links';
     if (key.startsWith(`worship:setlist-details:v1:${team}:`) && key.length > `worship:setlist-details:v1:${team}:`.length) return 'setlist-details';
     if (key.startsWith(`worship-together:song-form:v1:${team}:`) && key.length > `worship-together:song-form:v1:${team}:`.length) return 'song-form';
+    if (key.startsWith(`worship-together:sheet:v1:${team}:`) && key.length > `worship-together:sheet:v1:${team}:`.length) return 'sheet';
     return null;
 }
 
@@ -98,7 +102,7 @@ export class TeamDocs {
         const member = this.member(teamId, user.id);
         const kind = classifyDocKey(teamId, key);
         if (!kind) return { ok: false, conflict: null, error: '이 팀의 자료가 아닙니다.' };
-        if (typeof json !== 'string' || json.length > MAX_DOC_BYTES) return { ok: false, conflict: null, error: '자료가 너무 큽니다.' };
+        if (typeof json !== 'string' || json.length > (kind === 'sheet' ? MAX_SHEET_BYTES : MAX_DOC_BYTES)) return { ok: false, conflict: null, error: kind === 'sheet' ? '악보가 너무 큽니다. 페이지 수를 줄여 주세요.' : '자료가 너무 큽니다.' };
         try { JSON.parse(json); } catch { return { ok: false, conflict: null, error: '자료 형식이 올바르지 않습니다.' }; }
         return this.db.transaction((): PutResult => {
             const current = this.db.prepare('SELECT doc_key AS key, kind, json, version, updated_at AS updatedAt, updated_by_name AS updatedByName FROM online_docs WHERE team_id = ? AND doc_key = ?').get(teamId, key) as TeamDoc | undefined;
@@ -107,8 +111,9 @@ export class TeamDocs {
             const policy = this.teams.policy(teamId);
             const allowed = can(member, policy, 'contiEdit') || (kind === 'setlist-details' && onlyAddsComments(current?.json ?? null, json));
             if (!allowed) return { ok: false, conflict: current ?? null, error: '콘티를 편집할 권한이 없습니다. 코멘트는 남길 수 있어요.' };
-            const total = (this.db.prepare('SELECT coalesce(sum(length(json)), 0) AS n FROM online_docs WHERE team_id = ? AND doc_key <> ?').get(teamId, key) as { n: number }).n;
-            if (total + json.length > MAX_TEAM_BYTES) return { ok: false, conflict: null, error: '팀 저장 공간이 가득 찼습니다.' };
+            const sheets = kind === 'sheet';
+            const total = (this.db.prepare(`SELECT coalesce(sum(length(json)), 0) AS n FROM online_docs WHERE team_id = ? AND doc_key <> ? AND kind ${sheets ? '=' : '<>'} 'sheet'`).get(teamId, key) as { n: number }).n;
+            if (total + json.length > (sheets ? MAX_TEAM_SHEET_BYTES : MAX_TEAM_BYTES)) return { ok: false, conflict: null, error: '팀 저장 공간이 가득 찼습니다.' };
             const version = (this.db.prepare('SELECT coalesce(max(version), 0) + 1 AS v FROM online_docs WHERE team_id = ?').get(teamId) as { v: number }).v;
             const now = new Date().toISOString();
             this.db.prepare(`INSERT INTO online_docs(team_id, doc_key, kind, json, version, updated_at, updated_by, updated_by_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
