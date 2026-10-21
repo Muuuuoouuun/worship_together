@@ -147,6 +147,8 @@ export default function LiveSessionMiniBar() {
     }
 
     const { teamId, teamName, setlistId, title, songCount, isToday } = state;
+    // 온라인 팀에 아직 콘티가 없으면 시작할 예배가 없으므로 바를 두지 않습니다 (빈 자리를 예시 제목으로 채우지 않음).
+    if (connection && !setlistId) return null;
     const query = setlistId ? `?setlist=${encodeURIComponent(setlistId)}&team=${encodeURIComponent(teamId)}` : '';
     // 온라인 팀은 서버 예배(팀원 모두 함께), 그 밖에는 이 기기의 예배 화면
     const sessionHref = connection ? liveStartHref(connection.teamId, setlistId) : `/session/${DEMO_SESSION_ID}${query}`;

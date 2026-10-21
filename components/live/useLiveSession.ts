@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { can } from '@/lib/permissions';
 import { subscribeTeamStream, type StreamStatus } from '@/lib/teamStream';
+import { notifyDevice } from '@/lib/deviceNotify';
 import type { LiveCueRecord, LiveMovePatch, LivePresence, LiveSessionDetail, LiveState } from '@/lib/server/liveRepository';
 import { worshipRoles } from '@/types/team';
 import {
@@ -255,6 +256,7 @@ export function useLiveSession(sessionId: string, { exitHref = '/dashboard' }: {
                             ttl: CUE_TTL,
                         });
                         try { navigator.vibrate?.([18, 24, 32]); } catch { /* 진동 없는 기기 */ }
+                        void notifyDevice({ title: cue.label, body: `${cue.fromName} → ${CUE_TARGET_LABEL[cue.target]}`, tag: `cue-${cue.id}`, url: `/live/${sessionId}` });
                     }
                     return;
                 }

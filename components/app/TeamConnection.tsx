@@ -6,6 +6,7 @@ import { reconnectTeamStreams, subscribeTeamStream, type StreamStatus, type Team
 import { registerOnlineTeams, syncTeam, SYNC_NOTICE_EVENT, type SyncNotice } from '@/lib/teamDocSync';
 import { PLANNING_CHANGED_EVENT } from '@/lib/planningDemo';
 import { showAppToast } from '@/lib/appToast';
+import { notifyDevice } from '@/lib/deviceNotify';
 import type { LiveSessionSummary } from '@/lib/server/liveRepository';
 
 /** 공통 틀이 넘겨주는 지금 팀 정보 (로그인하고 온라인 팀이 있을 때만) */
@@ -106,6 +107,7 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                 case 'live.started': {
                     const session = payload as unknown as LiveSessionSummary;
                     if (active) setLive({ teamId, session });
+                    void notifyDevice({ title: '예배가 시작됐어요', body: `${session.startedByName}님 · ${session.title}`, tag: `live-${session.id}`, url: liveHref(session.id) });
                     if (!window.location.pathname.startsWith('/live/')) {
                         showAppToast({
                             id: `live-${session.id}`,

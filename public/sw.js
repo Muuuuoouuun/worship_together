@@ -96,3 +96,19 @@ async function cacheFirst(request) {
 function isStaticAsset(pathname) {
   return pathname === OFFLINE_URL || pathname.startsWith("/icons/");
 }
+
+// 기기 알림(예배 시작 · 받은 큐)을 누르면 열려 있는 앱 화면으로 가거나 새로 엽니다.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/dashboard";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (new URL(client.url).origin === self.location.origin && "focus" in client) {
+          return client.focus().then((focused) => (focused && "navigate" in focused ? focused.navigate(url) : focused));
+        }
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});

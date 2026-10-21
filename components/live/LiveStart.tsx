@@ -12,6 +12,7 @@ import { registerOnlineTeams, syncTeam } from '@/lib/teamDocSync';
 import { subscribeTeamStream } from '@/lib/teamStream';
 import type { LiveSessionSummary } from '@/lib/server/liveRepository';
 import { liveSessionHref } from './links';
+import DeviceNotifyToggle from '@/components/app/DeviceNotifyToggle';
 
 type Phase =
     | { kind: 'checking' }
@@ -106,6 +107,7 @@ export default function LiveStart({ teamId, teamName, teamIds, setlistId, canRun
                             <span className="size-2 shrink-0 rounded-full bg-brand motion-safe:animate-pulse" aria-hidden="true" />
                             시작을 기다리는 중
                         </p>
+                        <DeviceNotifyToggle className="mt-6" />
                         <div className="mt-auto grid gap-2 pt-8">
                             <Link href="/dashboard/songs" className={buttonVariants({ variant: 'outline', size: 'lg' })}>콘티 미리 보기</Link>
                         </div>
