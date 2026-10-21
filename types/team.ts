@@ -3,5 +3,6 @@ export type WorshipRole = keyof typeof worshipRoles;
 export type TeamMember = { userId: string; name: string; role: WorshipRole; permission: 'owner' | 'member' };
 export type OnlineTeam = { id: string; name: string; ownerId: string; members: TeamMember[]; createdAt: string };
 export type TeamIdentity = { id: string; name: string };
-export type InvitationPreview = { teamId: string; teamName: string; expiresAt: string };
+export type InvitationPreview = { teamId: string; teamName: string; expiresAt: string; claimable: { userId: string; name: string; role: WorshipRole }[] };
+export type UserProfile = { id: string; name: string; createdAt: string; onboardedAt: string | null };
 export type TeamActionResult<T = undefined> = { ok: true; value: T } | { ok: false; error: string };

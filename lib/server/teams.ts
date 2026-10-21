@@ -1,21 +1,46 @@
 import 'server-only';
 import path from 'node:path';
 import { TeamRepository } from './teamRepository';
+import { TeamEvents } from './teamEvents';
+import { TeamDocs } from './teamDocs';
+import { LiveRepository } from './liveRepository';
 import { getCurrentUser } from '@/lib/auth';
 
-const globalTeams = globalThis as unknown as { worshipTeamRepository?: TeamRepository; worshipTeamRepositoryVersion?: number };
+const STORE_VERSION = 3;
+type Stores = { teams: TeamRepository; events: TeamEvents; docs: TeamDocs; live: LiveRepository; sweeper: ReturnType<typeof setInterval> };
+const globalStores = globalThis as unknown as { worshipStores?: Stores; worshipStoresVersion?: number; worshipTeamRepository?: TeamRepository };
+
+/** 한 서버 프로세스가 같은 SQLite 파일을 한 번만 엽니다 (개발 중 새로고침에도 유지). */
+function stores(): Stores {
+    if (!globalStores.worshipStores || globalStores.worshipStoresVersion !== STORE_VERSION) {
+        if (globalStores.worshipStores) {
+            clearInterval(globalStores.worshipStores.sweeper);
+            globalStores.worshipStores.teams.close();
+        }
+        globalStores.worshipTeamRepository?.close();
+        globalStores.worshipTeamRepository = undefined;
+        const teams = new TeamRepository(process.env.TEAM_DATABASE_PATH || path.join(process.cwd(), '.data', 'teams.sqlite'));
+        const events = new TeamEvents(teams.database);
+        const live = new LiveRepository(teams.database, teams, events);
+        const docs = new TeamDocs(teams.database, teams, events);
+        // 화면을 닫은 기기(소식이 끊긴 기기)를 예배 세션에서 내보냅니다.
+        const sweeper = setInterval(() => { try { live.sweep(); } catch (error) { console.error('[live] sweep', error); } }, 15_000);
+        sweeper.unref?.();
+        globalStores.worshipStores = { teams, events, docs, live, sweeper };
+        globalStores.worshipStoresVersion = STORE_VERSION;
+    }
+    return globalStores.worshipStores;
+}
+
+export function getTeamRepository() { return stores().teams; }
+export function getTeamEvents() { return stores().events; }
+export function getTeamDocs() { return stores().docs; }
+export function getLiveRepository() { return stores().live; }
+
 export async function getOnlineTeamName(teamId: unknown): Promise<string | undefined> {
     if (typeof teamId !== 'string') return undefined;
     const user = await getCurrentUser();
     return user ? getTeamRepository().list(user.id).find(team => team.id === teamId)?.name : undefined;
-}
-export function getTeamRepository() {
-    if (!globalTeams.worshipTeamRepository || globalTeams.worshipTeamRepositoryVersion !== 2) {
-        globalTeams.worshipTeamRepository?.close();
-        globalTeams.worshipTeamRepository = new TeamRepository(process.env.TEAM_DATABASE_PATH || path.join(process.cwd(), '.data', 'teams.sqlite'));
-        globalTeams.worshipTeamRepositoryVersion = 2;
-    }
-    return globalTeams.worshipTeamRepository;
 }
 export function invitationOrigin(): string {
     const configured = process.env.NEXTAUTH_URL;
