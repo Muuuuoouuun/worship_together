@@ -278,3 +278,19 @@ test('conti notices fall back to the whole team when nobody is scheduled for tha
         assert.match(notices[0].body, /^인도자 · 수요 예배 · /);
     } finally { repo.close(); }
 });
+
+test('the personal stream catches up on notices and worship starts across my other teams only', () => {
+    const repo = new TeamRepository(':memory:');
+    try {
+        const a = repo.create('A팀', leader), b = repo.create('B팀', leader);
+        const events = new TeamEvents(repo.database);
+        const start = events.latestIdOverall();
+        events.publish(a.id, 'planning.notice', { title: '나에게' }, [keys.id]);
+        events.publish(b.id, 'planning.notice', { title: '다른 사람에게' }, [vocal.id]);
+        events.publish(b.id, 'live.started', { title: '주일 예배' });
+        events.publish(b.id, 'planning.changed', {});
+        const mine = events.sinceAcross([a.id, b.id], start, keys.id, ['planning.notice', 'live.started']);
+        assert.deepEqual(mine.map(event => [event.teamId === a.id ? 'A' : 'B', event.type]), [['A', 'planning.notice'], ['B', 'live.started']]);
+        assert.deepEqual(events.sinceAcross([], start, keys.id, ['planning.notice']), []);
+    } finally { repo.close(); }
+});

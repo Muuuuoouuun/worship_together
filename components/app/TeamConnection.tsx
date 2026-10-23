@@ -7,6 +7,7 @@ import { registerOnlineTeams, syncTeam, SYNC_NOTICE_EVENT, type SyncNotice } fro
 import { PLANNING_CHANGED_EVENT } from '@/lib/planningDemo';
 import { showAppToast } from '@/lib/appToast';
 import { notifyDevice } from '@/lib/deviceNotify';
+import { subscribeUserStream, type UserStreamEvent } from '@/lib/userStream';
 import type { LiveSessionSummary } from '@/lib/server/liveRepository';
 import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
 import type { PlanningTarget } from '@/types/planning';
@@ -185,6 +186,36 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
             if (syncTimer.current) clearTimeout(syncTimer.current);
         };
     }, [teamId, userId, router]);
+
+    // 내가 속한 다른 팀의 알림 · 공지 · 예배 시작 (지금 팀은 위의 팀 소식 흐름이 맡음)
+    useEffect(() => {
+        if (!teamId || teamKey.split(',').filter(Boolean).length < 2) return;
+        return subscribeUserStream(teamId, (event: UserStreamEvent) => {
+            if (event.type === 'planning.notice') {
+                const notice = event.payload as PlanningNotice;
+                const href = noticeHref(event.teamId, notice);
+                // 홈 · 화면 구석의 알림 배지는 모든 팀을 함께 셉니다.
+                window.dispatchEvent(new Event(PLANNING_CHANGED_EVENT));
+                void notifyDevice({ title: `${event.teamName} · ${notice.title}`, body: notice.body, tag: `plan-${notice.id}`, url: href });
+                showAppToast({
+                    id: `plan-${notice.id}`,
+                    tone: notice.urgent ? 'warning' : 'info',
+                    title: notice.title,
+                    body: `${event.teamName} · ${notice.body}`,
+                    action: { label: '보기', href },
+                    ttl: notice.urgent || notice.target === 'announcements' ? 15_000 : 6_000,
+                });
+                return;
+            }
+            if (event.type === 'live.started') {
+                const session = event.payload as LiveSessionSummary;
+                void notifyDevice({ title: `${event.teamName} · 예배가 시작됐어요`, body: `${session.startedByName}님 · ${session.title}`, tag: `live-${session.id}`, url: liveHref(session.id) });
+                if (!window.location.pathname.startsWith('/live/')) {
+                    showAppToast({ id: `live-${session.id}`, tone: 'live', title: `${event.teamName} · 예배가 시작됐어요`, body: `${session.startedByName}님 · ${session.title}`, action: { label: '입장', href: liveHref(session.id) }, ttl: 15_000 });
+                }
+            }
+        });
+    }, [teamId, teamKey]);
 
     // 다른 팀원이 바꾼 콘티 · 권한 때문에 되돌린 저장을 알립니다.
     useEffect(() => {
