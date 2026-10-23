@@ -55,6 +55,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             isAdmin: isAdmin(viewer.member),
             canRun: can(viewer.member, viewer.policy, 'sessionRun'),
             canEditConti: can(viewer.member, viewer.policy, 'contiEdit'),
+            policy: viewer.policy,
         }
         : null;
     const switcher = (variant: 'sidebar' | 'compact') => connection ? (

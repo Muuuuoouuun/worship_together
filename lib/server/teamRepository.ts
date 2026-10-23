@@ -102,7 +102,7 @@ export class TeamRepository {
     }
     planning(teamId: string, userId: string): PlanningState {
         const members = this.planningMembers(teamId, userId);
-        return planningForViewer(this.readPlanning(teamId), members, userId);
+        return planningForViewer(this.readPlanning(teamId), members, userId, this.policy(teamId));
     }
     updatePlanning(teamId: string, userId: string, command: PlanningCommand | unknown): PlanningState {
         return this.applyPlanning(teamId, userId, command).state;
@@ -112,10 +112,32 @@ export class TeamRepository {
         return this.db.transaction(() => {
             const members = this.planningMembers(teamId, userId);
             const previous = this.readPlanning(teamId);
-            const state = applyPlanningCommand(previous, members, userId, command);
+            const policy = this.policy(teamId);
+            const state = applyPlanningCommand(previous, members, userId, command, policy);
             this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
             const before = new Set(previous.notifications.map((item) => item.id));
-            return { state: planningForViewer(state, members, userId), created: state.notifications.filter((item) => !before.has(item.id)) };
+            return { state: planningForViewer(state, members, userId, policy), created: state.notifications.filter((item) => !before.has(item.id)) };
+        })();
+    }
+    /** 팀 이름 (없는 팀이면 null) */
+    teamName(teamId: string): string | null {
+        return (this.db.prepare('SELECT name FROM online_teams WHERE id = ?').get(teamId) as { name: string } | undefined)?.name ?? null;
+    }
+    /** 서버 안에서 쓰는 일정 상태와 명단 (권한 검사 없음 — 저장 흐름에서 알림을 만들 때) */
+    planningSnapshot(teamId: string): { state: PlanningState; members: TeamMember[] } {
+        const members = this.db.prepare('SELECT user_id AS userId, name, role, permission FROM online_members WHERE team_id = ?').all(teamId) as TeamMember[];
+        return { state: this.readPlanning(teamId), members };
+    }
+    /** 일정 명령이 아닌 곳(콘티 저장 등)에서 생긴 알림을 알림 목록에 더합니다. */
+    addNotices(teamId: string, items: Array<Pick<PlanningNotification, 'title' | 'body' | 'target' | 'entityId' | 'recipientIds'> & { urgent?: boolean }>): PlanningNotification[] {
+        if (!items.length) return [];
+        return this.db.transaction(() => {
+            const state = this.readPlanning(teamId);
+            const now = new Date().toISOString();
+            const created = items.map((item): PlanningNotification => ({ id: randomUUID(), title: item.title, body: item.body, urgent: Boolean(item.urgent), target: item.target, entityId: item.entityId, recipientIds: [...new Set(item.recipientIds)], readBy: [], createdAt: now }));
+            state.notifications = [...created, ...state.notifications].slice(0, 500);
+            this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
+            return created;
         })();
     }
     private identity(user: TeamIdentity) {

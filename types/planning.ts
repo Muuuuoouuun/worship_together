@@ -1,4 +1,5 @@
 import type { TeamMember, WorshipRole } from './team';
+import { DEFAULT_POLICY, can, type TeamPolicy } from '../lib/permissions';
 
 export const requestKinds = { question: '질문', reminder: '진행 확인 요청', change: '수정 요청' } as const;
 export const requestStatuses = { open: '접수', reviewing: '확인 중', resolved: '완료' } as const;
@@ -29,10 +30,21 @@ export type UrgentAlert = {
     body: string; authorId: string; createdAt: string; resolvedAt: string | null;
 };
 export type PlanningNotification = {
-    id: string; title: string; body: string; urgent: boolean; target: 'requests' | 'schedule' | 'rotation';
+    id: string; title: string; body: string; urgent: boolean; target: PlanningTarget;
     entityId: string; recipientIds: string[]; readBy: string[]; createdAt: string;
     /** 특정 자리에 관한 알림이면 그 자리 (대체 부탁 카드에서 바로 지원·거절) */
     slotId?: string;
+};
+/** 알림을 누르면 열리는 곳: 일정 · 요청 화면의 탭, 또는 콘티(entityId 가 콘티 id) */
+export type PlanningTarget = 'requests' | 'schedule' | 'rotation' | 'announcements' | 'conti';
+/** 공지를 받는 사람: 팀 전체 · 몇 개 파트 · 한 일정에 배치된 사람 */
+export type AnnouncementAudience = { kind: 'all' } | { kind: 'roles'; roles: WorshipRole[] } | { kind: 'event'; eventId: string };
+/** 팀 공지. 받는 사람은 올릴 때 정해지고(이후 들어온 팀원은 다시 알림에서 빠짐), 확인을 받으면 누가 확인했는지 남습니다. */
+export type TeamAnnouncement = {
+    id: string; title: string; body: string; authorId: string; createdAt: string;
+    audience: AnnouncementAudience; recipientIds: string[];
+    requireAck: boolean; acks: { userId: string; at: string }[];
+    remindedAt?: string; closedAt: string | null;
 };
 export type RotationTeam = { id: string; name: string; memberIds: string[] };
 export type RotationGroup = {
@@ -69,8 +81,9 @@ export type PlanningState = {
     rotations?: RotationGroup[];
     blockedDates?: BlockedDate[];
     partLeads?: PartLead[];
+    announcements?: TeamAnnouncement[];
 };
-export const emptyPlanningState = (): PlanningState => ({ version: 1, requests: [], events: [], alerts: [], notifications: [], rotations: [], blockedDates: [], partLeads: [] });
+export const emptyPlanningState = (): PlanningState => ({ version: 1, requests: [], events: [], alerts: [], notifications: [], rotations: [], blockedDates: [], partLeads: [], announcements: [] });
 export type ScheduleInput = {
     title: string; kind: TeamSchedule['kind']; startsAt: string; endsAt: string; location: string; notes: string;
     setlistTitle?: string | null; setlistSongs?: string[] | null; setlistId?: string | null;
@@ -114,16 +127,22 @@ export type PlanningCommand =
     | { type: 'member.blockDate'; date: string; reason?: string }
     | { type: 'member.unblockDate'; date: string }
     | { type: 'partLead.set'; part: LeadPart; memberIds: string[] }
+    | { type: 'announcement.create'; title: string; body: string; audience: AnnouncementAudience; requireAck: boolean }
+    | { type: 'announcement.ack'; announcementId: string }
+    | { type: 'announcement.remind'; announcementId: string }
+    | { type: 'announcement.close'; announcementId: string }
+    | { type: 'announcement.delete'; announcementId: string }
     | { type: 'notification.read'; notificationId: string }
     | { type: 'notification.readAll' };
 export type PlanningPanelProps = {
     state: PlanningState; members: TeamMember[]; userId: string; busy: boolean;
     onCommand: (command: PlanningCommand) => Promise<boolean>;
 };
-export const canManagePlanning = (members: TeamMember[], userId: string) => members.some(member => member.userId === userId && (member.permission === 'owner' || member.role === 'leader'));
+/** 일정 · 배치 · 로테이션을 바꿀 수 있는지 — 팀 권한 설정의 '일정 · 배치 관리' (정책이 없으면 관리자 · 인도자) */
+export const canManagePlanning = (members: TeamMember[], userId: string, policy: TeamPolicy = DEFAULT_POLICY) => can(members.find(member => member.userId === userId), policy, 'planningManage');
 /** 관리자이거나 이 역할 파트의 담당이면 대체 요청·지원자 확정을 할 수 있습니다. */
-export const canHandleSlot = (state: Pick<PlanningState, 'partLeads'>, members: TeamMember[], userId: string, role: WorshipRole) => {
-    if (canManagePlanning(members, userId)) return true;
+export const canHandleSlot = (state: Pick<PlanningState, 'partLeads'>, members: TeamMember[], userId: string, role: WorshipRole, policy: TeamPolicy = DEFAULT_POLICY) => {
+    if (canManagePlanning(members, userId, policy)) return true;
     const part = partOfRole(role);
     return Boolean(part) && (state.partLeads ?? []).some(lead => lead.part === part && lead.memberId === userId);
 };

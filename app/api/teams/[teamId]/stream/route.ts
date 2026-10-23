@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { apiUser, json, unauthorized } from '@/lib/server/api';
-import { getTeamEvents, getTeamRepository } from '@/lib/server/teams';
+import { getPushStore, getTeamEvents, getTeamRepository } from '@/lib/server/teams';
 import { visibleTo, type TeamEvent } from '@/lib/server/teamEvents';
 
 export const runtime = 'nodejs';
@@ -24,6 +24,9 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/teams/[t
     const reset = resuming && events.hasGap(teamId, resume);
     const start = resuming && !reset ? resume : events.latestId(teamId);
     const encoder = new TextEncoder();
+    // 이 기기에서 앱이 열려 있는 동안에는 푸시 대신 열린 앱이 알림을 띄웁니다.
+    const device = request.nextUrl.searchParams.get('device');
+    const releaseDevice = getPushStore().deviceConnected(device && /^[\w-]{8,64}$/.test(device) ? device : null);
     let cleanup = () => {};
 
     const stream = new ReadableStream<Uint8Array>({
@@ -45,6 +48,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/teams/[t
             const close = () => {
                 if (closed) return;
                 closed = true;
+                releaseDevice();
                 unsubscribe();
                 clearInterval(ping);
                 try { controller.close(); } catch { /* 이미 닫힘 */ }

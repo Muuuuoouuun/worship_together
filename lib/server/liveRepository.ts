@@ -139,6 +139,9 @@ function firstState(snapshot: LiveSnapshot, by: TeamIdentity): LiveState {
 }
 
 export class LiveRepository {
+    /** 예배를 새로 시작한 뒤 부르는 곳 (앱을 닫은 팀원에게 푸시). 실패해도 시작은 그대로입니다. */
+    afterStart: ((session: LiveSessionSummary, starterId: string) => void) | null = null;
+
     constructor(private db: Database.Database, private teams: TeamRepository, private events: TeamEvents) {
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS live_sessions (
@@ -289,6 +292,7 @@ export class LiveRepository {
             .run(id, teamId, JSON.stringify(snapshot), JSON.stringify(firstState(snapshot, by)), user.id, member.name, now, now);
         const session = this.summary(this.row(id));
         this.events.publish(teamId, 'live.started', session);
+        try { this.afterStart?.(session, user.id); } catch (error) { console.error('[live] afterStart', error); }
         return { session, created: true };
     }
 

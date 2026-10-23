@@ -7,7 +7,12 @@ import { registerOnlineTeams, syncTeam, SYNC_NOTICE_EVENT, type SyncNotice } fro
 import { PLANNING_CHANGED_EVENT } from '@/lib/planningDemo';
 import { showAppToast } from '@/lib/appToast';
 import { notifyDevice } from '@/lib/deviceNotify';
+import { subscribeUserStream, type UserStreamEvent } from '@/lib/userStream';
+import { liveHref, noticeHref } from '@/lib/noticeLinks';
+import { syncPushSubscription } from '@/lib/pushClient';
 import type { LiveSessionSummary } from '@/lib/server/liveRepository';
+import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
+import type { PlanningTarget } from '@/types/planning';
 
 /** 공통 틀이 넘겨주는 지금 팀 정보 (로그인하고 온라인 팀이 있을 때만) */
 export interface TeamConnectionInput {
@@ -19,6 +24,8 @@ export interface TeamConnectionInput {
     isAdmin: boolean;
     canRun: boolean;
     canEditConti: boolean;
+    /** 지금 팀의 권한 설정 (일정 · 공지 버튼을 서버와 같은 규칙으로 보이게) */
+    policy: TeamPolicy;
 }
 
 export interface TeamConnectionValue extends TeamConnectionInput {
@@ -34,8 +41,12 @@ export function useTeamConnection(): TeamConnectionValue | null {
     return useContext(Context);
 }
 
-export const liveHref = (sessionId: string) => `/live/${encodeURIComponent(sessionId)}`;
-const planningHref = (teamId: string, target: string) => `/dashboard/planning?${new URLSearchParams({ team: teamId, tab: target, inbox: '1' })}`;
+/** 지금 팀의 권한 설정. 온라인 팀이 없으면(이 기기 체험) 기본값 */
+export function useTeamPolicy(): TeamPolicy {
+    return useContext(Context)?.policy ?? DEFAULT_POLICY;
+}
+
+export { liveHref };
 
 /** 'planning.notice' 소식 (actions/planningActions 가 보냄) */
 interface PlanningNotice {
@@ -43,7 +54,8 @@ interface PlanningNotice {
     title: string;
     body: string;
     urgent: boolean;
-    target: 'requests' | 'schedule' | 'rotation';
+    target: PlanningTarget;
+    entityId: string;
 }
 
 /**
@@ -85,6 +97,11 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
         };
     }, [teamId, teamKey]);
 
+    // 알림을 허락한 기기는 앱을 닫아도 알림이 오도록 이 사람으로 푸시를 구독해 둡니다 (같은 기기에서 다른 사람이 로그인해도 맞춰짐).
+    useEffect(() => {
+        if (userId) void syncPushSubscription();
+    }, [userId]);
+
     // 지금 진행 중인 예배
     useEffect(() => {
         if (!teamId) return;
@@ -112,7 +129,7 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                 case 'planning.notice': {
                     // 나에게 온 일정 · 요청 알림 (서버가 받는 사람에게만 보냅니다)
                     const notice = payload as unknown as PlanningNotice;
-                    const href = planningHref(teamId, notice.target);
+                    const href = noticeHref(teamId, notice);
                     void notifyDevice({ title: notice.title, body: notice.body, tag: `plan-${notice.id}`, url: href });
                     // 일정 · 요청 화면은 알림 목록과 자기 알림 줄이 있어 겹쳐 띄우지 않습니다.
                     if (!window.location.pathname.startsWith('/dashboard/planning')) {
@@ -122,7 +139,8 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                             title: notice.title,
                             body: notice.body,
                             action: { label: '보기', href },
-                            ttl: notice.urgent ? 15_000 : 6_000,
+                            // 긴급 알림과 공지는 조금 더 오래 둡니다.
+                            ttl: notice.urgent || notice.target === 'announcements' ? 15_000 : 6_000,
                         });
                     }
                     return;
@@ -171,6 +189,36 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
             if (syncTimer.current) clearTimeout(syncTimer.current);
         };
     }, [teamId, userId, router]);
+
+    // 내가 속한 다른 팀의 알림 · 공지 · 예배 시작 (지금 팀은 위의 팀 소식 흐름이 맡음)
+    useEffect(() => {
+        if (!teamId || teamKey.split(',').filter(Boolean).length < 2) return;
+        return subscribeUserStream(teamId, (event: UserStreamEvent) => {
+            if (event.type === 'planning.notice') {
+                const notice = event.payload as PlanningNotice;
+                const href = noticeHref(event.teamId, notice);
+                // 홈 · 화면 구석의 알림 배지는 모든 팀을 함께 셉니다.
+                window.dispatchEvent(new Event(PLANNING_CHANGED_EVENT));
+                void notifyDevice({ title: `${event.teamName} · ${notice.title}`, body: notice.body, tag: `plan-${notice.id}`, url: href });
+                showAppToast({
+                    id: `plan-${notice.id}`,
+                    tone: notice.urgent ? 'warning' : 'info',
+                    title: notice.title,
+                    body: `${event.teamName} · ${notice.body}`,
+                    action: { label: '보기', href },
+                    ttl: notice.urgent || notice.target === 'announcements' ? 15_000 : 6_000,
+                });
+                return;
+            }
+            if (event.type === 'live.started') {
+                const session = event.payload as LiveSessionSummary;
+                void notifyDevice({ title: `${event.teamName} · 예배가 시작됐어요`, body: `${session.startedByName}님 · ${session.title}`, tag: `live-${session.id}`, url: liveHref(session.id) });
+                if (!window.location.pathname.startsWith('/live/')) {
+                    showAppToast({ id: `live-${session.id}`, tone: 'live', title: `${event.teamName} · 예배가 시작됐어요`, body: `${session.startedByName}님 · ${session.title}`, action: { label: '입장', href: liveHref(session.id) }, ttl: 15_000 });
+                }
+            }
+        });
+    }, [teamId, teamKey]);
 
     // 다른 팀원이 바꾼 콘티 · 권한 때문에 되돌린 저장을 알립니다.
     useEffect(() => {

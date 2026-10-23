@@ -15,6 +15,7 @@ import {
     ListMusic,
     ListPlus,
     MapPin,
+    Megaphone,
     MessageCircle,
     Plus,
     Radio,
@@ -31,7 +32,7 @@ import { worshipRoles } from '@/types/team';
 import { useConti } from '@/components/conti/context';
 import { NoticeAvatar } from '@/components/conti/AlertsScreen';
 import { EVENT_KIND } from '@/components/conti/planningUi';
-import type { PartAssignment, PlanningView, RequestItem, ServiceDay } from '@/components/conti/planningBridge';
+import type { AnnouncementItem, PartAssignment, PlanningView, RequestItem, ServiceDay } from '@/components/conti/planningBridge';
 import {
     SETLIST_STATUS,
     commentsOf,
@@ -313,6 +314,15 @@ export default function HomeTiles({ sessionHref, team, titleAs: Title = 'h1', li
             </header>
 
             {live ? <LiveNow live={live} /> : null}
+
+            {planning.announcements.length > 0 && (
+                <AnnouncementStrip
+                    items={planning.announcements}
+                    href={withTab(planning.planningHref, 'announcements')}
+                    busy={planning.busy}
+                    onAck={planning.actions ? (id) => void planning.actions!.dispatch({ type: 'announcement.ack', announcementId: id }) : null}
+                />
+            )}
 
             {planning.error && (
                 <p role="alert" className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
@@ -1027,6 +1037,50 @@ function ShortcutsTile({ items, className }: { items: Shortcut[]; className?: st
 }
 
 /** 팀에서 예배가 진행 중일 때 홈 맨 위 — 누가 시작했고 몇 명이 들어와 있는지, 그리고 '입장' */
+/**
+ * 팀 공지. 내가 확인할 공지를 먼저(최대 2개), 없으면 가장 최근 공지 하나를 보여 줍니다.
+ * 확인을 받는 공지는 여기서 바로 '확인했어요', 내가 쓴 공지는 확인 현황을 봅니다.
+ */
+function AnnouncementStrip({ items, href, busy, onAck }: { items: AnnouncementItem[]; href: string; busy: boolean; onAck: ((id: string) => void) | null }) {
+    const waiting = items.filter((item) => item.needsMyAck);
+    const shown = waiting.length ? waiting.slice(0, 2) : items.slice(0, 1);
+    return (
+        <section aria-label="팀 공지" className="space-y-2">
+            {shown.map((item) => (
+                <article key={item.id} className={cn('flex flex-wrap items-start gap-x-3.5 gap-y-3 rounded-3xl p-4 sm:p-5', item.needsMyAck ? TONE_TILE.peach : cn('border bg-card', line))}>
+                    <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-2xl', item.needsMyAck ? TONE_TILE_ICON.peach : 'bg-muted text-orange-600 dark:text-orange-300')}>
+                        <Megaphone className="size-[18px]" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1 basis-48">
+                        <p className={cn('text-xs font-medium', sub)}>
+                            공지 · {item.authorName} · {item.ago}
+                            {waiting.length > 2 && item === shown[0] ? ` · 확인할 공지 ${waiting.length}개` : ''}
+                        </p>
+                        <p className={cn('mt-0.5 break-words text-[15px] font-semibold leading-snug tracking-tight', ink)}>{item.title}</p>
+                        <p className={cn('mt-1 line-clamp-2 whitespace-pre-line break-words text-[13px] leading-relaxed', body)}>{item.body}</p>
+                        {item.mine && item.requireAck && (
+                            <p className={cn('mt-1.5 text-xs font-medium', item.ackCount < item.total ? 'text-secondary' : 'text-brand')}>
+                                확인 {item.ackCount}/{item.total}{item.ackCount < item.total ? ` · 아직 ${item.total - item.ackCount}명` : ' · 모두 확인'}
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+                        {item.needsMyAck && onAck && (
+                            <button type="button" disabled={busy} onClick={() => onAck(item.id)} className={cn(buttonVariants({ size: 'sm' }), 'flex-1 sm:flex-none')}>
+                                <Check aria-hidden="true" />
+                                {item.requireAck ? '확인했어요' : '확인'}
+                            </button>
+                        )}
+                        <Link href={href} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'flex-1 sm:flex-none')}>
+                            공지 보기
+                        </Link>
+                    </div>
+                </article>
+            ))}
+        </section>
+    );
+}
+
 function LiveNow({ live }: { live: NonNullable<HomeTilesProps['live']> }) {
     return (
         <section aria-label="진행 중인 예배" className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-3xl bg-brand p-4 text-brand-foreground sm:p-5">

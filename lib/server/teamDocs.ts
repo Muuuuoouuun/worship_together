@@ -63,7 +63,12 @@ function onlyAddsComments(before: string | null, after: string): boolean {
     }
 }
 
+/** 저장한 뒤 부르는 곳 (콘티 확정 · 변경 알림). 실패해도 저장은 그대로입니다. */
+export type DocSavedHook = (info: { teamId: string; user: TeamIdentity; key: string; kind: TeamDocKind; before: string | null; after: string }) => void;
+
 export class TeamDocs {
+    afterSave: DocSavedHook | null = null;
+
     constructor(private db: Database.Database, private teams: TeamRepository, private events: TeamEvents) {
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS online_docs (
@@ -85,6 +90,11 @@ export class TeamDocs {
         const member = this.teams.membership(teamId, userId);
         if (!member) throw new Error('이 팀에 접근할 수 없습니다.');
         return member;
+    }
+
+    /** 서버 안에서 읽는 문서 내용 (권한 검사 없음) */
+    raw(teamId: string, key: string): string | null {
+        return (this.db.prepare('SELECT json FROM online_docs WHERE team_id = ? AND doc_key = ?').get(teamId, key) as { json: string } | undefined)?.json ?? null;
     }
 
     /** since 이후에 바뀐 문서. cursor 는 다음에 넘길 값 */
@@ -121,6 +131,7 @@ export class TeamDocs {
                 ON CONFLICT(team_id, doc_key) DO UPDATE SET json = excluded.json, version = excluded.version, updated_at = excluded.updated_at, updated_by = excluded.updated_by, updated_by_name = excluded.updated_by_name`)
                 .run(teamId, key, kind, json, version, now, user.id, member.name);
             this.events.publish(teamId, 'docs.changed', { key, kind, version, by: user.id, byName: member.name });
+            try { this.afterSave?.({ teamId, user: { id: user.id, name: member.name }, key, kind, before: current?.json ?? null, after: json }); } catch (error) { console.error('[docs] afterSave', error); }
             return { ok: true, version };
         })();
     }

@@ -2,12 +2,14 @@
 
 import { cloneElement, isValidElement, memo, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { canManagePlanning, planningDate, scheduleTemplates, type PlanningCommand, type PlanningPanelProps, type ScheduleSlot, type ScheduleTemplateKey, type TeamSchedule, type UrgentAlert } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { Bell, CalendarDays, CalendarPlus, CalendarX2, Check, ChevronDown, ClipboardCopy, Copy, Download, ExternalLink, List, MessageSquare, Music, Plus, RotateCcw, Search, Send, Share2, Sparkles, Table, Users, X } from 'lucide-react';
 import { downloadIcsFile, getMyGoogleCalendarUrl, generateMyScheduleShareText } from '@/lib/calendarExport';
 import { cn } from '@/lib/utils';
+import { useTeamPolicy } from '@/components/app/TeamConnection';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { STATUS, type StatusTone } from '@/components/ui/status';
 import { Avatar, TONE_BLOCK } from '@/components/conti/ui';
@@ -555,6 +557,16 @@ function ReasonChips({ disabled, onPick, titleSuffix = '사유로 1클릭 불참
             </button>
         ))}
     </div>;
+}
+
+/** 연결된 콘티의 곡 순서 · 악보 화면으로 (일정에서 고른 콘티, 없으면 같은 날 콘티) */
+function ContiLink({ setlistId, className }: { setlistId: string; className?: string }) {
+    return (
+        <Link href={`/dashboard/songs?${new URLSearchParams({ tab: 'order', setlist: setlistId })}`} className={cn(outlineXs, className)}>
+            <ExternalLink className="text-muted-foreground" />
+            <span>콘티 · 악보 보기</span>
+        </Link>
+    );
 }
 
 /** 구글 캘린더 · .ics 버튼 한 쌍 */
@@ -1135,6 +1147,7 @@ function EventItem({ event, defaultOpen, now, alerts, manager, members, names, u
                             <p className="truncate text-[15px] font-medium text-foreground">{event.setlistTitle}</p>
                         </div>
                     </div>
+                    {event.setlistId ? <ContiLink setlistId={event.setlistId} /> : null}
                     {manager && live ? (
                         <Button
                             type="button"
@@ -1303,7 +1316,8 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);
     }, []);
-    const manager = canManagePlanning(members, userId);
+    const policy = useTeamPolicy();
+    const manager = canManagePlanning(members, userId, policy);
     const names = useMemo(() => new Map(members.map(member => [member.userId, member.name])), [members]);
     const eventMap = useMemo(() => new Map(state.events.map(event => [event.id, event])), [state.events]);
     const { alertsByEvent, openAlerts } = useMemo(() => {
@@ -1681,6 +1695,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                                 <span>콘티: {event.setlistTitle} {event.setlistSongs?.length ? `(${event.setlistSongs.length}곡)` : ''}</span>
                                                 <ChevronDown size={13} aria-hidden="true" className={cn('text-muted-foreground transition-transform', isSetlistPreviewOpen && 'rotate-180')} />
                                             </button>
+                                            {event.setlistId ? <ContiLink setlistId={event.setlistId} className="ml-1" /> : null}
                                             {isSetlistPreviewOpen && event.setlistSongs?.length ? (
                                                 <ol className="mt-1 space-y-1 rounded-2xl bg-card/80 px-4 py-3 text-[13px] text-foreground/80">
                                                     {event.setlistSongs.map((song, idx) => (
@@ -1751,6 +1766,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                     <ChevronDown className={cn('text-muted-foreground transition-transform', previewSetlistEventId === nextDuty.event.id && 'rotate-180')} />
                                 </Button>
                             ) : null}
+                            {nextDuty.event.setlistId ? <ContiLink setlistId={nextDuty.event.setlistId} /> : null}
                             <Button type="button" variant="ghost" size="xs" className="text-muted-foreground hover:text-destructive" onClick={() => setActiveDeclineSlotId(prev => prev === nextDuty.slot.id ? null : nextDuty.slot.id)}>
                                 참석 상태 변경
                             </Button>

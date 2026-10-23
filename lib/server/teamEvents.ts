@@ -108,6 +108,19 @@ export class TeamEvents {
         return missed > CATCH_UP_LIMIT;
     }
 
+    /** 여러 팀에서 afterId 다음 소식 중 types 에 해당하고 이 사람이 받을 것 (번호는 모든 팀이 함께 쓰므로 한 줄로 이어 받습니다) */
+    sinceAcross(teamIds: string[], afterId: number, userId: string, types: TeamEventType[], limit = CATCH_UP_LIMIT): TeamEvent[] {
+        if (!teamIds.length || !types.length) return [];
+        const rows = this.db.prepare(`SELECT * FROM team_events WHERE team_id IN (${teamIds.map(() => '?').join(',')}) AND type IN (${types.map(() => '?').join(',')}) AND id > ? ORDER BY id LIMIT ?`)
+            .all(...teamIds, ...types, afterId, limit) as Row[];
+        return rows.map(toEvent).filter((event) => visibleTo(event, userId));
+    }
+
+    /** 모든 팀을 통틀어 가장 최근 소식 번호 */
+    latestIdOverall(): number {
+        return (this.db.prepare('SELECT coalesce(max(id), 0) AS id FROM team_events').get() as { id: number }).id;
+    }
+
     latestId(teamId: string): number {
         return (this.db.prepare('SELECT coalesce(max(id), 0) AS id FROM team_events WHERE team_id = ?').get(teamId) as { id: number }).id;
     }
