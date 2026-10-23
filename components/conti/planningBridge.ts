@@ -8,6 +8,7 @@ import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { canHandleSlot, canManagePlanning, leadParts, type LeadPart } from '@/types/planning';
 import { slotKeepers, substituteOptions, type SlotKeeper, type SubstituteOption } from '@/lib/planning';
 import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
+import { linkedSetlistId } from '@/lib/serviceLink';
 import { diffDays, relativeTime, seoulDateTime, type ContiSetlist } from './model';
 
 export const ROLE_ORDER: WorshipRole[] = ['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member'];
@@ -267,6 +268,8 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
     const ago = (iso: string) => relativeTime(iso, now);
 
     const live = state.events.filter((event) => !event.cancelled);
+    const linkable = (input.setlists ?? []).map((setlist) => ({ id: setlist.id, day: setlist.date, time: setlist.time }));
+    const setlistTitleOf = (id: string | null) => (id ? (input.setlists ?? []).find((setlist) => setlist.id === id)?.service ?? null : null);
     const openAlert = (eventId: string, slotId: string) => state.alerts.some((alert) => alert.eventId === eventId && alert.slotId === slotId && !alert.resolvedAt);
     /** 겹치는 시간의 다른 일정(또는 같은 일정의 다른 자리)에 이미 배치된 사람은 지원할 수 없습니다 (lib/planning 의 available 과 같은 규칙). */
     const overlaps = (a: TeamSchedule, b: TeamSchedule) => Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
@@ -317,8 +320,9 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                 endTime: seoulDateTime(event.endsAt).time,
                 title: event.title,
                 place: event.location,
-                setlistId: event.setlistId ?? null,
-                setlistTitle: event.setlistTitle ?? null,
+                // 일정에서 고른 콘티가 없으면 같은 날 콘티로 잇습니다 (lib/serviceLink).
+                setlistId: linkedSetlistId(event, linkable) ?? event.setlistId ?? null,
+                setlistTitle: event.setlistTitle ?? setlistTitleOf(linkedSetlistId(event, linkable)),
                 assignments,
                 counts: {
                     total: assignments.length,

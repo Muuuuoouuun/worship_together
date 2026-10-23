@@ -21,6 +21,8 @@ import RequestsPanel from './RequestsPanel';
 import SchedulePanel from './SchedulePanel';
 import RotationPanel from './RotationPanel';
 import AnnouncementsPanel from './AnnouncementsPanel';
+import { useLibrarySetlists } from './useLibrarySetlists';
+import { withLinkedSetlists } from '@/lib/serviceLink';
 
 type Props = { teams: OnlineTeam[]; userId?: string; initialTeamId?: string; initialTab?: string; initialSetlist?: { id: string; title: string } };
 type TabId = 'schedule' | 'announcements' | 'rotation' | 'requests';
@@ -140,7 +142,10 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
     }, [key, loaded, online, receive, roster, teamId, userId]);
 
     const unread = useMemo(() => state.notifications.filter(item => !item.readBy.includes(userId)), [state.notifications, userId]);
-    const panelProps = useMemo(() => ({ state, members: roster, userId, busy: busy || !loaded, onCommand }), [state, roster, userId, busy, loaded, onCommand]);
+    // 일정에 콘티를 따로 고르지 않았으면 같은 날 콘티를 보여 줍니다 (lib/serviceLink · 저장하지 않음).
+    const library = useLibrarySetlists(teamId);
+    const linkedState = useMemo(() => (library.length ? { ...state, events: withLinkedSetlists(state.events, library) } : state), [state, library]);
+    const panelProps = useMemo(() => ({ state: linkedState, members: roster, userId, busy: busy || !loaded, onCommand }), [linkedState, roster, userId, busy, loaded, onCommand]);
     const sorted = useMemo(() => [...state.notifications].sort((a, b) => Number(a.readBy.includes(userId)) - Number(b.readBy.includes(userId))), [state.notifications, userId]);
     const urgentUnread = unread.some(item => item.urgent);
     return <div className="space-y-6">
