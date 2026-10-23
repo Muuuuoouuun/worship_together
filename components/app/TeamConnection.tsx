@@ -35,6 +35,16 @@ export function useTeamConnection(): TeamConnectionValue | null {
 }
 
 export const liveHref = (sessionId: string) => `/live/${encodeURIComponent(sessionId)}`;
+const planningHref = (teamId: string, target: string) => `/dashboard/planning?${new URLSearchParams({ team: teamId, tab: target, inbox: '1' })}`;
+
+/** 'planning.notice' 소식 (actions/planningActions 가 보냄) */
+interface PlanningNotice {
+    id: string;
+    title: string;
+    body: string;
+    urgent: boolean;
+    target: 'requests' | 'schedule' | 'rotation';
+}
 
 /**
  * 공통 틀 한 곳에서 지금 팀과 실시간으로 이어 둡니다.
@@ -99,6 +109,24 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                 case 'planning.changed':
                     if (payload?.by !== userId) window.dispatchEvent(new Event(PLANNING_CHANGED_EVENT));
                     return;
+                case 'planning.notice': {
+                    // 나에게 온 일정 · 요청 알림 (서버가 받는 사람에게만 보냅니다)
+                    const notice = payload as unknown as PlanningNotice;
+                    const href = planningHref(teamId, notice.target);
+                    void notifyDevice({ title: notice.title, body: notice.body, tag: `plan-${notice.id}`, url: href });
+                    // 일정 · 요청 화면은 알림 목록과 자기 알림 줄이 있어 겹쳐 띄우지 않습니다.
+                    if (!window.location.pathname.startsWith('/dashboard/planning')) {
+                        showAppToast({
+                            id: `plan-${notice.id}`,
+                            tone: notice.urgent ? 'warning' : 'info',
+                            title: notice.title,
+                            body: notice.body,
+                            action: { label: '보기', href },
+                            ttl: notice.urgent ? 15_000 : 6_000,
+                        });
+                    }
+                    return;
+                }
                 case 'team.changed':
                     // 명단 · 역할 · 권한이 바뀌면 서버에서 그린 부분(팀 바꾸기 · 권한)을 새로 받습니다.
                     if (refreshTimer.current) clearTimeout(refreshTimer.current);
@@ -125,6 +153,14 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                 case 'live.state':
                     void load();
                     return;
+                case 'stream.reset':
+                    // 오래 끊겨 있어 놓친 소식을 이어 받지 못함 — 팀 자료 · 일정 · 명단 · 예배를 처음부터 다시 읽습니다.
+                    void syncTeam(teamId);
+                    window.dispatchEvent(new Event(PLANNING_CHANGED_EVENT));
+                    void load();
+                    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+                    refreshTimer.current = setTimeout(() => router.refresh(), 300);
+                    return;
                 default:
             }
         }, (status) => { if (active) setStream(status); });
@@ -145,7 +181,7 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                 group: `sync-${notice.kind}`,
                 tone: notice.kind === 'received' ? 'info' : 'danger',
                 title: notice.message,
-                body: notice.kind === 'received' ? '콘티 · 악보 화면에 바로 반영했어요' : notice.kind === 'denied' ? '팀 자료로 되돌렸어요' : undefined,
+                body: notice.detail ?? (notice.kind === 'received' ? '콘티 · 악보 화면에 바로 반영했어요' : undefined),
             });
         };
         window.addEventListener(SYNC_NOTICE_EVENT, onNotice);

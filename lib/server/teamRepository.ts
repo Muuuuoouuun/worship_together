@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { applyPlanningCommand, parsePlanningState, planningForViewer } from '../planning';
 import { DEFAULT_POLICY, parsePolicy, type TeamPolicy } from '../permissions';
-import type { PlanningCommand, PlanningState } from '../../types/planning';
+import type { PlanningCommand, PlanningNotification, PlanningState } from '../../types/planning';
 import type { InvitationPreview, OnlineTeam, TeamIdentity, TeamMember, UserProfile, WorshipRole } from '../../types/team';
 
 const roles = new Set(['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member']);
@@ -105,11 +105,17 @@ export class TeamRepository {
         return planningForViewer(this.readPlanning(teamId), members, userId);
     }
     updatePlanning(teamId: string, userId: string, command: PlanningCommand | unknown): PlanningState {
+        return this.applyPlanning(teamId, userId, command).state;
+    }
+    /** 저장하고, 이번 명령으로 새로 생긴 알림도 돌려줍니다 — 받는 사람 화면에 바로 띄우도록 */
+    applyPlanning(teamId: string, userId: string, command: PlanningCommand | unknown): { state: PlanningState; created: PlanningNotification[] } {
         return this.db.transaction(() => {
             const members = this.planningMembers(teamId, userId);
-            const state = applyPlanningCommand(this.readPlanning(teamId), members, userId, command);
+            const previous = this.readPlanning(teamId);
+            const state = applyPlanningCommand(previous, members, userId, command);
             this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
-            return planningForViewer(state, members, userId);
+            const before = new Set(previous.notifications.map((item) => item.id));
+            return { state: planningForViewer(state, members, userId), created: state.notifications.filter((item) => !before.has(item.id)) };
         })();
     }
     private identity(user: TeamIdentity) {

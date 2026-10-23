@@ -1,6 +1,6 @@
 import * as z from 'zod';
 import { createClientId } from './clientId';
-import { worshipRoles, type TeamMember } from '../types/team';
+import { isPlaceholderMember, worshipRoles, type TeamMember } from '../types/team';
 import { canHandleSlot, canManagePlanning, emptyPlanningState, leadParts, partOfRole, planningDate, planningDay, requestKinds, scheduleTemplates, type LeadPart, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
 
 const id = z.string().min(1).max(200);
@@ -144,7 +144,9 @@ export function previewRotationBatchSkips(state: PlanningState, members: TeamMem
     }
 }
 
-const managerIds = (members: TeamMember[]) => members.filter(member => member.permission === 'owner' || member.role === 'leader').map(member => member.userId);
+/** 알림을 받고 직접 처리할 수 있는 팀원 — 이름만 올려 둔 명단 자리(미가입)는 알림을 볼 수 없어 빠집니다. */
+const reachable = (members: TeamMember[], memberId: string) => !isPlaceholderMember(memberId) && members.some(member => member.userId === memberId);
+const managerIds = (members: TeamMember[]) => members.filter(member => !isPlaceholderMember(member.userId) && (member.permission === 'owner' || member.role === 'leader')).map(member => member.userId);
 
 /** 겹치는 시간에 이 팀원이 이미 서는 다른 일정 (같은 자리는 제외). 없으면 undefined */
 export function clashingEvent(state: PlanningState, event: TeamSchedule, memberId: string, slotId?: string): TeamSchedule | undefined {
@@ -153,9 +155,9 @@ export function clashingEvent(state: PlanningState, event: TeamSchedule, memberI
 
 export type SlotKeeper = { memberId: string; as: 'leader' | LeadPart | 'manager' };
 
-/** 결석·대체를 챙길 사람: 그 예배의 인도자 + 파트 담당(악기장·싱어 담당). 아무도 없으면 인도자·관리자 전체 */
+/** 결석·대체를 챙길 사람: 그 예배의 인도자 + 파트 담당(악기장·싱어 담당). 아무도 없으면 인도자·관리자 전체 (모두 계정으로 들어온 팀원만) */
 export function slotKeepers(state: PlanningState, members: TeamMember[], event: TeamSchedule, slot: ScheduleSlot): SlotKeeper[] {
-    const isMember = (memberId: string) => members.some(member => member.userId === memberId);
+    const isMember = (memberId: string) => reachable(members, memberId);
     const part = partOfRole(slot.role);
     const keepers: SlotKeeper[] = [];
     for (const item of event.slots) if (item.role === 'leader' && item.memberId && item.attendance !== 'absent' && isMember(item.memberId)) keepers.push({ memberId: item.memberId, as: 'leader' });
@@ -220,7 +222,8 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         notify(recipients, kind === 'absence' ? '결석 · 대체 인원이 필요해요' : kind === 'substitute' ? '대체 인원을 구해요' : '긴급 안내', `${event.title} · ${text}`, 'schedule', event.id, true, slotId ?? undefined);
     };
     const keeperIds = (event: TeamSchedule, slot: ScheduleSlot) => slotKeepers(state, members, event, slot).map(keeper => keeper.memberId);
-    const substituteCandidates = (event: TeamSchedule, slot: ScheduleSlot) => substituteOptions(state, members, event, slot).filter(option => !option.blocker).map(option => members.find(member => member.userId === option.memberId)!);
+    /** 대체를 부탁할 수 있는 사람 — 설 수 있고, 부탁 알림을 받을 수 있는 팀원 */
+    const substituteCandidates = (event: TeamSchedule, slot: ScheduleSlot) => substituteOptions(state, members, event, slot).filter(option => !option.blocker && !isPlaceholderMember(option.memberId)).map(option => members.find(member => member.userId === option.memberId)!);
     /** 같은 악기·파트 팀원에게 대체를 부탁하고, 부탁한 사람을 자리에 남깁니다. */
     const askSubstitutes = (event: TeamSchedule, slot: ScheduleSlot, detail: string) => {
         const subs = substituteCandidates(event, slot).filter(member => member.userId !== userId);
@@ -417,7 +420,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                     askSubstitutes(event, slot, command.body);
                 } else {
                     urgent(event, slot.id, 'substitute', command.body);
-                    slot.asked = [...new Set([...(slot.asked ?? []), ...everyone.filter(memberId => memberId !== userId && memberId !== slot.memberId)])];
+                    slot.asked = [...new Set([...(slot.asked ?? []), ...everyone.filter(memberId => memberId !== userId && memberId !== slot.memberId && !isPlaceholderMember(memberId))])];
                 }
             }
             break;
@@ -464,7 +467,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             slot.passed = [...(slot.passed ?? []), userId];
             state.notifications.forEach(item => { if (item.slotId === slot.id && item.recipientIds.includes(userId) && !item.readBy.includes(userId)) item.readBy.push(userId); });
             // 부탁한 사람이 모두 어렵다고 하면 챙기는 사람에게 다시 알립니다.
-            const waiting = slot.asked.filter(memberId => !slot.passed!.includes(memberId) && members.some(member => member.userId === memberId));
+            const waiting = slot.asked.filter(memberId => !slot.passed!.includes(memberId) && reachable(members, memberId));
             if (!waiting.length && !slot.volunteers.length) notify(keeperIds(event, slot), '대체 부탁 · 모두 어려워요', `${event.title} · ${worshipRoles[slot.role]} · 팀 전체에 요청하거나 직접 배정해 주세요`, 'schedule', event.id, true, slot.id);
             break;
         }
@@ -473,7 +476,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (!canHandleSlot(state, members, userId, slot.role)) manage();
             if (slot.memberId && slot.attendance !== 'absent') throw new Error('이미 담당자가 있는 자리입니다.');
             const assignedInEvent = new Set(event.slots.map(item => item.memberId).filter(Boolean));
-            const targets = everyone.filter(memberId => memberId !== userId && !assignedInEvent.has(memberId) && !slot.passed?.includes(memberId) && !slot.asked?.includes(memberId));
+            const targets = everyone.filter(memberId => memberId !== userId && !isPlaceholderMember(memberId) && !assignedInEvent.has(memberId) && !slot.passed?.includes(memberId) && !slot.asked?.includes(memberId));
             if (!targets.length) throw new Error('더 부탁할 팀원이 없습니다.');
             if (!state.alerts.some(item => item.eventId === event.id && item.slotId === slot.id && !item.resolvedAt)) state.alerts.unshift({ id: createClientId(), eventId: event.id, slotId: slot.id, kind: 'substitute', body: `${worshipRoles[slot.role]} 대체 인원을 구합니다`, authorId: userId, createdAt: now, resolvedAt: null });
             slot.asked = [...new Set([...(slot.asked ?? []), ...targets])];

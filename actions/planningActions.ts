@@ -3,7 +3,7 @@
 import { getCurrentUser } from '@/lib/auth';
 import { getTeamEvents, getTeamRepository } from '@/lib/server/teams';
 import type { PlanningCommand, PlanningState } from '@/types/planning';
-import type { TeamActionResult, TeamMember } from '@/types/team';
+import { isPlaceholderMember, type TeamActionResult, type TeamMember } from '@/types/team';
 
 async function run(teamId: string, command?: PlanningCommand): Promise<TeamActionResult<PlanningState>> {
     try {
@@ -12,9 +12,15 @@ async function run(teamId: string, command?: PlanningCommand): Promise<TeamActio
         if (typeof teamId !== 'string' || !teamId || teamId.length > 200) throw new Error('팀을 확인해주세요.');
         const repository = getTeamRepository();
         if (command === undefined) return { ok: true, value: repository.planning(teamId, user.id) };
-        const value = repository.updatePlanning(teamId, user.id, command);
+        const { state: value, created } = repository.applyPlanning(teamId, user.id, command);
+        const events = getTeamEvents();
         // 일정 · 요청 · 소식을 보고 있는 다른 팀원 화면이 바로 다시 읽습니다.
-        getTeamEvents().publish(teamId, 'planning.changed', { by: user.id });
+        events.publish(teamId, 'planning.changed', { by: user.id });
+        // 새 알림은 받는 사람에게만, 어느 화면에 있든 바로 띄웁니다 (미가입 명단 자리는 볼 사람이 없으므로 빼고).
+        for (const item of [...created].reverse()) {
+            const audience = item.recipientIds.filter((id) => !isPlaceholderMember(id));
+            if (audience.length) events.publish(teamId, 'planning.notice', { id: item.id, title: item.title, body: item.body, urgent: item.urgent, target: item.target, entityId: item.entityId, slotId: item.slotId ?? null, by: user.id }, audience);
+        }
         return { ok: true, value };
     } catch (error) {
         const message = error instanceof Error ? error.message : '';

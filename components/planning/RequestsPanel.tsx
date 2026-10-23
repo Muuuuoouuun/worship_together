@@ -12,6 +12,7 @@ import {
     planningDate, requestKinds, requestStatuses,
     type PlanningCommand, type PlanningPanelProps, type SetlistRequest,
 } from '@/types/planning';
+import { isPlaceholderMember } from '@/types/team';
 
 type Props = PlanningPanelProps & { initialSetlist?: { id: string; title: string } };
 type RunCommand = (command: PlanningCommand, message: string) => Promise<boolean>;
@@ -31,7 +32,8 @@ const firstLine = (text: string) => text.trim().split('\n')[0]?.trim() ?? '';
 
 function RequestComposer({ members, initialSetlist, disabled, run }: Pick<Props, 'members' | 'initialSetlist'> & { disabled: boolean; run: RunCommand }) {
     const id = useId();
-    const leaders = members.filter(member => member.permission === 'owner' || member.role === 'leader');
+    // 이름만 올려 둔 명단 자리(미가입)는 요청을 받아 볼 수 없으므로 받는 사람에서 뺍니다.
+    const leaders = members.filter(member => !isPlaceholderMember(member.userId) && (member.permission === 'owner' || member.role === 'leader'));
 
     return (
         <form onSubmit={async event => {

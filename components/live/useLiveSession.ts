@@ -220,7 +220,7 @@ export function useLiveSession(sessionId: string, { exitHref = '/dashboard' }: {
         let wasOffline = false;
         const unsubscribe = subscribeTeamStream(teamId, (event) => {
             const payload = event.payload as Record<string, unknown> | null;
-            if (event.type === 'team.changed') { void refetch(); return; }
+            if (event.type === 'team.changed' || event.type === 'stream.reset') { void refetch(); return; }
             if (!payload || payload.sessionId !== sessionId) return;
             switch (event.type) {
                 case 'live.state': {

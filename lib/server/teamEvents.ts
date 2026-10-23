@@ -10,13 +10,17 @@ import type Database from 'better-sqlite3';
 export type TeamEventType =
     | 'docs.changed'
     | 'planning.changed'
+    /** 일정 · 요청 알림 하나 (받는 사람에게만) */
+    | 'planning.notice'
     | 'team.changed'
     | 'live.started'
     | 'live.ended'
     | 'live.state'
     | 'live.presence'
     | 'live.cue'
-    | 'live.ack';
+    | 'live.ack'
+    /** 다시 연결했는데 놓친 소식을 이어 줄 수 없음 — 처음부터 다시 읽으라는 신호 (저장하지 않고 흐름에서만 보냄) */
+    | 'stream.reset';
 
 export interface TeamEvent {
     id: number;
@@ -32,6 +36,8 @@ type Row = { id: number; team_id: string; type: TeamEventType; payload_json: str
 
 /** 팀마다 남겨 두는 최근 소식 수 — 다시 연결한 화면이 따라잡을 만큼만 */
 const KEEP_PER_TEAM = 600;
+/** 다시 연결한 화면에 한 번에 이어 보내는 소식 수. 이보다 많이 놓쳤으면 처음부터 다시 맞추게 합니다. */
+export const CATCH_UP_LIMIT = 300;
 
 function toEvent(row: Row): TeamEvent {
     return {
@@ -50,7 +56,8 @@ export function visibleTo(event: TeamEvent, userId: string): boolean {
 
 export class TeamEvents {
     private emitter = new EventEmitter();
-    private published = 0;
+    /** 팀마다 정리한 뒤로 쌓인 소식 수 */
+    private published = new Map<string, number>();
 
     constructor(private db: Database.Database) {
         this.emitter.setMaxListeners(0);
@@ -72,18 +79,33 @@ export class TeamEvents {
         const result = this.db.prepare('INSERT INTO team_events(team_id, type, payload_json, audience_json, created_at) VALUES (?, ?, ?, ?, ?)')
             .run(teamId, type, JSON.stringify(payload ?? null), audience ? JSON.stringify([...new Set(audience)]) : null, createdAt);
         const event: TeamEvent = { id: Number(result.lastInsertRowid), teamId, type, payload, audience: audience ? [...new Set(audience)] : null, createdAt };
-        this.published += 1;
-        if (this.published % 50 === 0) {
-            this.db.prepare('DELETE FROM team_events WHERE team_id = ? AND id <= ?').run(teamId, event.id - KEEP_PER_TEAM);
+        const count = (this.published.get(teamId) ?? 0) + 1;
+        this.published.set(teamId, count % 50);
+        if (count >= 50) {
+            // 번호는 모든 팀이 함께 쓰므로, 이 팀의 최근 KEEP_PER_TEAM 개를 세어서 그보다 오래된 것을 지웁니다.
+            const floor = this.db.prepare('SELECT id FROM team_events WHERE team_id = ? ORDER BY id DESC LIMIT 1 OFFSET ?').get(teamId, KEEP_PER_TEAM) as { id: number } | undefined;
+            if (floor) this.db.prepare('DELETE FROM team_events WHERE team_id = ? AND id <= ?').run(teamId, floor.id);
         }
         this.emitter.emit(teamId, event);
         return event;
     }
 
     /** afterId 다음 소식 (이 사람이 받을 것만) */
-    since(teamId: string, afterId: number, userId: string, limit = 300): TeamEvent[] {
+    since(teamId: string, afterId: number, userId: string, limit = CATCH_UP_LIMIT): TeamEvent[] {
         const rows = this.db.prepare('SELECT * FROM team_events WHERE team_id = ? AND id > ? ORDER BY id LIMIT ?').all(teamId, afterId, limit) as Row[];
         return rows.map(toEvent).filter((event) => visibleTo(event, userId));
+    }
+
+    /**
+     * afterId 다음부터 이어 받을 수 없는지 — 그사이 소식이 정리됐거나 너무 많이 쌓였으면 true.
+     * afterId 는 이 팀 소식의 번호이므로, 남은 가장 오래된 소식보다 앞이면 그 소식은 정리된 것입니다.
+     * 그때 화면은 이어 받지 말고 팀 자료 · 일정 · 예배를 처음부터 다시 읽어야 합니다.
+     */
+    hasGap(teamId: string, afterId: number): boolean {
+        const oldest = (this.db.prepare('SELECT min(id) AS id FROM team_events WHERE team_id = ?').get(teamId) as { id: number | null }).id;
+        if (oldest !== null && afterId < oldest) return true;
+        const missed = (this.db.prepare('SELECT count(*) AS n FROM (SELECT 1 FROM team_events WHERE team_id = ? AND id > ? LIMIT ?)').get(teamId, afterId, CATCH_UP_LIMIT + 1) as { n: number }).n;
+        return missed > CATCH_UP_LIMIT;
     }
 
     latestId(teamId: string): number {

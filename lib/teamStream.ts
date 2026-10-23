@@ -47,6 +47,11 @@ function open(teamId: string, stream: Stream) {
         stream.failures = 0;
         setStatus(stream, 'online');
     };
+    // 연결되면 서버가 이어 받을 시작 번호를 먼저 보냅니다.
+    source.addEventListener('hello', (message) => {
+        const id = Number((message as MessageEvent<string>).data);
+        if (Number.isFinite(id) && id >= 0) stream.lastId = id;
+    });
     source.addEventListener('team', (message) => {
         try {
             const event = JSON.parse((message as MessageEvent<string>).data) as TeamStreamEvent;

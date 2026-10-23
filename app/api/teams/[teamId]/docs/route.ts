@@ -24,7 +24,7 @@ export async function PUT(request: NextRequest, ctx: RouteContext<'/api/teams/[t
         const body = await request.json() as { key?: unknown; json?: unknown; baseVersion?: unknown };
         const result = getTeamDocs().put(teamId, user, String(body.key ?? ''), body.json, body.baseVersion);
         if (result.ok) return json(result);
-        if (result.error) return json(result, result.conflict ? 403 : 400);
+        if (result.error) return json(result, result.denied ? 403 : 400);
         return json(result, 409);
     } catch (error) { return failure(error); }
 }

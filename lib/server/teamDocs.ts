@@ -21,7 +21,8 @@ export interface TeamDoc {
     updatedByName: string;
 }
 
-export type PutResult = { ok: true; version: number } | { ok: false; conflict: TeamDoc | null; error?: string };
+/** denied: 권한이 없어 저장하지 않음 (conflict 가 있으면 그 서버 사본으로 되돌리면 됩니다) */
+export type PutResult = { ok: true; version: number } | { ok: false; conflict: TeamDoc | null; error?: string; denied?: boolean };
 
 const MAX_DOC_BYTES = 1_000_000;
 const MAX_TEAM_BYTES = 30_000_000;
@@ -110,7 +111,7 @@ export class TeamDocs {
             if (current?.json === json) return { ok: true, version: current.version };
             const policy = this.teams.policy(teamId);
             const allowed = can(member, policy, 'contiEdit') || (kind === 'setlist-details' && onlyAddsComments(current?.json ?? null, json));
-            if (!allowed) return { ok: false, conflict: current ?? null, error: '콘티를 편집할 권한이 없습니다. 코멘트는 남길 수 있어요.' };
+            if (!allowed) return { ok: false, conflict: current ?? null, error: '콘티를 편집할 권한이 없습니다. 코멘트는 남길 수 있어요.', denied: true };
             const sheets = kind === 'sheet';
             const total = (this.db.prepare(`SELECT coalesce(sum(length(json)), 0) AS n FROM online_docs WHERE team_id = ? AND doc_key <> ? AND kind ${sheets ? '=' : '<>'} 'sheet'`).get(teamId, key) as { n: number }).n;
             if (total + json.length > (sheets ? MAX_TEAM_SHEET_BYTES : MAX_TEAM_BYTES)) return { ok: false, conflict: null, error: '팀 저장 공간이 가득 찼습니다.' };

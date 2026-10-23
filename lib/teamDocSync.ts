@@ -38,6 +38,8 @@ export interface SyncNotice {
     teamId: string;
     kind: 'received' | 'denied' | 'error';
     message: string;
+    /** 한 줄 설명 (없으면 화면이 종류에 맞춰 씀) */
+    detail?: string;
 }
 
 const ONLINE_TEAMS_KEY = 'worship:online-teams:v1';
@@ -271,7 +273,8 @@ async function pushOne(teamId: string, key: string): Promise<'done' | 'retry' | 
         fresh.versions[key] = body.conflict.version;
         save(teamId, fresh);
     }
-    notify({ teamId, kind: response.status === 403 ? 'denied' : 'error', message: body.error ?? '팀 자료를 저장하지 못했어요.' });
+    // 서버 사본이 없으면 되돌릴 것이 없어 이 기기에만 남습니다 — 팀원에게는 보이지 않는다고 분명히 알립니다.
+    notify({ teamId, kind: response.status === 403 ? 'denied' : 'error', message: body.error ?? '팀 자료를 저장하지 못했어요.', detail: body.conflict ? '팀 자료로 되돌렸어요' : '팀에 올라가지 않았어요 · 이 기기에만 있어요' });
     return 'done';
 }
 
