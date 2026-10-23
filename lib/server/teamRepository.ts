@@ -102,7 +102,7 @@ export class TeamRepository {
     }
     planning(teamId: string, userId: string): PlanningState {
         const members = this.planningMembers(teamId, userId);
-        return planningForViewer(this.readPlanning(teamId), members, userId);
+        return planningForViewer(this.readPlanning(teamId), members, userId, this.policy(teamId));
     }
     updatePlanning(teamId: string, userId: string, command: PlanningCommand | unknown): PlanningState {
         return this.applyPlanning(teamId, userId, command).state;
@@ -112,10 +112,11 @@ export class TeamRepository {
         return this.db.transaction(() => {
             const members = this.planningMembers(teamId, userId);
             const previous = this.readPlanning(teamId);
-            const state = applyPlanningCommand(previous, members, userId, command, this.policy(teamId));
+            const policy = this.policy(teamId);
+            const state = applyPlanningCommand(previous, members, userId, command, policy);
             this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
             const before = new Set(previous.notifications.map((item) => item.id));
-            return { state: planningForViewer(state, members, userId), created: state.notifications.filter((item) => !before.has(item.id)) };
+            return { state: planningForViewer(state, members, userId, policy), created: state.notifications.filter((item) => !before.has(item.id)) };
         })();
     }
     private identity(user: TeamIdentity) {

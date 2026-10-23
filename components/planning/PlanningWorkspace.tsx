@@ -20,11 +20,13 @@ import { TONE_BLOCK } from '@/components/conti/ui';
 import RequestsPanel from './RequestsPanel';
 import SchedulePanel from './SchedulePanel';
 import RotationPanel from './RotationPanel';
+import AnnouncementsPanel from './AnnouncementsPanel';
 
 type Props = { teams: OnlineTeam[]; userId?: string; initialTeamId?: string; initialTab?: string; initialSetlist?: { id: string; title: string } };
-type TabId = 'schedule' | 'rotation' | 'requests';
+type TabId = 'schedule' | 'announcements' | 'rotation' | 'requests';
 const TABS: { id: TabId; title: string; shortTitle: string }[] = [
     { id: 'schedule', title: '일정 · 인원 배치', shortTitle: '일정·배치' },
+    { id: 'announcements', title: '팀 공지', shortTitle: '공지' },
     { id: 'rotation', title: '담당 & 로테이션', shortTitle: '로테이션' },
     { id: 'requests', title: '인도자에게 요청', shortTitle: '요청함' },
 ];
@@ -75,7 +77,7 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
     const searchParams = useSearchParams();
     const [inboxOpen, setInboxOpen] = useState(searchParams.get('inbox') === '1');
     const [state, setState] = useState<PlanningState>(emptyPlanningState);
-    const [tab, setTab] = useState<TabId>(initialTab === 'requests' ? 'requests' : initialTab === 'rotation' ? 'rotation' : 'schedule');
+    const [tab, setTab] = useState<TabId>(TABS.some(item => item.id === initialTab) ? initialTab as TabId : 'schedule');
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -209,6 +211,8 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
             <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="mt-3">
                 {tab === 'schedule' ? (
                     <SchedulePanel {...panelProps} />
+                ) : tab === 'announcements' ? (
+                    <AnnouncementsPanel {...panelProps} />
                 ) : tab === 'rotation' ? (
                     <RotationPanel {...panelProps} />
                 ) : (

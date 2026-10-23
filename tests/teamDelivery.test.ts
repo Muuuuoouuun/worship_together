@@ -168,3 +168,58 @@ test('team policy decides who manages schedules; manager notices stay with admin
         assert.deepEqual([...answer!.recipientIds].sort(), [leader.id, songLeader.id].sort(), '참석 응답은 모두가 아니라 관리자 · 인도자에게');
     } finally { repo.close(); }
 });
+
+test('team announcements: audience, acknowledgements, everyone-confirmed notice, reminders and visibility', () => {
+    const { repo, teamId } = seed();
+    try {
+        const drummer = { id: 'delivery-drums', name: '드럼' };
+        repo.join(repo.createInvite(teamId, leader.id).code, drummer);
+        repo.assignRole(teamId, leader.id, drummer.id, 'drums');
+        repo.addMemberDirect(teamId, leader.id, '건반 (미가입)', 'keyboard');
+        // 공지는 기본 정책에서 관리자 · 인도자만
+        assert.throws(() => repo.updatePlanning(teamId, vocal.id, { type: 'announcement.create', title: '공지', body: '내용', audience: { kind: 'all' }, requireAck: true }), /공지를 올릴 수/);
+        // 밴드에게만 (건반 · 드럼), 미가입 명단 자리는 받는 사람에서 빠짐
+        const { state, created } = repo.applyPlanning(teamId, leader.id, { type: 'announcement.create', title: '밴드 연습 30분 일찍', body: '이번 주는 6시 30분에 모여요.\n앰프 점검이 있어요.', audience: { kind: 'roles', roles: ['keyboard', 'drums'] }, requireAck: true });
+        const item = state.announcements![0];
+        assert.deepEqual([...item.recipientIds].sort(), [drummer.id, keys.id].sort());
+        assert.equal(created.length, 1);
+        assert.equal(created[0].target, 'announcements');
+        assert.equal(created[0].body, '이번 주는 6시 30분에 모여요. · 확인 부탁드려요', '알림에는 첫 줄만');
+        // 받지 않은 보컬에게는 보이지 않고, 받은 사람에게는 보입니다.
+        assert.equal(repo.planning(teamId, vocal.id).announcements!.length, 0);
+        assert.equal(repo.planning(teamId, keys.id).announcements!.length, 1);
+        assert.throws(() => repo.updatePlanning(teamId, vocal.id, { type: 'announcement.ack', announcementId: item.id }), /나에게 온 공지/);
+        // 한 명 확인 → 알림도 읽음 처리, 아직 1명
+        const afterKeys = repo.updatePlanning(teamId, keys.id, { type: 'announcement.ack', announcementId: item.id });
+        assert.deepEqual(afterKeys.announcements![0].acks.map(ack => ack.userId), [keys.id]);
+        assert.ok(afterKeys.notifications.filter(notice => notice.entityId === item.id).every(notice => notice.readBy.includes(keys.id)));
+        // 다시 알림은 아직인 사람에게만, 10분 안에는 다시 못 보냄
+        const remind = repo.applyPlanning(teamId, leader.id, { type: 'announcement.remind', announcementId: item.id });
+        assert.deepEqual(remind.created[0].recipientIds, [drummer.id]);
+        assert.throws(() => repo.updatePlanning(teamId, leader.id, { type: 'announcement.remind', announcementId: item.id }), /10분 뒤/);
+        // 마지막 사람이 확인하면 쓴 사람에게 '모두 확인'
+        const last = repo.applyPlanning(teamId, drummer.id, { type: 'announcement.ack', announcementId: item.id });
+        assert.equal(last.created[0].title, '모두 공지를 확인했어요');
+        assert.deepEqual(last.created[0].recipientIds, [leader.id]);
+        // 마감 · 삭제
+        assert.throws(() => repo.updatePlanning(teamId, keys.id, { type: 'announcement.close', announcementId: item.id }), /공지 담당/);
+        repo.updatePlanning(teamId, leader.id, { type: 'announcement.close', announcementId: item.id });
+        const removed = repo.updatePlanning(teamId, leader.id, { type: 'announcement.delete', announcementId: item.id });
+        assert.equal(removed.announcements!.length, 0);
+        assert.equal(repo.planning(teamId, keys.id).notifications.filter(notice => notice.entityId === item.id).length, 0, '지운 공지의 알림도 사라집니다');
+    } finally { repo.close(); }
+});
+
+test('an announcement to a schedule reaches the people serving it (not those who declined), and the policy can open announcing to everyone', () => {
+    const { repo, teamId } = seed();
+    try {
+        const event = addEvent(repo, teamId);
+        repo.updatePlanning(teamId, leader.id, { type: 'slot.save', eventId: event.id, role: 'keyboard', memberId: keys.id });
+        const vocalSlot = repo.updatePlanning(teamId, leader.id, { type: 'slot.save', eventId: event.id, role: 'vocal', memberId: vocal.id }).events[0].slots.find(slot => slot.role === 'vocal')!;
+        repo.updatePlanning(teamId, vocal.id, { type: 'attendance.set', eventId: event.id, slotId: vocalSlot.id, attendance: 'absent', reason: '', autoRequestSubstitute: false });
+        const state = repo.updatePlanning(teamId, leader.id, { type: 'announcement.create', title: '주일 리허설 8시', body: '본당에서 8시에 리허설해요.', audience: { kind: 'event', eventId: event.id }, requireAck: false });
+        assert.deepEqual(state.announcements![0].recipientIds, [keys.id]);
+        repo.setPolicy(teamId, leader.id, { ...repo.policy(teamId), announce: 'everyone' });
+        repo.updatePlanning(teamId, vocal.id, { type: 'announcement.create', title: '간식 준비할게요', body: '리허설 끝나고 간식 있어요', audience: { kind: 'all' }, requireAck: false });
+    } finally { repo.close(); }
+});

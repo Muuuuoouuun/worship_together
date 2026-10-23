@@ -1,8 +1,8 @@
 import * as z from 'zod';
 import { createClientId } from './clientId';
 import { isPlaceholderMember, worshipRoles, type TeamMember } from '../types/team';
-import { DEFAULT_POLICY, receivesManagerNotices, type TeamPolicy } from './permissions';
-import { canHandleSlot, canManagePlanning, emptyPlanningState, leadParts, partOfRole, planningDate, planningDay, requestKinds, scheduleTemplates, type LeadPart, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
+import { DEFAULT_POLICY, can, receivesManagerNotices, type TeamPolicy } from './permissions';
+import { canHandleSlot, canManagePlanning, emptyPlanningState, leadParts, partOfRole, planningDate, planningDay, requestKinds, scheduleTemplates, type LeadPart, type PlanningCommand, type PlanningState, type PlanningTarget, type RotationGroup, type ScheduleSlot, type TeamAnnouncement, type TeamSchedule } from '../types/planning';
 
 const id = z.string().min(1).max(200);
 const body = z.string().trim().min(1, '내용을 입력해주세요.').max(1500);
@@ -29,6 +29,11 @@ const rotationGroupSchema = z.object({
     currentStep: z.number().int().min(0).default(0),
     notes: z.string().trim().max(500).optional(),
 });
+const announcementAudience = z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('all') }),
+    z.object({ kind: z.literal('roles'), roles: z.array(role).min(1, '공지를 받을 파트를 골라주세요.').max(9) }),
+    z.object({ kind: z.literal('event'), eventId: id }),
+]);
 const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('request.create'), setlistId: z.string().max(200), setlistTitle: z.string().trim().min(1).max(120), kind: z.enum(['question', 'reminder', 'change']), body, leaderId: id }),
     z.object({ type: z.literal('request.reply'), requestId: id, body }),
@@ -102,6 +107,11 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('rotation.step'), rotationId: id, direction: z.enum(['next', 'prev']) }),
     z.object({ type: z.literal('rotation.apply'), rotationId: id, eventId: id }),
     z.object({ type: z.literal('rotation.batchApply'), rotationId: id, eventIds: z.array(id).min(1).max(20) }),
+    z.object({ type: z.literal('announcement.create'), title: z.string().trim().min(1, '공지 제목을 입력해주세요.').max(80), body, audience: announcementAudience, requireAck: z.boolean() }),
+    z.object({ type: z.literal('announcement.ack'), announcementId: id }),
+    z.object({ type: z.literal('announcement.remind'), announcementId: id }),
+    z.object({ type: z.literal('announcement.close'), announcementId: id }),
+    z.object({ type: z.literal('announcement.delete'), announcementId: id }),
     z.object({ type: z.literal('notification.read'), notificationId: id }),
     z.object({ type: z.literal('notification.readAll') }),
     z.object({ type: z.literal('member.blockDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(200).optional() }),
@@ -114,24 +124,39 @@ const stateSchema = z.object({
     requests: z.array(z.object({ id, setlistId: z.string(), setlistTitle: z.string(), kind: z.enum(['question', 'reminder', 'change']), body: z.string(), authorId: id, leaderId: id, status: z.enum(['open', 'reviewing', 'resolved']), createdAt: stamp, updatedAt: stamp, replies: z.array(z.object({ id, authorId: id, body: z.string(), createdAt: stamp })) })),
     events: z.array(scheduleInput.extend({ id, cancelled: z.boolean(), slots: z.array(z.object({ id, role, memberId: id.nullable(), attendance: z.enum(['pending', 'confirmed', 'absent']), volunteers: z.array(id), invitedAt: stamp.optional(), respondedAt: stamp.optional(), declineReason: z.string().optional(), asked: z.array(id).optional(), passed: z.array(id).optional() })) })),
     alerts: z.array(z.object({ id, eventId: id, slotId: id.nullable(), kind: z.enum(['absence', 'substitute', 'notice']), body: z.string(), authorId: id, createdAt: stamp, resolvedAt: stamp.nullable() })),
-    notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp, slotId: id.optional() })),
+    notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation', 'announcements']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp, slotId: id.optional() })),
     rotations: z.array(rotationGroupSchema).optional().default([]),
     blockedDates: z.array(z.object({ memberId: id, date: z.string(), reason: z.string().optional() })).optional().default([]),
     partLeads: z.array(z.object({ part: z.enum(['band', 'vocal']), memberId: id })).optional().default([]),
+    announcements: z.array(z.object({ id, title: z.string(), body: z.string(), authorId: id, createdAt: stamp, audience: announcementAudience, recipientIds: z.array(id), requireAck: z.boolean(), acks: z.array(z.object({ userId: id, at: stamp })), remindedAt: stamp.optional(), closedAt: stamp.nullable() })).optional().default([]),
 });
 export function parsePlanningState(value: unknown): PlanningState {
     if (value == null) return emptyPlanningState();
     const result = stateSchema.safeParse(value);
     if (!result.success) throw new Error('저장된 일정 자료를 읽지 못했습니다. 새로고침 후 다시 확인해주세요.');
-    return { ...result.data, rotations: result.data.rotations ?? [], blockedDates: result.data.blockedDates ?? [], partLeads: result.data.partLeads ?? [] };
+    return { ...result.data, rotations: result.data.rotations ?? [], blockedDates: result.data.blockedDates ?? [], partLeads: result.data.partLeads ?? [], announcements: result.data.announcements ?? [] };
 }
-export function planningForViewer(state: PlanningState, members: TeamMember[], userId: string): PlanningState {
-    if (!members.some(member => member.userId === userId)) throw new Error('이 팀에 접근할 수 없습니다.');
-    const owner = members.some(member => member.userId === userId && member.permission === 'owner');
-    return { ...state, requests: state.requests.filter(item => item.authorId === userId || item.leaderId === userId || owner), notifications: state.notifications.filter(item => item.recipientIds.includes(userId)) };
+export function planningForViewer(state: PlanningState, members: TeamMember[], userId: string, policy: TeamPolicy = DEFAULT_POLICY): PlanningState {
+    const me = members.find(member => member.userId === userId);
+    if (!me) throw new Error('이 팀에 접근할 수 없습니다.');
+    const owner = me.permission === 'owner';
+    // 공지는 받는 사람 · 쓴 사람, 그리고 공지를 쓸 수 있는 사람(확인 현황을 함께 챙김)에게 보입니다.
+    const announcer = can(me, policy, 'announce');
+    return {
+        ...state,
+        requests: state.requests.filter(item => item.authorId === userId || item.leaderId === userId || owner),
+        notifications: state.notifications.filter(item => item.recipientIds.includes(userId)),
+        announcements: (state.announcements ?? []).filter(item => announcer || item.authorId === userId || item.recipientIds.includes(userId)),
+    };
 }
 
 const BATCH_SKIP_MARK = ' · 빠진 팀원 ';
+/** 팀마다 보관하는 공지 수 */
+const ANNOUNCEMENT_LIMIT = 100;
+/** 같은 공지를 다시 알릴 수 있는 간격 */
+const REMIND_GAP_MS = 10 * 60 * 1000;
+/** 알림 한 줄에 넣을 공지 첫 줄 */
+const preview = (text: string) => { const line = text.trim().split('\n')[0].trim(); return line.length > 120 ? `${line.slice(0, 119)}…` : line; };
 
 /** 로테이션 일괄 배정을 같은 규칙으로 미리 적용해 완료 메시지에 붙일 '빠진 팀원 N명: …' 안내를 돌려줍니다. 빠질 사람이 없거나 적용할 수 없으면 ''. */
 export function previewRotationBatchSkips(state: PlanningState, members: TeamMember[], userId: string, command: Extract<PlanningCommand, { type: 'rotation.batchApply' }>, policy: TeamPolicy = DEFAULT_POLICY): string {
@@ -202,7 +227,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
     const managers = managerIds(members, policy);
     const manage = () => { if (!canManagePlanning(members, userId, policy)) throw new Error(policy.planningManage === 'admins' ? '팀 관리자만 변경할 수 있습니다.' : '인도자 또는 팀 관리자만 변경할 수 있습니다.'); };
     /** slotId: 알림을 누르면 열릴 배치 자리. includeSelf: 처리한 본인도 확인해야 할 결과(예: 일괄 배정에서 빠진 팀원)일 때 */
-    const notify = (recipientIds: string[], title: string, text: string, target: 'requests' | 'schedule' | 'rotation', entityId: string, urgent = false, slotId?: string, includeSelf = false) => {
+    const notify = (recipientIds: string[], title: string, text: string, target: PlanningTarget, entityId: string, urgent = false, slotId?: string, includeSelf = false) => {
         const recipients = [...new Set(recipientIds)].filter(recipient => (includeSelf || recipient !== userId) && members.some(member => member.userId === recipient));
         if (recipients.length) state.notifications.unshift({ id: createClientId(), title, body: text, target, entityId, urgent, recipientIds: recipients, readBy: [], createdAt: now, ...(slotId ? { slotId } : {}) });
     };
@@ -235,6 +260,13 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         if (subs.length) notify(subs.map(member => member.userId), `${worshipRoles[slot.role]} 대체 가능하신가요?`, `${event.title} · ${planningDate(event.startsAt)} · ${detail}`, 'schedule', event.id, true, slot.id);
         return subs;
     };
+    const announcementById = (announcementId: string) => {
+        const item = (state.announcements ?? []).find(other => other.id === announcementId);
+        if (!item) throw new Error('공지를 찾지 못했습니다.');
+        return item;
+    };
+    /** 아직 확인하지 않은 받는 사람 (그사이 팀을 떠난 사람은 빼고) */
+    const unconfirmed = (item: TeamAnnouncement) => item.recipientIds.filter(memberId => reachable(members, memberId) && !item.acks.some(ack => ack.userId === memberId));
     /** 자리가 채워지면 부탁 기록은 지웁니다. */
     const clearAsks = (slot: ScheduleSlot) => { delete slot.asked; delete slot.passed; };
     switch (command.type) {
@@ -485,6 +517,61 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (!state.alerts.some(item => item.eventId === event.id && item.slotId === slot.id && !item.resolvedAt)) state.alerts.unshift({ id: createClientId(), eventId: event.id, slotId: slot.id, kind: 'substitute', body: `${worshipRoles[slot.role]} 대체 인원을 구합니다`, authorId: userId, createdAt: now, resolvedAt: null });
             slot.asked = [...new Set([...(slot.asked ?? []), ...targets])];
             notify(targets, '대체 인원을 구해요', `${event.title} · ${planningDate(event.startsAt)} · ${worshipRoles[slot.role]}`, 'schedule', event.id, true, slot.id);
+            break;
+        }
+        case 'announcement.create': {
+            if (!can(actor, policy, 'announce')) throw new Error(policy.announce === 'admins' ? '팀 관리자만 공지를 올릴 수 있습니다.' : '인도자 또는 팀 관리자만 공지를 올릴 수 있습니다.');
+            const audience = command.audience;
+            const pool = audience.kind === 'all' ? everyone
+                : audience.kind === 'roles' ? members.filter(member => audience.roles.includes(member.role)).map(member => member.userId)
+                : eventById(audience.eventId).slots.filter(slot => slot.attendance !== 'absent').map(slot => slot.memberId).filter((memberId): memberId is string => Boolean(memberId));
+            // 확인을 셀 수 있게, 공지를 볼 수 있는 팀원(쓴 사람 · 미가입 명단 자리 제외)만 받는 사람으로 남깁니다.
+            const recipients = [...new Set(pool)].filter(memberId => memberId !== userId && reachable(members, memberId));
+            if (!recipients.length) throw new Error('공지를 받을 팀원이 없습니다. 대상을 다시 골라주세요.');
+            const list = state.announcements ?? [];
+            if (list.length >= ANNOUNCEMENT_LIMIT) {
+                // 보관 한도: 마감한 공지 중 가장 오래된 것부터, 없으면 가장 오래된 공지를 정리합니다.
+                const closed = list.map((item, index) => ({ item, index })).filter(({ item }) => item.closedAt).pop();
+                list.splice(closed ? closed.index : list.length - 1, 1);
+            }
+            const announcementId = createClientId();
+            list.unshift({ id: announcementId, title: command.title, body: command.body, authorId: userId, createdAt: now, audience, recipientIds: recipients, requireAck: command.requireAck, acks: [], closedAt: null });
+            state.announcements = list;
+            notify(recipients, `공지 · ${command.title}`, command.requireAck ? `${preview(command.body)} · 확인 부탁드려요` : preview(command.body), 'announcements', announcementId);
+            break;
+        }
+        case 'announcement.ack': {
+            const item = announcementById(command.announcementId);
+            if (!item.recipientIds.includes(userId)) throw new Error('나에게 온 공지가 아닙니다.');
+            if (item.acks.some(ack => ack.userId === userId)) break;
+            item.acks.push({ userId, at: now });
+            state.notifications.forEach(notice => { if (notice.target === 'announcements' && notice.entityId === item.id && notice.recipientIds.includes(userId) && !notice.readBy.includes(userId)) notice.readBy.push(userId); });
+            // 확인을 받는 공지를 모두 확인하면 쓴 사람에게 알립니다.
+            if (item.requireAck && !item.closedAt && !unconfirmed(item).length) notify([item.authorId], '모두 공지를 확인했어요', `${item.title} · ${item.acks.length}명 확인`, 'announcements', item.id);
+            break;
+        }
+        case 'announcement.remind': {
+            const item = announcementById(command.announcementId);
+            if (item.authorId !== userId && !can(actor, policy, 'announce')) throw new Error('공지를 쓴 사람이나 공지 담당만 다시 알릴 수 있습니다.');
+            if (item.closedAt) throw new Error('마감한 공지입니다.');
+            const pending = unconfirmed(item);
+            if (!pending.length) throw new Error('아직 확인하지 않은 팀원이 없습니다.');
+            if (item.remindedAt && Date.parse(now) - Date.parse(item.remindedAt) < REMIND_GAP_MS) throw new Error('방금 다시 알렸어요. 10분 뒤에 다시 알릴 수 있어요.');
+            item.remindedAt = now;
+            notify(pending, `공지 확인 부탁 · ${item.title}`, preview(item.body), 'announcements', item.id);
+            break;
+        }
+        case 'announcement.close': {
+            const item = announcementById(command.announcementId);
+            if (item.authorId !== userId && !can(actor, policy, 'announce')) throw new Error('공지를 쓴 사람이나 공지 담당만 마감할 수 있습니다.');
+            item.closedAt = item.closedAt ?? now;
+            break;
+        }
+        case 'announcement.delete': {
+            const item = announcementById(command.announcementId);
+            if (item.authorId !== userId && actor.permission !== 'owner') throw new Error('공지를 쓴 사람이나 팀 관리자만 삭제할 수 있습니다.');
+            state.announcements = (state.announcements ?? []).filter(other => other.id !== item.id);
+            state.notifications = state.notifications.filter(notice => !(notice.target === 'announcements' && notice.entityId === item.id));
             break;
         }
         case 'notification.read': {

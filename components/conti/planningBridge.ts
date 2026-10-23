@@ -142,7 +142,7 @@ export interface RequestItem {
     volunteered?: boolean;
 }
 
-export type NoticeKind = 'request' | 'reply' | 'invite' | 'accept' | 'decline' | 'substitute' | 'volunteer' | 'conti' | 'schedule' | 'rotation' | 'comment' | 'other';
+export type NoticeKind = 'request' | 'reply' | 'invite' | 'accept' | 'decline' | 'substitute' | 'volunteer' | 'conti' | 'schedule' | 'rotation' | 'announcement' | 'comment' | 'other';
 export type NoticeCategory = 'conti' | 'team' | 'request';
 export type NoticeGroup = '오늘' | '어제' | '이번 주' | '이전';
 
@@ -195,6 +195,8 @@ export interface PlanningView {
     notices: Notice[];
     unreadCount: number;
     openRequestCount: number;
+    /** 마감하지 않은 팀 공지 (내가 받은 것 · 내가 쓴 것) */
+    announcements: AnnouncementItem[];
     actions: PlanningActions | null;
     /** 일정·요청 화면 주소 (관리 기능은 그곳에서) */
     planningHref: string;
@@ -214,6 +216,7 @@ export const EMPTY_PLANNING_VIEW: PlanningView = {
     notices: [],
     unreadCount: 0,
     openRequestCount: 0,
+    announcements: [],
     actions: null,
     planningHref: '/dashboard/planning',
 };
@@ -232,7 +235,22 @@ export interface BuildInput {
     feedSeenAt?: string | null;
 }
 
-export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'partLeads' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount'>;
+export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'partLeads' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount' | 'announcements'>;
+
+export interface AnnouncementItem {
+    id: string;
+    title: string;
+    body: string;
+    authorName: string;
+    ago: string;
+    createdAt: string;
+    requireAck: boolean;
+    /** 나에게 온 공지인데 아직 확인하지 않음 */
+    needsMyAck: boolean;
+    mine: boolean;
+    ackCount: number;
+    total: number;
+}
 
 /** 일정·요청 화면(SchedulePanel)과 같은 이름을 씁니다. */
 const ALERT_KIND_LABEL: Record<UrgentAlert['kind'], string> = { absence: '불참 알림', substitute: '대체 인원 요청', notice: '긴급 공지' };
@@ -485,12 +503,32 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
         notices: allNotices,
         unreadCount: allNotices.filter((item) => item.unread).length,
         openRequestCount: allRequests.filter((item) => !item.done).length,
+        announcements: (state.announcements ?? [])
+            .filter((item) => !item.closedAt && (item.recipientIds.includes(userId) || item.authorId === userId))
+            .map((item): AnnouncementItem => {
+                const pending = item.recipientIds.filter((id) => members.some((member) => member.userId === id) && !item.acks.some((ack) => ack.userId === id)).length;
+                return {
+                    id: item.id,
+                    title: item.title,
+                    body: item.body,
+                    authorName: nameOf(item.authorId) ?? '이전 팀원',
+                    ago: ago(item.createdAt),
+                    createdAt: item.createdAt,
+                    requireAck: item.requireAck,
+                    needsMyAck: item.recipientIds.includes(userId) && !item.acks.some((ack) => ack.userId === userId),
+                    mine: item.authorId === userId,
+                    ackCount: item.acks.length,
+                    total: item.acks.length + pending,
+                };
+            })
+            .sort((a, b) => Number(b.needsMyAck) - Number(a.needsMyAck) || b.createdAt.localeCompare(a.createdAt)),
     };
 }
 
 /** 알림 제목(lib/planning.ts 의 notify 호출)에서 종류를 알아냅니다. */
 export function classifyNotice(item: Pick<PlanningNotification, 'title' | 'target'>): NoticeKind {
     const title = item.title;
+    if (item.target === 'announcements') return 'announcement';
     if (title.includes('답변')) return 'reply';
     if (title.startsWith('콘티 ') && (title.includes('요청') || title.includes('질문'))) return 'request';
     if (title.includes('초대') || title.includes('참석 여부를 확정')) return 'invite';

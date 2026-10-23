@@ -9,6 +9,7 @@ import { showAppToast } from '@/lib/appToast';
 import { notifyDevice } from '@/lib/deviceNotify';
 import type { LiveSessionSummary } from '@/lib/server/liveRepository';
 import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
+import type { PlanningTarget } from '@/types/planning';
 
 /** 공통 틀이 넘겨주는 지금 팀 정보 (로그인하고 온라인 팀이 있을 때만) */
 export interface TeamConnectionInput {
@@ -51,7 +52,7 @@ interface PlanningNotice {
     title: string;
     body: string;
     urgent: boolean;
-    target: 'requests' | 'schedule' | 'rotation';
+    target: PlanningTarget;
 }
 
 /**
@@ -130,7 +131,8 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                             title: notice.title,
                             body: notice.body,
                             action: { label: '보기', href },
-                            ttl: notice.urgent ? 15_000 : 6_000,
+                            // 긴급 알림과 공지는 조금 더 오래 둡니다.
+                            ttl: notice.urgent || notice.target === 'announcements' ? 15_000 : 6_000,
                         });
                     }
                     return;
