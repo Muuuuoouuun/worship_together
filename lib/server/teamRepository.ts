@@ -119,6 +119,10 @@ export class TeamRepository {
             return { state: planningForViewer(state, members, userId, policy), created: state.notifications.filter((item) => !before.has(item.id)) };
         })();
     }
+    /** 팀 이름 (없는 팀이면 null) */
+    teamName(teamId: string): string | null {
+        return (this.db.prepare('SELECT name FROM online_teams WHERE id = ?').get(teamId) as { name: string } | undefined)?.name ?? null;
+    }
     /** 서버 안에서 쓰는 일정 상태와 명단 (권한 검사 없음 — 저장 흐름에서 알림을 만들 때) */
     planningSnapshot(teamId: string): { state: PlanningState; members: TeamMember[] } {
         const members = this.db.prepare('SELECT user_id AS userId, name, role, permission FROM online_members WHERE team_id = ?').all(teamId) as TeamMember[];

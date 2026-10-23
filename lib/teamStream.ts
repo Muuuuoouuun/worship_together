@@ -1,4 +1,5 @@
 import type { TeamEventType } from './server/teamEvents';
+import { deviceId } from './pushClient';
 
 /*
  * 팀 소식 실시간 흐름 (브라우저 쪽). 한 탭에서 같은 팀을 여러 화면이 들어도 연결은 하나만 엽니다.
@@ -39,8 +40,13 @@ function setStatus(stream: Stream, status: StreamStatus) {
 function open(teamId: string, stream: Stream) {
     if (typeof EventSource === 'undefined') return;
     stream.source?.close();
-    const after = stream.lastId === null ? '' : `?after=${stream.lastId}`;
-    const source = new EventSource(`/api/teams/${encodeURIComponent(teamId)}/stream${after}`);
+    const params = new URLSearchParams();
+    if (stream.lastId !== null) params.set('after', String(stream.lastId));
+    // 이 기기에서 앱이 열려 있음을 알려, 서버가 이 기기에는 푸시를 보내지 않게 합니다.
+    const device = deviceId();
+    if (device) params.set('device', device);
+    const query = params.toString();
+    const source = new EventSource(`/api/teams/${encodeURIComponent(teamId)}/stream${query ? `?${query}` : ''}`);
     stream.source = source;
     setStatus(stream, stream.status === 'online' ? 'online' : 'connecting');
     source.onopen = () => {

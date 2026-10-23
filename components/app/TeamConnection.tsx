@@ -8,6 +8,8 @@ import { PLANNING_CHANGED_EVENT } from '@/lib/planningDemo';
 import { showAppToast } from '@/lib/appToast';
 import { notifyDevice } from '@/lib/deviceNotify';
 import { subscribeUserStream, type UserStreamEvent } from '@/lib/userStream';
+import { liveHref, noticeHref } from '@/lib/noticeLinks';
+import { syncPushSubscription } from '@/lib/pushClient';
 import type { LiveSessionSummary } from '@/lib/server/liveRepository';
 import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
 import type { PlanningTarget } from '@/types/planning';
@@ -44,11 +46,7 @@ export function useTeamPolicy(): TeamPolicy {
     return useContext(Context)?.policy ?? DEFAULT_POLICY;
 }
 
-export const liveHref = (sessionId: string) => `/live/${encodeURIComponent(sessionId)}`;
-/** 알림을 누르면 갈 곳 — 콘티 알림은 그 콘티, 나머지는 일정 · 요청 화면의 탭 */
-const noticeHref = (teamId: string, notice: { target: PlanningTarget; entityId: string }) => notice.target === 'conti'
-    ? `/dashboard/songs?${new URLSearchParams({ tab: 'order', setlist: notice.entityId, team: teamId })}`
-    : `/dashboard/planning?${new URLSearchParams({ team: teamId, tab: notice.target, inbox: '1' })}`;
+export { liveHref };
 
 /** 'planning.notice' 소식 (actions/planningActions 가 보냄) */
 interface PlanningNotice {
@@ -98,6 +96,11 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
             document.removeEventListener('visibilitychange', again);
         };
     }, [teamId, teamKey]);
+
+    // 알림을 허락한 기기는 앱을 닫아도 알림이 오도록 이 사람으로 푸시를 구독해 둡니다 (같은 기기에서 다른 사람이 로그인해도 맞춰짐).
+    useEffect(() => {
+        if (userId) void syncPushSubscription();
+    }, [userId]);
 
     // 지금 진행 중인 예배
     useEffect(() => {

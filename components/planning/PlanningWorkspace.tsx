@@ -151,7 +151,7 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
     return <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             {toolbar}
-            <p className="min-w-0 flex-1 basis-56 text-xs leading-5 text-muted-foreground">{online ? '팀에 함께 저장 · 다른 팀원이 바꾸면 바로 보여요' : '기기 저장 · 체험 중'}<br />앱을 닫은 상태의 푸시 알림은 지원하지 않습니다.</p>
+            <p className="min-w-0 flex-1 basis-56 text-xs leading-5 text-muted-foreground">{online ? '팀에 함께 저장 · 다른 팀원이 바꾸면 바로 보여요' : '기기 저장 · 체험 중'}<br />{online ? '팀·초대 화면에서 ‘이 기기 알림’을 켜면 앱을 보지 않을 때도 알려 드려요.' : '체험 중에는 다른 기기로 알림이 가지 않아요.'}</p>
             <Button type="button" variant="outline" size="icon-sm" aria-label="새로고침" title="새로고침" className="ml-auto" onClick={() => void refresh()} disabled={busy}><RefreshCw size={16} aria-hidden="true" /></Button>
         </div>
         {toast && <div role="alert" className={cn('flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-3xl px-4 py-3.5', TONE_BLOCK.peach)}>
