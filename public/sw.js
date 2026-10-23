@@ -99,6 +99,14 @@ function isStaticAsset(pathname) {
 
 // 앱을 닫아도 오는 알림(푸시). 서버는 앱이 열린 기기에는 보내지 않으므로 받으면 항상 띄웁니다.
 // 앱이 띄운 기기 알림과 같은 tag 를 써서 같은 알림이 두 번 쌓이지 않습니다.
+function notificationUrl(value) {
+  try {
+    const url = new URL(value, self.location.origin);
+    if (url.origin === self.location.origin) return url.href;
+  } catch { /* 잘못된 주소는 홈으로 */ }
+  return new URL('/dashboard', self.location.origin).href;
+}
+
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -113,7 +121,7 @@ self.addEventListener("push", (event) => {
       tag: typeof data.tag === "string" && data.tag ? data.tag : undefined,
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
-      data: { url: typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/dashboard" },
+      data: { url: notificationUrl(typeof data.url === "string" ? data.url : "/dashboard") },
     }),
   );
 });
@@ -121,7 +129,7 @@ self.addEventListener("push", (event) => {
 // 기기 알림(예배 시작 · 받은 큐 · 팀 알림 · 푸시)을 누르면 열려 있는 앱 화면으로 가거나 새로 엽니다.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/dashboard";
+  const url = notificationUrl((event.notification.data && event.notification.data.url) || "/dashboard");
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {

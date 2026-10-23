@@ -5,7 +5,7 @@ import webpush from 'web-push';
 import { PushStore, pushConfigFromEnv, type PushSendFn, type PushSubscriptionInput } from '../lib/server/push';
 
 const config = { publicKey: 'pub', privateKey: 'priv', subject: 'mailto:test@example.com' };
-const sub = (name: string): PushSubscriptionInput => ({ endpoint: `https://push.example.com/${name}`, keys: { p256dh: `key-${name}`, auth: `auth-${name}` } });
+const sub = (name: string): PushSubscriptionInput => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${name}`, keys: { p256dh: `key-${name}`, auth: `auth-${name}` } });
 
 function store(send: PushSendFn | null = async () => ({}), withConfig = true) {
     const db = new Sqlite(':memory:');
@@ -22,14 +22,14 @@ test('push goes only to the recipients’ devices whose app is closed, with the 
     const release = push.deviceConnected('device-keys-laptop');
     const sent = await push.send(['keys'], { title: '결석 · 대체 인원이 필요해요', body: '주일 예배 · 건반', url: '/dashboard/planning?tab=schedule', tag: 'plan-1', urgent: true });
     assert.equal(sent, 1);
-    assert.deepEqual(calls.map(call => call.endpoint), ['https://push.example.com/keys-phone']);
+    assert.deepEqual(calls.map(call => call.endpoint), ['https://fcm.googleapis.com/fcm/send/keys-phone']);
     assert.deepEqual(calls[0].payload, { title: '결석 · 대체 인원이 필요해요', body: '주일 예배 · 건반', url: '/dashboard/planning?tab=schedule', tag: 'plan-1' });
     assert.equal(calls[0].urgency, 'high');
     // 앱을 닫으면 그 기기에도 보냄
     release();
     calls.length = 0;
     await push.send(['keys'], { title: '공지', body: '내용', url: 'https://evil.example.com', tag: 'plan-2' });
-    assert.deepEqual(calls.map(call => call.endpoint).sort(), ['https://push.example.com/keys-laptop', 'https://push.example.com/keys-phone']);
+    assert.deepEqual(calls.map(call => call.endpoint).sort(), ['https://fcm.googleapis.com/fcm/send/keys-laptop', 'https://fcm.googleapis.com/fcm/send/keys-phone']);
     assert.equal(calls[0].payload.url, '/dashboard', '사이트 밖 주소는 열지 않음');
 });
 
@@ -70,4 +70,30 @@ test('a real VAPID-signed, encrypted push request is built for the subscription'
     assert.equal(request.method, 'POST');
     assert.match(String(request.headers.Authorization), /^vapid t=/);
     assert.ok(request.body && request.body.length > 0);
+});
+
+
+test('push subscriptions cannot direct the server to private or untrusted HTTPS endpoints', () => {
+    const { push, db } = store();
+    try {
+        for (const endpoint of ['https://localhost/push', 'https://127.0.0.1/push', 'https://169.254.169.254/push', 'https://internal.example/push', 'https://fcm.googleapis.com.evil.example/push', 'https://fcm.googleapis.com:8443/push', 'https://user:password@fcm.googleapis.com/push']) {
+            assert.throws(() => push.subscribe('u', 'device-test', { ...sub('x'), endpoint }), /구독 정보/);
+        }
+        for (const endpoint of ['https://fcm.googleapis.com/fcm/send/test', 'https://updates.push.services.mozilla.com/wpush/v2/test', 'https://web.push.apple.com/test', 'https://wns1.notify.windows.com/test']) {
+            push.subscribe('u', 'device-test', { ...sub('x'), endpoint });
+        }
+        assert.equal(push.subscriptionCount('u'), 4);
+    } finally { db.close(); }
+});
+
+test('push navigation rejects protocol-relative and backslash external URLs', async () => {
+    const urls: string[] = [];
+    const { push, db } = store(async (_subscription, payload) => { urls.push(JSON.parse(payload).url); });
+    try {
+        push.subscribe('u', 'device-test', sub('x'));
+        for (const url of ['//evil.example', '/' + String.fromCharCode(92) + 'evil.example', '/dashboard/planning?tab=schedule']) {
+            await push.send(['u'], { title: 'notice', body: 'test', url, tag: 'test' });
+        }
+        assert.deepEqual(urls, ['/dashboard', '/dashboard', '/dashboard/planning?tab=schedule']);
+    } finally { db.close(); }
 });

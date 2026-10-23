@@ -15,6 +15,7 @@ const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev',
         TEAM_DATABASE_PATH: join(directory, 'teams.sqlite'), NEXT_DIST_DIR: '.next-e2e',
         GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '', NAVER_CLIENT_ID: '', NAVER_CLIENT_SECRET: '',
         NEXT_PUBLIC_SUPABASE_URL: '', NEXT_PUBLIC_SUPABASE_ANON_KEY: '', NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY: '',
+        VAPID_PUBLIC_KEY: '', VAPID_PRIVATE_KEY: '', VAPID_SUBJECT: '',
     },
 });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));

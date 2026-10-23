@@ -15,6 +15,7 @@ export default defineConfig({
     outputDir: process.env.E2E_OUTPUT_DIR ?? join(tmpdir(), 'worship-together-e2e-results'),
     use: {
         baseURL: external ?? 'http://localhost:4100',
+        actionTimeout: 15_000,
         locale: 'ko-KR',
         timezoneId: 'Asia/Seoul',
         reducedMotion: 'reduce',

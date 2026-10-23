@@ -36,6 +36,22 @@ type Row = { endpoint: string; user_id: string; device_id: string; p256dh: strin
 
 const MAX_PER_USER = 10;
 
+// Subscription URLs are client input. Only browser push services may receive
+// server requests; arbitrary HTTPS URLs could otherwise reach private services.
+function isPushService(url: URL): boolean {
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash) return false;
+    const host = url.hostname;
+    return host === 'fcm.googleapis.com' || host === 'android.googleapis.com'
+        || host === 'web.push.apple.com'
+        || host === 'updates.push.services.mozilla.com'
+        || /^[a-z0-9-]+\.notify\.windows\.com$/.test(host);
+}
+
+function localPath(value: string): string {
+    // URL parsers also treat backslashes as slashes for HTTP navigation.
+    return value.startsWith('/') && !value.startsWith('//') && !/[\\\r\n\t]/.test(value) ? value : '/dashboard';
+}
+
 export function pushConfigFromEnv(env: Record<string, string | undefined> = process.env): PushConfig | null {
     const publicKey = env.VAPID_PUBLIC_KEY?.trim();
     const privateKey = env.VAPID_PRIVATE_KEY?.trim();
@@ -72,7 +88,7 @@ export class PushStore {
         const keys = value.keys && typeof value.keys === 'object' ? value.keys : null;
         let url: URL | null = null;
         try { url = new URL(endpoint); } catch { url = null; }
-        if (!url || url.protocol !== 'https:' || endpoint.length > 1000 || !keys || typeof keys.p256dh !== 'string' || typeof keys.auth !== 'string' || keys.p256dh.length > 200 || keys.auth.length > 100) {
+        if (!url || !isPushService(url) || endpoint.length > 1000 || !keys || typeof keys.p256dh !== 'string' || typeof keys.auth !== 'string' || keys.p256dh.length > 200 || keys.auth.length > 100) {
             throw new Error('알림 구독 정보를 확인해주세요.');
         }
         const device = typeof deviceId === 'string' && /^[\w-]{8,64}$/.test(deviceId) ? deviceId : endpoint.slice(-64);
@@ -116,7 +132,7 @@ export class PushStore {
         const payload = JSON.stringify({
             title: message.title.slice(0, 120),
             body: message.body.length > 300 ? `${message.body.slice(0, 299)}…` : message.body,
-            url: message.url.startsWith('/') ? message.url : '/dashboard',
+            url: localPath(message.url),
             tag: message.tag.slice(0, 100),
         });
         let sent = 0;

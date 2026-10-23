@@ -65,6 +65,17 @@ test('new leader and first-time teammate: invite, shared setlist, permission bou
         await expect(event.getByText('1/1').first()).toBeVisible();
         await info.attach('member-rsvp', { body: await teammate.screenshot(), contentType: 'image/png' });
 
+        for (const actor of [page, teammate]) await actor.getByRole('tab', { name: /공지/ }).click();
+        await page.getByRole('button', { name: '새 공지', exact: true }).click();
+        const announcement = page.locator('form').filter({ has: page.getByRole('button', { name: '공지 올리기', exact: true }) });
+        await announcement.getByLabel('제목 (필수)', { exact: true }).fill('처음 오는 팀원 준비 안내');
+        await announcement.getByLabel('내용 (필수)', { exact: true }).fill('예배 시작 10분 전에 곡과 악보를 확인해 주세요.');
+        await announcement.getByRole('button', { name: '공지 올리기', exact: true }).click();
+        const memberNotice = teammate.getByRole('article').filter({ has: teammate.getByRole('heading', { name: '처음 오는 팀원 준비 안내' }) });
+        await expect(memberNotice).toBeVisible();
+        await memberNotice.getByRole('button', { name: '확인했어요', exact: true }).click();
+        await expect(page.getByRole('article').filter({ has: page.getByRole('heading', { name: '처음 오는 팀원 준비 안내' }) }).getByRole('img', { name: '1명 중 1명 확인' })).toBeVisible();
+
         for (const actor of [teammate, page]) {
             await actor.getByRole('link', { name: '콘티·악보', exact: true }).filter({ visible: true }).click();
             await actor.getByRole('link', { name: '곡 보관함', exact: true }).click();
