@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { TONE_BLOCK } from '@/components/conti/ui';
+import { sectionLabel } from './sectionLabel';
 import { keyText, songMeta, type LivePosition } from './derive';
 import type { LiveScreenModel } from './model';
 
@@ -16,7 +16,7 @@ import type { LiveScreenModel } from './model';
 export function SongStrip({ model, pos, onOrder, beat }: { model: LiveScreenModel; pos: LivePosition; onOrder: () => void; beat: ReactNode }) {
     const { song } = pos;
     return (
-        <section aria-label="지금 곡" className="shrink-0 px-5 pb-3 pt-1.5">
+        <section aria-label="지금 곡" className="shrink-0 px-5 pb-3 pt-1.5 [@container(min-width:600px)_and_(max-height:560px)]:flex [@container(min-width:600px)_and_(max-height:560px)]:items-center [@container(min-width:600px)_and_(max-height:560px)]:justify-between [@container(min-width:600px)_and_(max-height:560px)]:gap-4">
             <div className="flex items-baseline justify-between gap-3">
                 <h2 className="min-w-0 truncate text-[23px] font-semibold leading-tight tracking-tight">{song.title}</h2>
                 <button
@@ -33,7 +33,7 @@ export function SongStrip({ model, pos, onOrder, beat }: { model: LiveScreenMode
                 </button>
             </div>
             <div className="mt-2 flex min-w-0 items-center gap-3 text-[13px]">
-                <span className="inline-flex h-7 shrink-0 items-center rounded-full bg-muted px-3 text-[15px] font-semibold">
+                <span className="inline-flex h-7 shrink-0 items-center text-[15px] font-semibold">
                     <span className="mr-1 text-xs font-medium text-muted-foreground">Key</span>
                     {keyText(song.key)}
                 </span>
@@ -49,7 +49,7 @@ export function NowCard({ pos }: { pos: LivePosition }) {
         // 남는 높이는 카드가 차지하고 내용은 세로 가운데 — 시각적 가운데를 위해 위 2 : 아래 3 으로 나눕니다
         <article
             aria-label="지금 섹션"
-            className={cn('flex shrink-0 grow flex-col rounded-3xl px-5 pb-5 pt-4 [@container(max-height:740px)]:pb-4 [@container(max-height:740px)]:pt-3', TONE_BLOCK.mint)}
+            className="flex shrink-0 grow flex-col rounded-xl border border-border bg-muted/30 px-5 pb-5 pt-4 [@container(max-height:740px)]:pb-4 [@container(max-height:740px)]:pt-3"
         >
             <span aria-hidden="true" className="grow-[2]" />
             <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
@@ -61,7 +61,7 @@ export function NowCard({ pos }: { pos: LivePosition }) {
             </div>
             {pos.hasForm ? (
                 <p className="mt-1.5 truncate text-[46px] font-semibold leading-[1.08] tracking-tight [@container(max-height:740px)]:mt-1 [@container(max-height:740px)]:text-[42px] [@container(min-height:770px)]:text-[52px]">
-                    {pos.section}
+                    {sectionLabel(pos.section ?? '')}
                 </p>
             ) : (
                 <>
@@ -80,11 +80,11 @@ export function NowCard({ pos }: { pos: LivePosition }) {
     );
 }
 
-/** 특이사항 · 인도자 메모 (복숭아 블록) */
+/** 진행 메모는 한 줄로 구분합니다. */
 export function NoteBlock({ note, className }: { note: string; className?: string }) {
     return (
-        <p className={cn('shrink-0 rounded-2xl px-4 py-2.5 text-sm leading-snug', TONE_BLOCK.peach, className)}>
-            <span className="mr-1.5 font-semibold text-secondary">특이사항</span>
+        <p className={cn('shrink-0 border-l-2 border-border px-3 py-2.5 text-sm leading-snug', className)}>
+            <span className="mr-1.5 font-medium text-muted-foreground">메모</span>
             <span className="[overflow-wrap:anywhere]">{note}</span>
         </p>
     );
@@ -109,28 +109,28 @@ export function FormRow({ pos, canControl, onPick }: { pos: LivePosition; canCon
 
     return (
         <nav aria-label={`${pos.song.title} 송폼`}>
-            <ol ref={scroller} className="relative flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <ol ref={scroller} tabIndex={0} className="relative flex gap-1.5 overflow-x-auto px-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {pos.song.sections.map((name, index) => {
                     const current = index === pos.sectionIndex;
                     const done = index < pos.sectionIndex;
                     const look = cn(
-                        'inline-flex h-11 items-center rounded-full px-4 text-[15px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring',
+                        'inline-flex h-11 items-center rounded-lg px-4 text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring',
                         current
                             ? 'bg-primary font-semibold text-primary-foreground'
                             : done
                               ? 'font-medium text-muted-foreground'
-                              : 'font-medium text-foreground ring-1 ring-inset ring-border',
+                              : 'font-medium text-foreground',
                         canControl && !current && (done ? 'hover:text-foreground' : 'hover:bg-muted'),
                     );
                     return (
                         <li key={`${name}-${index}`} className="shrink-0">
                             {canControl ? (
                                 <button type="button" aria-current={current ? 'step' : undefined} onClick={() => onPick(index)} className={look}>
-                                    {name}
+                                    {sectionLabel(name)}
                                 </button>
                             ) : (
                                 <span aria-current={current ? 'step' : undefined} className={look}>
-                                    {name}
+                                    {sectionLabel(name)}
                                 </span>
                             )}
                         </li>
@@ -157,7 +157,7 @@ export function NextUp({ pos }: { pos: LivePosition }) {
         <section aria-label="다음" className="shrink-0 border-t border-border px-1 pt-3.5">
             <div className="flex items-baseline gap-3">
                 <p className="w-11 shrink-0 text-xs font-medium text-muted-foreground">{label}</p>
-                <p className="min-w-0 truncate text-2xl font-semibold tracking-tight text-foreground/50">{pos.nextName}</p>
+                <p className="min-w-0 truncate text-2xl font-semibold tracking-tight text-foreground/80">{pos.nextKind === 'section' ? sectionLabel(pos.nextName) : pos.nextName}</p>
             </div>
             {detail ? <p className="mt-0.5 truncate pl-14 text-[15px] text-muted-foreground [@container(max-height:660px)]:hidden">{detail}</p> : null}
         </section>
@@ -167,13 +167,13 @@ export function NextUp({ pos }: { pos: LivePosition }) {
 /** 펄스 화면의 섹션 줄 — 눈썹(지금 · 다음)끼리, 이름끼리 같은 기준선에 섭니다 */
 export function SectionNow({ pos }: { pos: LivePosition }) {
     return (
-        <section aria-label="섹션" className="grid shrink-0 grid-cols-[minmax(0,auto)_minmax(0,auto)] items-baseline justify-between gap-x-4 px-5 pt-5">
+        <section aria-label="섹션" className="grid shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-baseline gap-x-4 border-t border-border mx-5 pb-3 pt-4">
             <p className="text-xs font-medium text-muted-foreground">
                 지금 <span className="tabular-nums">· {pos.hasForm ? `${pos.sectionIndex + 1}/${pos.song.sections.length}` : '송폼 없음'}</span>
             </p>
             <p className="text-right text-xs font-medium text-muted-foreground">{pos.nextKind === 'section' ? '다음' : pos.nextKind === 'song' ? '다음 곡' : '끝'}</p>
-            <h2 className={cn('mt-1 truncate font-semibold leading-[1.05] tracking-tight', pos.hasForm ? 'text-[44px] [@media(max-height:700px)]:text-[40px]' : 'text-[32px]')}>{pos.section ?? pos.song.title}</h2>
-            <p className="mt-1 truncate text-right text-xl font-semibold tracking-tight text-muted-foreground">{pos.nextName}</p>
+            <h2 data-current-section className={cn('mt-1 truncate font-semibold leading-[1.05] tracking-tight', pos.hasForm ? 'text-[36px] [@media(max-height:700px)]:text-[30px]' : 'text-[32px]')}>{pos.section ? sectionLabel(pos.section) : pos.song.title}</h2>
+            <p className="mt-1 truncate text-right text-xl font-semibold tracking-tight text-muted-foreground">{pos.nextKind === 'section' ? sectionLabel(pos.nextName) : pos.nextName}</p>
         </section>
     );
 }
@@ -216,8 +216,11 @@ export function FadeScroller({ children }: { children: ReactNode }) {
     return (
         <div
             ref={ref}
+            tabIndex={0}
+            role="region"
+            aria-label="현재 진행"
             className={cn(
-                'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-4 pb-3 pt-0.5 [scrollbar-width:none]',
+                'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-4 pb-3 pt-0.5 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [scrollbar-width:none]',
                 fade && 'mask-b-from-[calc(100%-2rem)]',
             )}
         >

@@ -1,0 +1,104 @@
+/* Only the active worship screen uses this palette. */
+.stage { --radius: 0.5rem; }
+
+.pulse {
+    color-scheme: dark;
+    --background: #171b1a;
+    --foreground: #eeeae1;
+    --card: #1d2220;
+    --card-foreground: #eeeae1;
+    --surface: #202623;
+    --muted: #272e2a;
+    --muted-foreground: #acb5ae;
+    --border: #3d4741;
+    --input: #617068;
+    --ring: #d4c8ac;
+    --primary: #ddd1b8;
+    --primary-foreground: #20241f;
+    --brand: #b5c9b8;
+    --brand-foreground: #171b1a;
+    --secondary: #e8b58e;
+    --secondary-foreground: #261e18;
+    --accent: #bdcbd2;
+    --accent-foreground: #171b1a;
+    --success: #b5c9b8;
+    --success-foreground: #171b1a;
+    --warning: #e8c18e;
+    --warning-foreground: #261e18;
+    --destructive: #ffacac;
+    --destructive-foreground: #331919;
+}
+
+.dialSpace {
+    container-type: size;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
+}
+.dial {
+    position: relative;
+    width: min(92cqh, 92cqw, 28rem);
+    height: min(92cqh, 92cqw, 28rem);
+    container-type: size;
+}
+.dialFace {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+}
+.beatNumber {
+    color: var(--foreground);
+    font-size: 31cqw;
+    font-weight: 400;
+    line-height: 0.9;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.06em;
+}
+.beatLabel {
+    color: var(--muted-foreground);
+    font-size: clamp(10px, 5cqw, 15px);
+    font-variant-numeric: tabular-nums;
+}
+.activeBeat { stroke: var(--primary); }
+.restBeat { stroke: #68776e; }
+
+.pulseCaption {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-shrink: 0;
+    padding: 0.75rem 0 1rem;
+    color: var(--muted-foreground);
+    font-size: 11px;
+}
+.desktopCaption { padding-bottom: 2rem; font-size: 13px; }
+.pulseBody {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+}
+.pulseVisual {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    padding: 0.25rem 1.25rem 0;
+}
+@container (max-height: 560px) {
+    .pulseBody { flex-direction: row; align-items: stretch; }
+    .pulseVisual { padding: 0 0.5rem; min-width: 0; }
+    .pulseCaption { display: none; }
+    .pulseBody > section { width: 52%; align-content: center; padding: 0 1rem 0 0; border: 0; }
+    .pulseBody h2 { font-size: 24px; }
+}
+
+@container (min-width: 600px) and (max-height: 560px) {
+    .mobileFooter { display: grid; grid-template-columns: 1fr 1fr; align-items: center; }
+    .mobileFooter > :last-child { grid-column: 1 / -1; padding-top: 0; }
+}

@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Activity, ArrowRightLeft, ChevronLeft, ChevronRight, Ellipsis, FileMusic, Lock, LockOpen, Maximize2, Minimize2, MonitorCheck, StickyNote } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
-import { AvatarStack, TONE_BLOCK, TONE_ICON } from '@/components/conti/ui';
+import { AvatarStack } from '@/components/conti/ui';
 import BeatHero, { NoPulse } from './BeatHero';
 import { FollowStatus, IconToggle, ViewSwitch, type SwitchOption } from './Controls';
 import CueIsland, { type IslandMode } from './CueIsland';
@@ -14,13 +14,14 @@ import QuickCues from './QuickCues';
 import ScoreStage from './ScoreStage';
 import { MemberList, MoreBody } from './SheetBodies';
 import TempoBeat from './TempoBeat';
+import { sectionLabel } from './sectionLabel';
 import { keyText, type LivePosition } from './derive';
 import type { LiveView } from './LiveMobile';
 import type { CueDefinition, LiveScreenHandlers, LiveScreenModel, LiveToast } from './model';
 import { isFresh, relativeTime, useNow } from './time';
 
 /*
- * 데스크톱 (lg 이상) — 후보 A '밝은 따라가기' 의 악보 무대.
+ * 데스크톱 (lg 이상) — 악보와 차분한 펄스.
  * 위 막대: 나가기 · 곡 · Key · 박에 맞춰 뛰는 BPM · 악보 | 펄스 · 기기 동작 · 더보기
  * 가운데: 악보(이 기기에 받은 팀 악보) 또는 펄스 — 맨 위 줄 가운데에 큐 아일랜드
  * 오른쪽 레일: 지금 · 다음 · 메모 · 송폼 · 콘티 순서 · 팀 접속
@@ -100,15 +101,15 @@ export default function LiveDesktop({
 
                 <div className="flex min-w-0 items-center gap-3">
                     <h2 className="min-w-0 truncate text-[22px] font-semibold tracking-tight">{song.title}</h2>
-                    <span className="inline-flex h-7 shrink-0 items-center rounded-full bg-muted px-2.5 text-sm font-semibold">Key {keyText(song.key)}</span>
-                    <TempoBeat bpm={model.bpm} meter={song.meter} resetKey={`${pos.beatKey}-${pulse ? 'pulse' : 'score'}`} desktop />
+                    <span className="inline-flex h-7 shrink-0 items-center border-l border-border pl-3 text-sm font-semibold">Key {keyText(song.key)}</span>
+                    <TempoBeat bpm={model.bpm} meter={song.meter} desktop />
                 </div>
                 <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
                     {pos.songIndex + 1} / {model.songs.length}곡
                 </span>
 
                 <div inert={locked} className="ml-auto flex shrink-0 items-center gap-1">
-                    <ViewSwitch label="화면" value={pulse ? 'pulse' : 'score'} options={DESKTOP_SCREENS} onChange={(value) => onView(value)} className="mr-2" />
+                    <ViewSwitch label="화면" value={pulse ? 'pulse' : 'score'} options={DESKTOP_SCREENS} onChange={(value) => onView(value)} className="mr-2 border-0 pt-0" />
                     {device.wakeSupported ? (
                         <IconToggle label="화면 꺼짐 방지" pressed={device.awake} onClick={device.toggleAwake}>
                             <MonitorCheck className="size-5" aria-hidden="true" />
@@ -194,7 +195,7 @@ export default function LiveDesktop({
                                     onClick={handlers.prev}
                                     disabled={pos.atStart}
                                     aria-label={pos.hasForm ? '이전 섹션' : '이전 곡'}
-                                    className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-12 shrink-0 px-3.5 @min-[1200px]:px-5')}
+                                    className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-12 rounded-xl shrink-0 px-3.5 @min-[1200px]:px-5')}
                                 >
                                     <ChevronLeft className="size-5" aria-hidden="true" />
                                     <span className="hidden @min-[1200px]:inline">{pos.hasForm ? '이전 섹션' : '이전 곡'}</span>
@@ -203,14 +204,14 @@ export default function LiveDesktop({
                                     type="button"
                                     onClick={handlers.next}
                                     disabled={pos.atEnd}
-                                    className={cn(buttonVariants({ size: 'lg' }), 'h-12 min-w-36 max-w-60 shrink-0 gap-2 has-[>svg]:pl-6 has-[>svg]:pr-4')}
+                                    className={cn(buttonVariants({ size: 'lg' }), 'h-12 rounded-xl min-w-36 max-w-60 shrink-0 gap-2 has-[>svg]:pl-6 has-[>svg]:pr-4')}
                                 >
                                     {pos.atEnd ? (
                                         <span className="flex-1 text-left">콘티 끝</span>
                                     ) : (
                                         <span className="flex min-w-0 flex-1 items-baseline gap-2 text-left">
-                                            <span className="shrink-0 text-sm font-medium opacity-60">{pos.nextKind === 'section' ? '다음' : '다음 곡'}</span>
-                                            <span className="truncate">{pos.nextName}</span>
+                                            <span className="shrink-0 text-sm font-medium opacity-80">{pos.nextKind === 'section' ? '다음' : '다음 곡'}</span>
+                                            <span className="truncate">{pos.nextKind === 'section' ? sectionLabel(pos.nextName) : pos.nextName}</span>
                                         </span>
                                     )}
                                     <ChevronRight className="size-5" aria-hidden="true" />
@@ -268,7 +269,7 @@ function DesktopPulse({ model, pos }: { model: LiveScreenModel; pos: LivePositio
                 <p className="truncate text-xs font-medium text-muted-foreground">펄스 · {pos.song.meter}</p>
             </div>
             <div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-9 pb-7 pt-2 @min-[1200px]:px-12">
-                {model.bpm ? <BeatHero bpm={model.bpm} meter={pos.song.meter} resetKey={pos.beatKey} desktop tempo={false} /> : <NoPulse desktop />}
+                {model.bpm ? <BeatHero bpm={model.bpm} meter={pos.song.meter} resetKey={pos.beatKey} desktop /> : <NoPulse desktop />}
             </div>
         </section>
     );
@@ -307,23 +308,25 @@ function Rail({ model, handlers, pos }: { model: LiveScreenModel; handlers: Live
         <aside
             ref={railRef}
             aria-label="진행"
+            tabIndex={0}
             onScroll={(event) => setRailScrolled(event.currentTarget.scrollTop > 4)}
-            className="relative w-[300px] shrink-0 overflow-y-auto overscroll-contain border-l border-border @min-[1200px]:w-80"
+            className="relative w-[300px] shrink-0 overflow-y-auto overscroll-contain border-l border-border outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring @min-[1200px]:w-80"
         >
             <div ref={nowRef} className={cn('sticky top-0 z-10 border-b bg-background px-6 pb-5 pt-6 transition-colors', railScrolled ? 'border-border' : 'border-transparent')}>
                 <p className="text-xs font-medium text-muted-foreground">지금</p>
                 {pos.hasForm ? (
                     <p
+                        data-current-section
                         className={cn(
-                            'mt-2 break-words text-5xl font-semibold leading-[1.02]',
+                            'mt-2 break-words text-[40px] font-medium leading-[1.02]',
                             // 긴 이름(Pre-Chorus)은 48px 로 한 줄에, 짧은 이름은 넓은 레일에서 56px
-                            (pos.section ?? '').length > 7 ? 'tracking-[-0.035em]' : 'tracking-tight @min-[1200px]:text-[56px]',
+                            (pos.section ?? '').length > 7 ? 'tracking-[-0.035em]' : 'tracking-tight @min-[1200px]:text-[48px]',
                         )}
                     >
-                        {pos.section}
+                        {sectionLabel(pos.section ?? '')}
                     </p>
                 ) : (
-                    <p className="mt-2 line-clamp-3 break-words text-3xl font-semibold leading-tight tracking-tight">{song.title}</p>
+                    <p data-current-section className="mt-2 line-clamp-3 break-words text-3xl font-semibold leading-tight tracking-tight">{song.title}</p>
                 )}
                 <p className="mt-2.5 text-sm text-muted-foreground tabular-nums">
                     {pos.hasForm ? `${pos.sectionIndex + 1} / ${song.sections.length} 섹션` : '송폼 없음 · 곡 단위로 넘어가요'}
@@ -336,25 +339,25 @@ function Rail({ model, handlers, pos }: { model: LiveScreenModel; handlers: Live
                     ) : (
                         <>
                             <span className="shrink-0 text-sm text-muted-foreground">{pos.nextKind === 'section' ? '다음' : '다음 곡'}</span>
-                            <span className="min-w-0 truncate text-xl font-semibold tracking-tight">{pos.nextName}</span>
+                            <span className="min-w-0 truncate text-xl font-semibold tracking-tight">{pos.nextKind === 'section' ? sectionLabel(pos.nextName) : pos.nextName}</span>
                         </>
                     )}
                 </div>
             </div>
 
             {song.note ? (
-                <div className={cn('mx-3 mt-1 rounded-2xl px-3 py-3.5', TONE_BLOCK.peach)}>
+                <div className="mx-6 mt-2 border-l-2 border-border py-2 pl-3">
                     <p className="flex items-center gap-1.5 text-xs font-semibold">
-                        <StickyNote className={cn('size-3.5', TONE_ICON.peach)} aria-hidden="true" />
+                        <StickyNote className="size-3.5 text-muted-foreground" aria-hidden="true" />
                         곡 메모
                     </p>
                     <p className="mt-1.5 text-[15px] font-medium leading-snug [overflow-wrap:anywhere]">{song.note}</p>
                 </div>
             ) : null}
             {song.transitionNote && pos.nextSong ? (
-                <div className={cn('mx-3 mt-2 rounded-2xl px-3 py-3.5', TONE_BLOCK.sky)}>
+                <div className="mx-6 mt-3 border-l-2 border-border py-2 pl-3">
                     <p className="flex items-center gap-1.5 text-xs font-semibold">
-                        <ArrowRightLeft className={cn('size-3.5', TONE_ICON.sky)} aria-hidden="true" />
+                        <ArrowRightLeft className="size-3.5 text-muted-foreground" aria-hidden="true" />
                         다음 곡으로 넘어갈 때
                     </p>
                     <p className="mt-1.5 text-[15px] font-medium leading-snug [overflow-wrap:anywhere]">{song.transitionNote}</p>
@@ -364,7 +367,7 @@ function Rail({ model, handlers, pos }: { model: LiveScreenModel; handlers: Live
             <section aria-labelledby={formId} className="px-6 pt-7">
                 <div className="flex items-baseline justify-between">
                     <h3 id={formId} className="text-[15px] font-semibold tracking-tight">
-                        송폼
+                        곡 진행 순서
                     </h3>
                     <span className="text-xs text-muted-foreground">{pos.hasForm ? (control ? '눌러서 이동' : `${song.sections.length}섹션`) : ''}</span>
                 </div>
@@ -376,7 +379,7 @@ function Rail({ model, handlers, pos }: { model: LiveScreenModel; handlers: Live
                             const body = (
                                 <>
                                     <span className="w-5 shrink-0 text-xs text-muted-foreground tabular-nums">{index + 1}</span>
-                                    <span className={cn('min-w-0 flex-1 truncate', current ? 'font-semibold' : 'font-medium', past && 'text-muted-foreground')}>{name}</span>
+                                    <span className={cn('min-w-0 flex-1 truncate', current ? 'font-semibold' : 'font-medium', past && 'text-muted-foreground')}>{sectionLabel(name)}</span>
                                     {current ? (
                                         <span className="inline-flex h-6 items-center rounded-full bg-primary px-2.5 text-[11px] font-semibold text-primary-foreground">지금</span>
                                     ) : index === pos.sectionIndex + 1 ? (

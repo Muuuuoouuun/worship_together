@@ -23,7 +23,7 @@ export default function QuickCues({ cues, onSend, desktop = false }: { cues: Cue
         <div role="group" aria-label="큐 바로 보내기" className={cn('flex items-center gap-2', desktop && 'shrink-0')}>
             {desktop ? (
                 <span aria-hidden="true" className="mr-1.5 flex shrink-0 flex-col text-xs leading-tight">
-                    <span className="font-semibold">큐 보내기</span>
+                    <span className="font-semibold">팀에 요청</span>
                     <span className="text-muted-foreground">누르면 바로</span>
                 </span>
             ) : null}
@@ -86,21 +86,21 @@ function QuickCueButton({ cue, onSend, desktop }: { cue: CueDefinition; onSend: 
         <button
             type="button"
             onClick={send}
-            aria-label={failed ? `${cue.label} 큐를 보내지 못했어요. 다시 보내기` : `${cue.label} 큐를 ${target}에게 바로 보내기`}
+            aria-label={failed ? `실패 다시 눌러 보내기 · ${cue.label}` : sent ? `보냄 ${target}에게 · ${cue.label}` : `${cue.label} ${target}에게 바로 보내기`}
             aria-disabled={sent || undefined}
             className={cn(
-                buttonVariants({ variant: sent ? 'brand' : failed ? 'destructive-outline' : 'secondary' }),
-                'h-12 flex-col gap-0 leading-tight',
+                buttonVariants({ variant: sent ? 'brand' : failed ? 'destructive-outline' : 'outline' }),
+                'h-12 rounded-xl flex-col gap-0 leading-tight',
                 desktop ? 'w-28 shrink-0 px-3' : 'min-w-0 flex-1 px-2',
                 sent && 'hover:bg-brand',
             )}
         >
             {sent ? (
                 <>
-                    <span className="inline-flex items-center gap-1 text-[15px] font-semibold animate-success-bounce">
+                    <span className="inline-flex items-center gap-1 text-[15px] font-semibold">
                         <Check className="size-4" strokeWidth={3} aria-hidden="true" />
                         보냄
-                    </span>
+                    </span>{' '}
                     <span className="max-w-full truncate text-[11px] font-medium text-brand-foreground/75">{target}에게</span>
                 </>
             ) : failed ? (
@@ -108,13 +108,13 @@ function QuickCueButton({ cue, onSend, desktop }: { cue: CueDefinition; onSend: 
                     <span className="inline-flex items-center gap-1 text-[15px] font-semibold">
                         <CircleAlert className="size-4" aria-hidden="true" />
                         실패
-                    </span>
+                    </span>{' '}
                     <span className="max-w-full truncate text-[11px] font-medium">다시 눌러 보내기</span>
                 </>
             ) : (
                 <>
-                    <span className="max-w-full truncate text-[15px] font-semibold">{cue.label}</span>
-                    <span className="max-w-full truncate text-[11px] font-medium text-muted-foreground">{target}</span>
+                    <span className="max-w-full truncate text-[15px] font-semibold">{cue.label}</span>{' '}
+                    <span className="max-w-full truncate text-[11px] font-medium text-muted-foreground">{target}에게</span>
                 </>
             )}
         </button>

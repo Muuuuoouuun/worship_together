@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
  * 예배 중 화면의 박 시계. 지금 BPM 과 박자표로 한 마디의 박 · 센박 · 마디 수를 셉니다.
  * - 4/4 · 3/4 …: 4분음표 = BPM, 위 숫자만큼 박
  * - 6/8 · 9/8 · 12/8 (겹박자): 점4분음표 = BPM, 8분음표를 세고 세 박씩 묶음 (묶음 첫 박이 중간 센박)
- * 박마다 두 번(박 시작 · 깜빡임 끝) 다시 그리므로, 이 훅은 박 표시만 그리는 작은 부품에서 쓰세요.
+ * 박마다 한 번, 박 표시만 다시 그립니다. 숨겨진 탭에서는 갱신을 멈춥니다.
  */
 
 export interface Meter {
@@ -43,8 +43,6 @@ export interface Pulse {
     downbeat: boolean;
     /** 6/8 의 4박처럼 묶음의 첫 박 */
     secondary: boolean;
-    /** 박이 막 들어온 짧은 순간 (깜빡임) */
-    blink: boolean;
     /** resetKey 가 바뀐 뒤 몇 번째 마디인지 (1부터) */
     bar: number;
     /** 한 박 길이 ms */
@@ -57,38 +55,40 @@ export interface Pulse {
 export function usePulse({ bpm, meter, resetKey }: { bpm: number; meter: string; resetKey?: string | number }): Pulse {
     const parsed = parseMeter(meter);
     const intervalMs = 60000 / (Math.max(20, Math.min(300, bpm)) * parsed.perQuarter);
-    const [state, setState] = useState({ tick: -1, blink: false });
+    const [currentTick, setCurrentTick] = useState(-1);
     const startRef = useRef(0);
 
     useEffect(() => {
         startRef.current = Date.now();
-        const pulseMs = Math.min(140, intervalMs * 0.35);
         let timer: ReturnType<typeof setTimeout>;
         const tick = () => {
+            clearTimeout(timer);
+            if (document.hidden) return;
             const elapsed = Date.now() - startRef.current;
             const index = Math.floor(elapsed / intervalMs);
             const phase = elapsed - index * intervalMs;
-            // 다른 앱에 가 있는 동안은 깜빡이지 않고 박만 셉니다
-            const blink = phase < pulseMs && !document.hidden;
-            setState((current) => (current.tick === index && current.blink === blink ? current : { tick: index, blink }));
-            timer = setTimeout(tick, Math.max(8, (blink ? pulseMs : intervalMs) - phase));
+            setCurrentTick(index);
+            timer = setTimeout(tick, Math.max(8, intervalMs - phase));
         };
         timer = setTimeout(tick, 0);
-        return () => clearTimeout(timer);
+        document.addEventListener('visibilitychange', tick);
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('visibilitychange', tick);
+        };
     }, [intervalMs, resetKey]);
 
-    if (state.tick < 0) {
-        return { count: 0, beatsPerBar: parsed.beatsPerBar, groupSize: parsed.groupSize, downbeat: false, secondary: false, blink: false, bar: 1, intervalMs };
+    if (currentTick < 0) {
+        return { count: 0, beatsPerBar: parsed.beatsPerBar, groupSize: parsed.groupSize, downbeat: false, secondary: false, bar: 1, intervalMs };
     }
-    const count = (state.tick % parsed.beatsPerBar) + 1;
+    const count = (currentTick % parsed.beatsPerBar) + 1;
     return {
         count,
         beatsPerBar: parsed.beatsPerBar,
         groupSize: parsed.groupSize,
         downbeat: count === 1,
         secondary: parsed.groupSize !== null && count > 1 && (count - 1) % parsed.groupSize === 0,
-        blink: state.blink,
-        bar: Math.floor(state.tick / parsed.beatsPerBar) + 1,
+        bar: Math.floor(currentTick / parsed.beatsPerBar) + 1,
         intervalMs,
     };
 }

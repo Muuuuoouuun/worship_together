@@ -122,7 +122,7 @@ test('new leader and first-time teammate: invite, shared setlist, permission bou
         const sessionId = new URL(page.url()).pathname.split('/').at(-1)!;
         await expect(teammate.getByRole('heading', { name: '처음 함께 찬양', exact: true })).toBeVisible();
         await expect(teammate.getByText(/을 따라가는 중/).first()).toBeVisible();
-        await page.getByRole('button', { name: /한 번 더 큐를 .*바로 보내기/ }).click();
+        await page.getByRole('button', { name: /한 번 더 .*에게 바로 보내기/ }).click();
         await expect(teammate.getByText('한 번 더', { exact: true }).first()).toBeVisible();
         await info.attach('member-live-cue', { body: await teammate.screenshot(), contentType: 'image/png' });
         const detail = await (await other.request.get(`/api/live/${sessionId}`)).json();

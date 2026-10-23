@@ -17,7 +17,7 @@ test('first-time teammate finds help, understands terms, and enters a safe pract
     await page.getByRole('link', { name: '팀원으로 연습', exact: true }).click();
     await expect(page.getByRole('heading', { name: /예배 중/ }).first()).toBeAttached();
     await expect(page.getByText(/을 따라가는 중/).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /큐를 .*바로 보내기/ }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /에게 바로 보내기/ }).first()).toBeVisible();
 });
 
 test('core pages render without errors, horizontal overflow or accessibility violations', async ({ page }) => {

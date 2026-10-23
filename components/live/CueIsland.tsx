@@ -20,9 +20,9 @@ export type IslandMode = 'idle' | 'compact' | 'medium' | 'large' | 'list';
 const EXPAND_MS: Record<LiveToastUrgency, number> = { high: 3200, normal: 2400, low: 2000 };
 
 export const CUE_KIND_LABEL: Partial<Record<LiveToastKind, string>> = {
-    'cue-all': '전체 큐',
-    'cue-role': '내 역할 큐',
-    'cue-sent': '보낸 큐',
+    'cue-all': '전체 신호',
+    'cue-role': '파트 신호',
+    'cue-sent': '보낸 신호',
 };
 
 function sendPath(toast: LiveToast) {
@@ -144,25 +144,24 @@ export default function CueIsland({
                 <div
                     key={face.id}
                     className={cn(
-                        'flex items-center gap-1 rounded-full bg-primary p-1 text-primary-foreground shadow-lg shadow-foreground/15 animate-in fade-in zoom-in-90 duration-200 motion-reduce:animate-none',
+                        'flex items-center gap-1 rounded-full bg-primary p-1 text-primary-foreground shadow-lg shadow-foreground/15 animate-in fade-in duration-200 motion-reduce:animate-none',
                         desktop ? 'h-11' : 'h-10',
                     )}
                 >
                     <button
                         type="button"
                         aria-expanded={false}
-                        aria-label={more > 0 ? `큐 ${cues.length}개 모두 보기 — ${face.title}` : `${face.title} 큐 펼치기`}
                         onClick={() => (more > 0 ? setListOpen(true) : setFocusId(face.id))}
                         className="relative flex h-full min-w-0 items-center gap-2 rounded-full pl-2.5 pr-2 outline-none after:absolute after:-inset-y-1 after:inset-x-0 focus-visible:ring-2 focus-visible:ring-primary-foreground/70"
                     >
                         <CueLead cue={face} />
                         <span className={cn('min-w-0 max-w-40 shrink truncate font-semibold', desktop ? 'text-sm' : 'text-[13px]')}>{face.title}</span>
                         {face.progress ? (
-                            <span className="shrink-0 text-xs tabular-nums text-primary-foreground/60">
+                            <span className="shrink-0 text-xs tabular-nums text-primary-foreground/80">
                                 {face.progress.done}/{face.progress.total}
                             </span>
                         ) : face.from && (desktop || more === 0 || !face.ackable || face.acked) ? (
-                            <span className={cn('min-w-0 truncate text-primary-foreground/60', desktop ? 'text-sm' : 'text-[13px]')}>{face.from}</span>
+                            <span className={cn('min-w-0 truncate text-primary-foreground/80', desktop ? 'text-sm' : 'text-[13px]')}>{face.from}</span>
                         ) : null}
                         {more > 0 ? (
                             <span className="relative ml-0.5 inline-flex h-5 shrink-0 items-center rounded-full bg-primary-foreground/15 px-1.5 text-[11px] font-semibold tabular-nums">
@@ -170,6 +169,7 @@ export default function CueIsland({
                                 {hiddenUnacked ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-secondary ring-2 ring-primary" /> : null}
                             </span>
                         ) : null}
+                        <span className="sr-only">{more > 0 ? ' 신호 모두 보기' : ' 신호 펼치기'}</span>
                     </button>
                     {face.ackable ? <AckButton cue={face} onAck={onAck} size="xs" /> : null}
                 </div>
@@ -179,12 +179,12 @@ export default function CueIsland({
                 <div
                     key={focused.id}
                     {...swipe}
-                    className="relative flex h-16 items-center gap-3 overflow-hidden rounded-full bg-primary pl-5 pr-2 text-primary-foreground shadow-xl shadow-foreground/20 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-300 motion-reduce:animate-none"
+                    className="relative flex h-16 items-center gap-3 overflow-hidden rounded-2xl bg-primary pl-5 pr-2 text-primary-foreground shadow-xl shadow-foreground/20 animate-in fade-in duration-300 motion-reduce:animate-none"
                 >
                     <CueLead cue={focused} />
                     <div className="min-w-0 flex-1">
                         <p className="truncate text-[17px] font-semibold leading-tight">{focused.title}</p>
-                        <p className="truncate text-xs text-primary-foreground/60">
+                        <p className="truncate text-xs text-primary-foreground/80">
                             {CUE_KIND_LABEL[focused.kind]} · {sendPath(focused)}
                         </p>
                     </div>
@@ -198,9 +198,9 @@ export default function CueIsland({
                 <div
                     key={focused.id}
                     {...swipe}
-                    className="relative overflow-hidden rounded-[28px] bg-primary px-5 pb-5 pt-3 text-primary-foreground shadow-2xl shadow-foreground/25 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-300 motion-reduce:animate-none"
+                    className="relative overflow-hidden rounded-2xl bg-primary px-5 pb-5 pt-3 text-primary-foreground shadow-2xl shadow-foreground/25 animate-in fade-in duration-300 motion-reduce:animate-none"
                 >
-                    <div className="flex items-center gap-2 text-[13px] text-primary-foreground/65">
+                    <div className="flex items-center gap-2 text-[13px] text-primary-foreground/80">
                         {!focused.acked ? <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-secondary" /> : null}
                         <Megaphone className="size-4 shrink-0" aria-hidden="true" />
                         <span className="shrink-0 font-medium text-primary-foreground">{CUE_KIND_LABEL[focused.kind]}</span>
@@ -221,10 +221,10 @@ export default function CueIsland({
             {mode === 'list' ? (
                 <div
                     {...swipe}
-                    className="rounded-[28px] bg-primary p-2 text-primary-foreground shadow-2xl shadow-foreground/25 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-200 motion-reduce:animate-none"
+                    className="rounded-2xl bg-primary p-2 text-primary-foreground shadow-2xl shadow-foreground/25 animate-in fade-in duration-200 motion-reduce:animate-none"
                 >
                     <div className="flex items-center justify-between pl-3">
-                        <p className="text-[13px] font-medium text-primary-foreground/65">
+                        <p className="text-[13px] font-medium text-primary-foreground/80">
                             큐 <span className="tabular-nums">{cues.length}</span>
                         </p>
                         <button
@@ -242,7 +242,7 @@ export default function CueIsland({
                                 <CueLead cue={cue} />
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate text-[15px] font-semibold leading-snug">{cue.title}</p>
-                                    <p className="truncate text-xs text-primary-foreground/60">
+                                    <p className="truncate text-xs text-primary-foreground/80">
                                         {CUE_KIND_LABEL[cue.kind]} · {sendPath(cue)}
                                     </p>
                                 </div>
@@ -277,10 +277,10 @@ function CueLead({ cue }: { cue: LiveToast }) {
 }
 
 function AckButton({ cue, onAck, size }: { cue: LiveToast; onAck: (id: string) => void; size: 'xs' | 'sm' | 'lg' }) {
-    const box = size === 'lg' ? 'h-14 min-w-24 px-6 text-base' : size === 'sm' ? 'h-10 px-4 text-sm' : 'h-8 px-3 text-xs';
+    const box = size === 'lg' ? 'h-14 min-w-24 px-6 text-base' : size === 'sm' ? 'h-11 px-4 text-sm' : 'h-8 px-3 text-xs';
     if (cue.acked) {
         return (
-            <span className={cn('inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary-foreground/15 font-semibold text-primary-foreground animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none', box)}>
+            <span className={cn('inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary-foreground/15 font-semibold text-primary-foreground animate-in fade-in duration-150 motion-reduce:animate-none', box)}>
                 <Check className={size === 'lg' ? 'size-5' : 'size-3.5'} aria-hidden="true" />
                 확인함
             </span>
@@ -327,7 +327,7 @@ function IslandClose({ cue, onDismiss, className }: { cue: LiveToast; onDismiss:
             onClick={() => onDismiss(cue.id)}
             aria-label={`${cue.title} 알림 닫기`}
             className={cn(
-                'relative inline-flex size-9 shrink-0 items-center justify-center rounded-full text-primary-foreground/60 outline-none transition-colors after:absolute after:-inset-1 hover:bg-primary-foreground/10 hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-primary-foreground/70',
+                'relative inline-flex size-9 shrink-0 items-center justify-center rounded-full text-primary-foreground/80 outline-none transition-colors after:absolute after:-inset-1 hover:bg-primary-foreground/10 hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-primary-foreground/70',
                 className,
             )}
         >
@@ -345,10 +345,9 @@ function IdleStatus({ connection, startedAt }: { connection: LiveConnection; sta
     return (
         <p className="flex h-9 items-center gap-1.5 whitespace-nowrap px-3 text-xs text-muted-foreground animate-in fade-in duration-300 motion-reduce:animate-none">
             <span className="relative flex size-1.5" aria-hidden="true">
-                <span className={cn('absolute inset-0 rounded-full opacity-60 motion-safe:animate-ping', warn ? 'bg-warning' : 'bg-brand')} />
                 <span className={cn('relative size-1.5 rounded-full', warn ? 'bg-warning' : 'bg-brand')} />
             </span>
-            <span className={cn('font-medium', warn ? 'text-warning' : 'text-brand')}>{label}</span>
+            <span className={cn('font-medium', warn ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
             {elapsed ? (
                 <>
                     <span aria-hidden="true">·</span>

@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Lock, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { controllerText, type LivePosition } from './derive';
+import { sectionLabel } from './sectionLabel';
 
 /* 예배 중 화면의 작은 조작 부품 — 화면 바꾸기 · 넘김 버튼 · 따라가는 중 · 잠금 풀기 · 아이콘 스위치 */
 
@@ -14,10 +15,10 @@ export interface SwitchOption<T extends string> {
     icon: LucideIcon;
 }
 
-/** 화면 바꾸기 — 회색 트랙 위 흰 칩 (모바일은 맨 아래, 데스크톱은 위 막대 오른쪽) */
+/** 화면 바꾸기 — 고정된 44px 터치 영역 (모바일은 맨 아래, 데스크톱은 위 막대 오른쪽) */
 export function ViewSwitch<T extends string>({ label, value, options, onChange, className }: { label: string; value: T; options: SwitchOption<T>[]; onChange: (value: T) => void; className?: string }) {
     return (
-        <div role="group" aria-label={label} className={cn('grid shrink-0 auto-cols-fr grid-flow-col rounded-full bg-muted p-1', className)}>
+        <div role="group" aria-label={label} className={cn('grid shrink-0 auto-cols-fr grid-flow-col gap-1 border-t border-border pt-1', className)}>
             {options.map((option) => {
                 const active = option.value === value;
                 const Icon = option.icon;
@@ -29,9 +30,9 @@ export function ViewSwitch<T extends string>({ label, value, options, onChange, 
                         aria-pressed={active}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            // 보이는 칩은 36px, 누르는 자리는 트랙 여백까지 44px (after: 로 위아래 4px 넓힘)
-                            'relative inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-full px-3.5 text-sm outline-none transition-colors after:absolute after:inset-x-0 after:-inset-y-1 focus-visible:ring-[3px] focus-visible:ring-ring',
-                            active ? 'bg-card font-semibold text-foreground shadow-sm' : 'font-medium text-muted-foreground hover:text-foreground',
+                            // 보이는 영역과 누르는 영역 모두 최소 44px
+                            'relative inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg px-3.5 text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring',
+                            active ? 'bg-muted font-semibold text-foreground' : 'font-medium text-muted-foreground hover:text-foreground',
                         )}
                     >
                         <Icon className="size-4 shrink-0" aria-hidden="true" />
@@ -52,7 +53,7 @@ export function MobileNav({ pos, onPrev, onNext }: { pos: LivePosition; onPrev: 
                 onClick={onPrev}
                 disabled={pos.atStart}
                 aria-label={pos.hasForm ? '이전 섹션' : '이전 곡'}
-                className={cn(buttonVariants({ variant: 'outline' }), 'size-14 shrink-0 flex-col gap-0 px-0 text-[11px] font-medium has-[>svg]:px-0')}
+                className={cn(buttonVariants({ variant: 'outline' }), 'size-14 shrink-0 rounded-xl flex-col gap-0 px-0 text-[11px] font-medium has-[>svg]:px-0')}
             >
                 <ChevronLeft className="size-5" aria-hidden="true" />
                 이전
@@ -61,11 +62,11 @@ export function MobileNav({ pos, onPrev, onNext }: { pos: LivePosition; onPrev: 
                 type="button"
                 onClick={onNext}
                 disabled={pos.atEnd}
-                className={cn(buttonVariants({ size: 'lg' }), 'h-14 min-w-0 flex-1 justify-between gap-3 pl-6 pr-4 text-[17px] has-[>svg]:pr-4')}
+                className={cn(buttonVariants({ size: 'lg' }), 'h-14 min-w-0 flex-1 rounded-xl justify-between gap-3 pl-6 pr-4 text-[17px] has-[>svg]:pr-4')}
             >
                 <span className="flex min-w-0 flex-col items-start leading-tight">
                     <span>{pos.nextTitle}</span>
-                    <span className="max-w-full truncate text-xs font-medium text-primary-foreground/60">{pos.nextName}</span>
+                    <span className="max-w-full truncate text-xs font-medium text-primary-foreground/80">{pos.nextKind === 'section' ? sectionLabel(pos.nextName) : pos.nextName}</span>
                 </span>
                 <ChevronRight className="size-6" aria-hidden="true" />
             </button>
@@ -82,12 +83,11 @@ export function FollowStatus({ controllerNames, desktop = false }: { controllerN
         <div
             role="status"
             className={cn(
-                'flex min-w-0 items-center gap-3 rounded-full bg-muted pl-5 pr-6 text-left',
+                'flex min-w-0 items-center gap-3 px-2 text-left',
                 desktop ? 'h-12 w-[19rem] shrink-0' : 'h-14 w-full',
             )}
         >
             <span className="relative flex size-2 shrink-0" aria-hidden="true">
-                <span className="absolute inset-0 rounded-full bg-brand opacity-50 motion-safe:animate-ping" />
                 <span className="relative size-2 rounded-full bg-brand" />
             </span>
             <span className="flex min-w-0 flex-col leading-tight">

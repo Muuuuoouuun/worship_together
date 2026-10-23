@@ -15,12 +15,13 @@ import ScoreStage from './ScoreStage';
 import Sheet from './Sheet';
 import { MoreBody, OrderList } from './SheetBodies';
 import TempoBeat from './TempoBeat';
+import styles from './live-stage.module.css';
 import type { LivePosition } from './derive';
 import type { CueDefinition, LiveScreenHandlers, LiveScreenModel, LiveToast } from './model';
 
 /*
- * 모바일 (lg 미만) — 후보 A '밝은 따라가기'.
- * 위: 나가기 · 큐 아일랜드 · 더보기 / 곡 줄(곡 · Key · 박에 맞춰 뛰는 BPM) / 가운데: 지금 | 악보 | 펄스
+ * 모바일 (lg 미만) — 지금 · 악보 · 차분한 펄스.
+ * 위: 나가기 · 큐 아일랜드 · 더보기 / 곡 줄(곡 · Key · 고정 BPM) / 가운데: 지금 | 악보 | 펄스
  * 아래 엄지 자리(세 화면 모두 같음): 빠른 큐 → 이전 · 다음 (따라가는 사람은 '따라가는 중') → 화면 바꾸기.
  * 악보는 뷰어의 머리줄이 곡 · Key 를 보여 주므로 곡 줄 없이 가운데를 끝까지 쓰고, 왼쪽 위가 '돌아가기' 가 됩니다.
  */
@@ -143,23 +144,23 @@ export default function LiveMobile({
                         <ScoreStage model={model} handlers={handlers} pos={pos} locked={locked} onPulse={() => onView('pulse')} className="px-2 pb-1 pt-1" />
                     ) : (
                         <>
-                            {/* 곡 줄: 곡 · Key · 박에 맞춰 뛰는 BPM — 지금 · 펄스 모두 같은 자리, 같은 박 시계 */}
+                            {/* 곡 줄: 곡 · Key · 고정 BPM — 지금 · 펄스 모두 같은 자리에서 표시 */}
                             <div className="shrink-0 transition-opacity duration-200 group-has-[[data-island-open]]/screen:pointer-events-none group-has-[[data-island-open]]/screen:opacity-0 motion-reduce:transition-none">
                                 <SongStrip
                                     model={model}
                                     pos={pos}
                                     onOrder={() => openSheet('order')}
-                                    beat={<TempoBeat bpm={model.bpm} meter={song.meter} resetKey={`${pos.beatKey}-${view}`} />}
+                                    beat={<TempoBeat bpm={model.bpm} meter={song.meter} />}
                                 />
                             </div>
 
                             {pulse ? (
-                                <>
-                                    <div className="flex min-h-0 flex-1 flex-col px-5 pt-1">
-                                        {model.bpm ? <BeatHero bpm={model.bpm} meter={song.meter} resetKey={pos.beatKey} tempo={false} /> : <NoPulse />}
+                                <div className={styles.pulseBody}>
+                                    <div className={styles.pulseVisual}>
+                                        {model.bpm ? <BeatHero bpm={model.bpm} meter={song.meter} resetKey={pos.beatKey} /> : <NoPulse />}
                                     </div>
                                     <SectionNow pos={pos} />
-                                </>
+                                </div>
                             ) : (
                                 // 가운데: 지금 카드 — 자랄 수 있는 유일한 스크롤 영역
                                 <FadeScroller>
@@ -184,7 +185,7 @@ export default function LiveMobile({
                 </DockZone>
 
                 {/* 엄지 자리 (세 화면 모두 같음): 빠른 큐 → 이전 · 다음 → 화면 바꾸기 */}
-                <div className="shrink-0 bg-background pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2.5">
+                <div className={cn(styles.mobileFooter, 'shrink-0 bg-background pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2.5')}>
                     {model.quickCues.length > 0 ? (
                         <div inert={locked} className={cn('px-4 pb-2.5 transition-opacity', locked && 'opacity-40')}>
                             <QuickCues cues={model.quickCues} onSend={onSendCue} />
