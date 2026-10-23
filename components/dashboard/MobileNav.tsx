@@ -6,7 +6,9 @@ import { usePathname } from 'next/navigation';
 import { ChevronRight, Menu } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
-import { isNavActive, primaryNavItems, secondaryNavItems } from './navItems';
+import { guideNavItem, isNavActive, primaryNavItems, secondaryNavItems } from './navItems';
+
+const moreItems = [guideNavItem, ...secondaryNavItems];
 
 const tab = 'relative flex select-none flex-col items-center justify-center gap-1 transition-colors';
 
@@ -17,7 +19,7 @@ export default function MobileNav() {
     const [openedOn, setOpenedOn] = useState<string | null>(null);
     const moreOpen = openedOn === pathname;
     const setMoreOpen = (open: boolean) => setOpenedOn(open ? pathname : null);
-    const secondaryActive = secondaryNavItems.some((item) => isNavActive(pathname, item.href));
+    const secondaryActive = moreItems.some((item) => isNavActive(pathname, item.href));
 
     return (
         <>
@@ -41,9 +43,9 @@ export default function MobileNav() {
                 </div>
             </nav>
 
-            <Modal open={moreOpen} onOpenChange={setMoreOpen} title="더보기" description="나눔 · 돌봄 · 섬김 · 그룹은 준비 중이에요. 지금 할 수 있는 화면으로 이어 드려요.">
+            <Modal open={moreOpen} onOpenChange={setMoreOpen} title="더보기" description="처음 사용 안내에서 순서대로 따라 해보세요. 나눔 · 돌봄 · 섬김 · 그룹은 준비 중이에요.">
                 <ul className="divide-y divide-border/70">
-                    {secondaryNavItems.map((item) => {
+                    {moreItems.map((item) => {
                         const active = isNavActive(pathname, item.href);
                         return (
                             <li key={item.href}>

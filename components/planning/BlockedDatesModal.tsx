@@ -65,7 +65,7 @@ export default function BlockedDatesModal({
     const [reason, setReason] = useState('');
     const [pending, setPending] = useState(false);
     const [error, setError] = useState('');
-    useSheetDismiss(onClose);
+    const dialogRef = useSheetDismiss(onClose);
 
     const memberMap = useMemo(() => new Map(members.map(m => [m.userId, m])), [members]);
 
@@ -148,6 +148,7 @@ export default function BlockedDatesModal({
 
     return (
         <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${modalId}-title`}

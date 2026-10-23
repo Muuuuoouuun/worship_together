@@ -26,15 +26,58 @@ export function lockBodyScroll(): () => void {
     };
 }
 
-type Overlay = { close: () => void };
+type Overlay = { close: () => void; element: HTMLElement | null };
+const inertLocks = new Map<HTMLElement, { count: number; previous: boolean }>();
+
+/** Inert only siblings on the path to the body, so nested dialogs remain usable. */
+function isolateDialog(element: HTMLElement): () => void {
+    const siblings: HTMLElement[] = [];
+    let child: HTMLElement = element;
+    while (child.parentElement && child !== document.body) {
+        for (const sibling of child.parentElement.children) {
+            if (!(sibling instanceof HTMLElement) || sibling === child || sibling.tagName === 'SCRIPT' || sibling.tagName === 'STYLE') continue;
+            const lock = inertLocks.get(sibling) ?? { count: 0, previous: sibling.inert };
+            lock.count += 1;
+            inertLocks.set(sibling, lock);
+            sibling.inert = true;
+            siblings.push(sibling);
+        }
+        child = child.parentElement;
+    }
+    return () => {
+        for (const sibling of siblings) {
+            const lock = inertLocks.get(sibling);
+            if (!lock || --lock.count > 0) continue;
+            sibling.inert = lock.previous;
+            inertLocks.delete(sibling);
+        }
+    };
+}
+
+function focusable(element: HTMLElement): HTMLElement[] {
+    return Array.from(element.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, summary, [tabindex]'))
+        .filter((item) => item.tabIndex >= 0 && !item.matches(':disabled') && !item.closest('[inert]') && item.getClientRects().length > 0 && getComputedStyle(item).visibility !== 'hidden');
+}
 
 /** 열린 순서대로 쌓인 창. 마지막 항목이 맨 위 창입니다. */
 const overlays: Overlay[] = [];
 
 function handleEscape(event: KeyboardEvent) {
-    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+    if (event.defaultPrevented || event.isComposing) return;
     const top = overlays[overlays.length - 1];
     if (!top) return;
+    if (event.key === 'Tab' && top.element) {
+        const items = focusable(top.element);
+        const first = items[0];
+        const last = items.at(-1);
+        const active = document.activeElement;
+        if (!first || !top.element.contains(active) || (event.shiftKey ? active === first : active === last)) {
+            event.preventDefault();
+            (event.shiftKey ? last ?? top.element : first ?? top.element).focus({ preventScroll: true });
+        }
+        return;
+    }
+    if (event.key !== 'Escape') return;
     // 맨 위 창만 닫고, 뒤 화면(일정 패널의 Esc 처리 등)으로는 넘기지 않습니다.
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -47,21 +90,32 @@ function handleEscape(event: KeyboardEvent) {
  */
 export function useSheetDismiss(onClose: () => void, open = true) {
     const onCloseRef = useRef(onClose);
+    const dialogRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         onCloseRef.current = onClose;
     });
 
     useEffect(() => {
         if (!open) return;
-        const overlay: Overlay = { close: () => onCloseRef.current() };
+        const element = dialogRef.current;
+        const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const overlay: Overlay = { close: () => onCloseRef.current(), element };
         overlays.push(overlay);
         if (overlays.length === 1) document.addEventListener('keydown', handleEscape);
         const unlock = lockBodyScroll();
+        const restoreBackground = element ? isolateDialog(element) : () => {};
+        if (element && !element.contains(document.activeElement)) {
+            if (!element.hasAttribute('tabindex')) element.tabIndex = -1;
+            (focusable(element)[0] ?? element).focus({ preventScroll: true });
+        }
         return () => {
             const index = overlays.lastIndexOf(overlay);
             if (index !== -1) overlays.splice(index, 1);
             if (overlays.length === 0) document.removeEventListener('keydown', handleEscape);
+            restoreBackground();
             unlock();
+            if (previousFocus?.isConnected && !previousFocus.closest('[inert]')) previousFocus.focus({ preventScroll: true });
         };
     }, [open]);
+    return dialogRef;
 }

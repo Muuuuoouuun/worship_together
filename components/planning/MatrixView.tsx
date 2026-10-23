@@ -84,7 +84,7 @@ export default function MatrixView({
     }
 
     // 빠른 배정 시트: Esc 로 닫고, 열려 있는 동안 뒤 화면 스크롤을 막습니다.
-    useSheetDismiss(() => setAssigningSlot(null), Boolean(assigningSlot));
+    const dialogRef = useSheetDismiss(() => setAssigningSlot(null), Boolean(assigningSlot));
 
     // Filter events for the current month
     const monthEvents = useMemo(() => {
@@ -370,6 +370,7 @@ export default function MatrixView({
             {/* 빠른 배정 시트 */}
             {assigningSlot && (
                 <div
+                    ref={dialogRef}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby={sheetTitleId}

@@ -10,6 +10,7 @@ import { useLiveContiData, type LiveContiInputs } from '@/components/conti/useLi
 import { liveHref, useTeamConnection } from '@/components/app/TeamConnection';
 import { liveStartHref } from '@/components/live/links';
 import HomeTiles, { HomeTilesSkeleton } from './HomeTiles';
+import FirstSteps from './FirstSteps';
 
 interface LiveHomeProps extends LiveContiInputs {
     /** 서버가 찾은 진행 중인 라이브 예배 세션 (없으면 데모 세션) */
@@ -38,6 +39,7 @@ export default function LiveHome({ sessionId, ...inputs }: LiveHomeProps) {
 
     return (
         <ContiProvider value={data}>
+            {!connection ? <FirstSteps /> : null}
             <HomeTiles sessionHref={sessionHref} team={source.teamName ? { name: source.teamName } : null} live={live} canStart={online ? connection.canRun : true} />
         </ContiProvider>
     );

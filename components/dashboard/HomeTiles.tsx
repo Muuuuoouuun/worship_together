@@ -679,7 +679,7 @@ function ScheduleTile({ anchor, href, sample, className }: { anchor: string; hre
     const [first, ...rest] = events;
 
     return (
-        <Tile tone="sky" icon={CalendarDays} title={`${dayName(day)} 일정 · ${md(day)}`} badge={sample} action={<TileLink href={href} label="일정 모두 보기">일정 보기</TileLink>} className={className}>
+        <Tile tone="sky" icon={CalendarDays} title={`${dayName(day)} 일정 · ${md(day)}`} badge={sample} action={<TileLink href={href} label="일정 보기 · 모두 보기">일정 보기</TileLink>} className={className}>
             {!planning.ready ? (
                 <Pending className="mt-5 flex-1" />
             ) : first ? (
@@ -743,7 +743,7 @@ function ScheduleTile({ anchor, href, sample, className }: { anchor: string; hre
                                 onClick={() => setPicked(date)}
                                 aria-pressed={active}
                                 aria-current={date === today ? 'date' : undefined}
-                                aria-label={`${monthOf(date)}월 ${dayOf(date)}일 ${weekday(date)}요일${date === today ? ' (오늘)' : ''}${dayEvents.length ? ` · 일정 ${dayEvents.length}개` : ''}`}
+                                aria-label={`${weekday(date)}${dayOf(date)} · ${monthOf(date)}월 ${dayOf(date)}일${date === today ? ' (오늘)' : ''}${dayEvents.length ? ` · 일정 ${dayEvents.length}개` : ''}`}
                                 className="group flex w-full flex-col items-center gap-1 rounded-xl py-1.5"
                             >
                                 <span className={cn('text-[11px]', active ? cn('font-semibold', ink) : sub)}>{weekday(date)}</span>

@@ -499,7 +499,7 @@ function FooterStatus({ model }: { model: LiveScreenModel }) {
                                 key={cue.id}
                                 className={cn(
                                     'flex min-w-0 items-center gap-2.5 animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none',
-                                    index > 0 && 'hidden border-l border-border pl-4 opacity-60 @min-[1360px]:flex',
+                                    index > 0 && 'hidden border-l border-border pl-4 @min-[1360px]:flex',
                                 )}
                             >
                                 <span

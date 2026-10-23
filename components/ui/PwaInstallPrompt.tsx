@@ -71,9 +71,9 @@ export default function PwaInstallPrompt() {
     // 1) Chrome/Android/Desktop 설치 프롬프트가 지원되는 경우
     if (deferredPrompt) {
         return (
-            <div className="fixed bottom-4 inset-x-4 z-40 mx-auto max-w-md animate-in slide-in-from-bottom duration-300">
+            <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] lg:bottom-4 inset-x-4 z-40 mx-auto max-w-md animate-in slide-in-from-bottom duration-300">
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-background/95 p-3.5 shadow-2xl backdrop-blur-md">
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                             <Smartphone size={20} />
                         </div>
@@ -82,17 +82,17 @@ export default function PwaInstallPrompt() {
                             <p className="text-xs text-muted-foreground">홈 화면에 추가해 전체화면으로 편리하게 쓰세요.</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-1.5">
                         <button
                             onClick={() => void handleInstallClick()}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-90 active:scale-95 transition"
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-90 active:scale-95 transition"
                         >
                             <Download size={14} />
                             설치
                         </button>
                         <button
                             onClick={handleDismiss}
-                            className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition"
+                            className="flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground rounded-lg transition"
                             aria-label="안내 닫기"
                         >
                             <X size={16} />
@@ -106,11 +106,11 @@ export default function PwaInstallPrompt() {
     // 2) iOS Safari 사용자를 위한 홈 화면 추가 가이드 (브라우저 정책상 원클릭 설치 불가)
     if (isIosEligible) {
         return (
-            <div className="fixed bottom-4 inset-x-4 z-40 mx-auto max-w-md animate-in slide-in-from-bottom duration-300">
+            <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] lg:bottom-4 inset-x-4 z-40 mx-auto max-w-md animate-in slide-in-from-bottom duration-300">
                 <div className="relative rounded-2xl border border-primary/20 bg-background/95 p-4 shadow-2xl backdrop-blur-md">
                     <button
                         onClick={handleDismiss}
-                        className="absolute right-3 top-3 p-1 text-muted-foreground hover:text-foreground rounded-lg transition"
+                        className="absolute right-2 top-2 flex size-11 items-center justify-center text-muted-foreground hover:text-foreground rounded-lg transition"
                         aria-label="안내 닫기"
                     >
                         <X size={16} />

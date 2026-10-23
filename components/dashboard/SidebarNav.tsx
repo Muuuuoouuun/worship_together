@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { isNavActive, primaryNavItems, secondaryNavItems, type NavItem } from './navItems';
+import { guideNavItem, isNavActive, primaryNavItems, secondaryNavItems, type NavItem } from './navItems';
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     return (
@@ -30,6 +30,7 @@ export default function SidebarNav() {
             {primaryNavItems.map((item) => (
                 <NavLink key={item.href} item={item} active={isNavActive(pathname, item.href)} />
             ))}
+            <NavLink item={guideNavItem} active={isNavActive(pathname, guideNavItem.href)} />
             <p className="mt-5 px-4 pb-2 text-[11px] font-medium text-muted-foreground">나눔과 돌봄 · 준비 중</p>
             {secondaryNavItems.map((item) => (
                 <NavLink key={item.href} item={item} active={isNavActive(pathname, item.href)} />

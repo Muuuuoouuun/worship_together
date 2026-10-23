@@ -48,13 +48,13 @@ export default function LiveScreen({ model, handlers, className }: { model: Live
     const layout = { model, handlers, pos, view, onView: setView, device, cues, notices, onSendCue: handlers.sendCue };
 
     return (
-        <div className={shell}>
+        <main className={shell}>
             <h1 className="sr-only">
                 {model.title} · 예배 중
             </h1>
             {/* 서버 · 첫 그림에서는 화면 폭을 모르므로 빈 바탕만 — 엉뚱한 배치가 잠깐 보이지 않게 */}
             {desktop === null ? null : desktop ? <LiveDesktop {...layout} /> : <LiveMobile {...layout} />}
             <Announcer toasts={model.toasts} />
-        </div>
+        </main>
     );
 }

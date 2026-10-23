@@ -26,7 +26,7 @@
 .panel p + p { color: var(--muted-foreground); font-size: 13px; }
 .panel a { display: flex; align-items: center; min-height: 44px; color: var(--foreground); font-weight: 600; text-decoration: none; border-top: 1px solid var(--border); }
 /* 개발용 이름 로그인 — DEV_LOGIN=1 인 개발 환경에서만 보입니다. */
-.devForm { display: grid; gap: 8px; margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border); }
+.devForm { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 8px; margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border); }
 .devLabel { color: var(--muted-foreground); font-size: 13px; }
 .devRow { display: flex; gap: 8px; }
 .devInput { flex: 1; min-width: 0; min-height: 48px; padding: 0 16px; border: 1px solid var(--border); border-radius: 9999px; background: var(--background); color: var(--foreground); font-size: 16px; }

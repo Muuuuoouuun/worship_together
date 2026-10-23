@@ -1,5 +1,6 @@
 import {
     BadgeCheck,
+    BookOpen,
     CalendarDays,
     HandHeart,
     HeartHandshake,
@@ -30,6 +31,8 @@ export const secondaryNavItems: NavItem[] = [
     { icon: BadgeCheck, label: '섬김', href: '/serve', description: '봉사 및 봉사자 연결' },
     { icon: Network, label: '그룹', href: '/groups', description: '소그룹 및 사역팀' },
 ];
+
+export const guideNavItem: NavItem = { icon: BookOpen, label: '처음 사용 안내', href: '/guide', description: '역할별 따라 하기 · 용어 · 예배 화면 연습' };
 
 /** 현재 주소에서 이 메뉴가 선택됐는지 (하위 화면도 포함: /dashboard/songs/library → 콘티·악보) */
 export function isNavActive(pathname: string, href: string): boolean {

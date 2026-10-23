@@ -25,14 +25,21 @@ function Modal({
   isBottomSheetOnMobile = true,
 }: ModalProps) {
   // Esc 로 닫고(겹친 창이면 맨 위만), 열려 있는 동안 뒤 화면 스크롤을 막습니다.
-  useSheetDismiss(() => onOpenChange(false), open);
+  const dialogRef = useSheetDismiss(() => onOpenChange(false), open);
+  const titleId = React.useId();
+  const descriptionId = React.useId();
 
   if (!open) return null;
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
+      aria-labelledby={title ? titleId : undefined}
+      aria-label={title ? undefined : '상세 보기'}
+      aria-describedby={description ? descriptionId : undefined}
+      tabIndex={-1}
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
     >
       {/* 백드롭 */}
@@ -60,12 +67,12 @@ function Modal({
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 pr-6">
             {title && (
-              <h2 className="text-xl font-bold tracking-tight text-foreground">
+              <h2 id={titleId} className="text-xl font-bold tracking-tight text-foreground">
                 {title}
               </h2>
             )}
             {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
+              <p id={descriptionId} className="text-sm text-muted-foreground">{description}</p>
             )}
           </div>
           <button

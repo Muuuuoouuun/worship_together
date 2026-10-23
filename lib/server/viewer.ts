@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { getCurrentUser, type CurrentUser } from '@/lib/auth';
 import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
@@ -22,7 +23,7 @@ export interface Viewer {
  * 로그인한 사람과 지금 팀. 로그인하지 않았으면 null.
  * 처음 로그인한 사람은 여기서 사용자 기록이 만들어집니다.
  */
-export async function getViewer(requestedTeamId?: string | null): Promise<Viewer | null> {
+export const getViewer = cache(async (requestedTeamId?: string | null): Promise<Viewer | null> => {
     const user = await getCurrentUser();
     if (!user) return null;
     const repository = getTeamRepository();
@@ -32,4 +33,4 @@ export async function getViewer(requestedTeamId?: string | null): Promise<Viewer
     const team = teams.find((item) => item.id === requestedTeamId) ?? teams.find((item) => item.id === cookieTeam) ?? teams[0] ?? null;
     const member = team?.members.find((item) => item.userId === user.id) ?? null;
     return { user: { ...user, name: profile.name }, profile, teams, team, member, policy: team ? repository.policy(team.id) : DEFAULT_POLICY };
-}
+});

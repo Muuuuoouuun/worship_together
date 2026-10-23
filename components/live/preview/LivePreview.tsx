@@ -465,6 +465,7 @@ export default function LivePreview({ initialControl, showBar, scene }: { initia
     return (
         <div className="flex h-dvh flex-col bg-background">
             {showBar ? (
+                <section aria-label="연습 화면 · 실제 팀에 전송되지 않음" className="shrink-0">
                 <div role="toolbar" aria-label="미리보기 상황 흉내" className="flex h-11 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border bg-card px-2 text-xs [scrollbar-width:none]">
                     <span className="inline-flex shrink-0 items-center gap-1 px-1.5 font-medium text-secondary">
                         <FlaskConical size={13} aria-hidden="true" />
@@ -485,6 +486,7 @@ export default function LivePreview({ initialControl, showBar, scene }: { initia
                         </button>
                     ))}
                 </div>
+                </section>
             ) : null}
             <div className="relative min-h-0 flex-1">
                 <LiveScreen model={model} handlers={handlers} className="h-full" />

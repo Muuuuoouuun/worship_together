@@ -16,7 +16,7 @@ import SidebarNav from './SidebarNav';
 
 function Brand({ compact = false }: { compact?: boolean }) {
     return (
-        <Link href="/dashboard" aria-label="Worship Together 홈" className="inline-flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl transition-opacity hover:opacity-80">
+        <Link href="/dashboard" className="inline-flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl transition-opacity hover:opacity-80">
             <span aria-hidden="true" className={compact ? 'flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground' : 'flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-base font-bold text-primary-foreground'}>
                 W
             </span>
@@ -64,6 +64,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ) : null;
     return (
         <TeamConnection value={connection}>
+        <a href="#main-content" className="sr-only fixed left-4 top-4 z-[100] rounded-xl bg-primary px-4 py-3 text-primary-foreground focus:not-sr-only">본문으로 건너뛰기</a>
         <div className="flex min-h-screen bg-background text-foreground [--app-header-h:calc(env(safe-area-inset-top)+3.5rem)] lg:[--app-header-h:0px]">
             <Suspense fallback={null}>
                 <PlanningInbox />
@@ -106,7 +107,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 </header>
 
                 {/* 본문: 모든 화면이 같은 폭·여백을 씁니다 */}
-                <main className="w-full flex-1 px-4 pb-32 pt-5 sm:px-6 sm:pb-36 sm:pt-6 lg:px-10 lg:pb-24 lg:pt-10">
+                <main id="main-content" tabIndex={-1} className="w-full flex-1 px-4 pb-32 pt-5 outline-none sm:px-6 sm:pb-36 sm:pt-6 lg:px-10 lg:pb-24 lg:pt-10">
                     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">{children}</div>
                 </main>
 

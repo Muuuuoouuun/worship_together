@@ -1045,6 +1045,12 @@ function EventItem({ event, defaultOpen, now, alerts, manager, members, names, u
 
         <SlotSummary slots={event.slots} className="mt-4" />
 
+        {manager && live ? (
+            <Disclosure className="mt-3 rounded-2xl border border-border px-4" summaryClassName="min-h-12 text-sm font-medium" summary={<span>역할·담당자 추가</span>}>
+                <div className="pb-4"><SlotForm {...actions} eventId={event.id} members={members} /></div>
+            </Disclosure>
+        ) : null}
+
         <div className="mt-4 flex flex-wrap gap-1.5">
             {manager && live && hasVacant ? (
                 <Button
@@ -1213,7 +1219,6 @@ function EventItem({ event, defaultOpen, now, alerts, manager, members, names, u
                                 {([
                                     ['콘티 정보 수정 및 당번 알림', <SetlistForm key="setlist" {...actions} event={event} />],
                                     ['일정 수정', <EventForm key={JSON.stringify([event.title, event.kind, event.startsAt, event.endsAt, event.location, event.notes])} {...actions} event={event} />],
-                                    ['역할·담당자 1명 추가', <SlotForm key="slot" {...actions} eventId={event.id} members={members} />],
                                     ['역할 템플릿 일괄 추가 (표준 밴드, 풀 세션 등)', <TemplateForm key="template" {...actions} eventId={event.id} />],
                                     ['이전 일정에서 배정 복사해오기', <CopyRosterForm key="copy" {...actions} eventId={event.id} otherEvents={allEvents} />],
                                     ['일정 전체 긴급 공지', <AlertForm key="notice" {...actions} eventId={event.id} slotId={null} />],

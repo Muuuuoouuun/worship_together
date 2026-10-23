@@ -130,7 +130,7 @@ export default function OnlineTeamManager({
     const [batchOpen, setBatchOpen] = useState(false);
     const [batchText, setBatchText] = useState('');
     const parsedBatch = useMemo(() => parseMemberLines(batchText), [batchText]);
-    useSheetDismiss(() => setBatchOpen(false), batchOpen);
+    const dialogRef = useSheetDismiss(() => setBatchOpen(false), batchOpen);
 
     // Member list search & filter
     const [memberSearch, setMemberSearch] = useState('');
@@ -716,6 +716,7 @@ export default function OnlineTeamManager({
             {/* 명단 텍스트 일괄 붙여넣기 모달 */}
             {batchOpen && (
                 <div
+                    ref={dialogRef}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby={batchInputId}
