@@ -1,6 +1,7 @@
 import * as z from 'zod';
 import { createClientId } from './clientId';
 import { isPlaceholderMember, worshipRoles, type TeamMember } from '../types/team';
+import { DEFAULT_POLICY, receivesManagerNotices, type TeamPolicy } from './permissions';
 import { canHandleSlot, canManagePlanning, emptyPlanningState, leadParts, partOfRole, planningDate, planningDay, requestKinds, scheduleTemplates, type LeadPart, type PlanningCommand, type PlanningState, type RotationGroup, type ScheduleSlot, type TeamSchedule } from '../types/planning';
 
 const id = z.string().min(1).max(200);
@@ -133,9 +134,9 @@ export function planningForViewer(state: PlanningState, members: TeamMember[], u
 const BATCH_SKIP_MARK = ' · 빠진 팀원 ';
 
 /** 로테이션 일괄 배정을 같은 규칙으로 미리 적용해 완료 메시지에 붙일 '빠진 팀원 N명: …' 안내를 돌려줍니다. 빠질 사람이 없거나 적용할 수 없으면 ''. */
-export function previewRotationBatchSkips(state: PlanningState, members: TeamMember[], userId: string, command: Extract<PlanningCommand, { type: 'rotation.batchApply' }>): string {
+export function previewRotationBatchSkips(state: PlanningState, members: TeamMember[], userId: string, command: Extract<PlanningCommand, { type: 'rotation.batchApply' }>, policy: TeamPolicy = DEFAULT_POLICY): string {
     try {
-        const next = applyPlanningCommand(state, members, userId, command);
+        const next = applyPlanningCommand(state, members, userId, command, policy);
         const body = next.notifications.find(item => !state.notifications.some(old => old.id === item.id))?.body ?? '';
         const index = body.indexOf(BATCH_SKIP_MARK);
         return index >= 0 ? body.slice(index + 3) : '';
@@ -146,7 +147,10 @@ export function previewRotationBatchSkips(state: PlanningState, members: TeamMem
 
 /** 알림을 받고 직접 처리할 수 있는 팀원 — 이름만 올려 둔 명단 자리(미가입)는 알림을 볼 수 없어 빠집니다. */
 const reachable = (members: TeamMember[], memberId: string) => !isPlaceholderMember(memberId) && members.some(member => member.userId === memberId);
-const managerIds = (members: TeamMember[]) => members.filter(member => !isPlaceholderMember(member.userId) && (member.permission === 'owner' || member.role === 'leader')).map(member => member.userId);
+/** 콘티 요청을 받는 사람: 관리자 · 인도자 */
+const leaderIds = (members: TeamMember[]) => members.filter(member => !isPlaceholderMember(member.userId) && (member.permission === 'owner' || member.role === 'leader')).map(member => member.userId);
+/** 참석 응답 · 불가일 · 결석(챙길 사람이 없을 때) 소식을 받는 사람: 일정 · 배치 관리 권한자 (팀 권한 설정) */
+const managerIds = (members: TeamMember[], policy: TeamPolicy) => members.filter(member => !isPlaceholderMember(member.userId) && receivesManagerNotices(member, policy)).map(member => member.userId);
 
 /** 겹치는 시간에 이 팀원이 이미 서는 다른 일정 (같은 자리는 제외). 없으면 undefined */
 export function clashingEvent(state: PlanningState, event: TeamSchedule, memberId: string, slotId?: string): TeamSchedule | undefined {
@@ -156,13 +160,13 @@ export function clashingEvent(state: PlanningState, event: TeamSchedule, memberI
 export type SlotKeeper = { memberId: string; as: 'leader' | LeadPart | 'manager' };
 
 /** 결석·대체를 챙길 사람: 그 예배의 인도자 + 파트 담당(악기장·싱어 담당). 아무도 없으면 인도자·관리자 전체 (모두 계정으로 들어온 팀원만) */
-export function slotKeepers(state: PlanningState, members: TeamMember[], event: TeamSchedule, slot: ScheduleSlot): SlotKeeper[] {
+export function slotKeepers(state: PlanningState, members: TeamMember[], event: TeamSchedule, slot: ScheduleSlot, policy: TeamPolicy = DEFAULT_POLICY): SlotKeeper[] {
     const isMember = (memberId: string) => reachable(members, memberId);
     const part = partOfRole(slot.role);
     const keepers: SlotKeeper[] = [];
     for (const item of event.slots) if (item.role === 'leader' && item.memberId && item.attendance !== 'absent' && isMember(item.memberId)) keepers.push({ memberId: item.memberId, as: 'leader' });
     if (part) for (const lead of state.partLeads ?? []) if (lead.part === part && isMember(lead.memberId) && !keepers.some(keeper => keeper.memberId === lead.memberId)) keepers.push({ memberId: lead.memberId, as: part });
-    return keepers.length ? keepers : managerIds(members).map(memberId => ({ memberId, as: 'manager' as const }));
+    return keepers.length ? keepers : managerIds(members, policy).map(memberId => ({ memberId, as: 'manager' as const }));
 }
 
 export type SubstituteOption = { memberId: string; load: number; blocker: null | 'assigned' | 'blocked' | 'clash' };
@@ -184,8 +188,8 @@ export function substituteOptions(state: PlanningState, members: TeamMember[], e
         .sort((a, b) => Number(a.blocker !== null) - Number(b.blocker !== null) || a.load - b.load);
 }
 
-/** Shared local-demo/server domain rules; the server supplies authenticated identity and roster. */
-export function applyPlanningCommand(previous: PlanningState, members: TeamMember[], userId: string, input: PlanningCommand | unknown): PlanningState {
+/** Shared local-demo/server domain rules; the server supplies authenticated identity, roster and team policy. */
+export function applyPlanningCommand(previous: PlanningState, members: TeamMember[], userId: string, input: PlanningCommand | unknown, policy: TeamPolicy = DEFAULT_POLICY): PlanningState {
     const actor = members.find(member => member.userId === userId);
     if (!actor) throw new Error('이 팀에 접근할 수 없습니다.');
     const parsed = commandSchema.safeParse(input);
@@ -195,8 +199,8 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
     state.rotations = state.rotations ?? [];
     state.partLeads = state.partLeads ?? [];
     const now = new Date().toISOString();
-    const managers = managerIds(members);
-    const manage = () => { if (!canManagePlanning(members, userId)) throw new Error('인도자 또는 팀 관리자만 변경할 수 있습니다.'); };
+    const managers = managerIds(members, policy);
+    const manage = () => { if (!canManagePlanning(members, userId, policy)) throw new Error(policy.planningManage === 'admins' ? '팀 관리자만 변경할 수 있습니다.' : '인도자 또는 팀 관리자만 변경할 수 있습니다.'); };
     /** slotId: 알림을 누르면 열릴 배치 자리. includeSelf: 처리한 본인도 확인해야 할 결과(예: 일괄 배정에서 빠진 팀원)일 때 */
     const notify = (recipientIds: string[], title: string, text: string, target: 'requests' | 'schedule' | 'rotation', entityId: string, urgent = false, slotId?: string, includeSelf = false) => {
         const recipients = [...new Set(recipientIds)].filter(recipient => (includeSelf || recipient !== userId) && members.some(member => member.userId === recipient));
@@ -221,7 +225,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         const recipients = targetRecipients ?? everyone;
         notify(recipients, kind === 'absence' ? '결석 · 대체 인원이 필요해요' : kind === 'substitute' ? '대체 인원을 구해요' : '긴급 안내', `${event.title} · ${text}`, 'schedule', event.id, true, slotId ?? undefined);
     };
-    const keeperIds = (event: TeamSchedule, slot: ScheduleSlot) => slotKeepers(state, members, event, slot).map(keeper => keeper.memberId);
+    const keeperIds = (event: TeamSchedule, slot: ScheduleSlot) => slotKeepers(state, members, event, slot, policy).map(keeper => keeper.memberId);
     /** 대체를 부탁할 수 있는 사람 — 설 수 있고, 부탁 알림을 받을 수 있는 팀원 */
     const substituteCandidates = (event: TeamSchedule, slot: ScheduleSlot) => substituteOptions(state, members, event, slot).filter(option => !option.blocker && !isPlaceholderMember(option.memberId)).map(option => members.find(member => member.userId === option.memberId)!);
     /** 같은 악기·파트 팀원에게 대체를 부탁하고, 부탁한 사람을 자리에 남깁니다. */
@@ -235,7 +239,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
     const clearAsks = (slot: ScheduleSlot) => { delete slot.asked; delete slot.passed; };
     switch (command.type) {
         case 'request.create': {
-            if (!managers.includes(command.leaderId)) throw new Error('수신할 인도자 또는 관리자를 선택해주세요.');
+            if (!leaderIds(members).includes(command.leaderId)) throw new Error('수신할 인도자 또는 관리자를 선택해주세요.');
             if (state.requests.length >= 300) {
                 const pruneIndex = state.requests.findLastIndex ? state.requests.findLastIndex(r => r.status === 'resolved') : -1;
                 if (pruneIndex !== -1) {
@@ -413,7 +417,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             } else {
                 if (!command.slotId) throw new Error('대체할 배치를 선택해주세요.');
                 const slot = slotById(event, command.slotId);
-                if (slot.memberId !== userId && !canHandleSlot(state, members, userId, slot.role)) manage();
+                if (slot.memberId !== userId && !canHandleSlot(state, members, userId, slot.role, policy)) manage();
                 // 같은 악기·파트 팀원과 담당자에게. 설 수 있는 사람이 없으면 팀 전체에 알립니다.
                 if (substituteCandidates(event, slot).some(member => member.userId !== userId)) {
                     urgent(event, slot.id, 'substitute', command.body, keeperIds(event, slot));
@@ -450,7 +454,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         }
         case 'slot.accept': {
             const event = eventById(command.eventId); const slot = slotById(event, command.slotId);
-            if (!canHandleSlot(state, members, userId, slot.role)) manage();
+            if (!canHandleSlot(state, members, userId, slot.role, policy)) manage();
             if (!slot.volunteers.includes(command.memberId)) throw new Error('지원한 팀원만 확정할 수 있습니다.');
             available(event, command.memberId, slot.id);
             const oldMember = slot.memberId;
@@ -473,7 +477,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
         }
         case 'slot.askAll': {
             const event = eventById(command.eventId); const slot = slotById(event, command.slotId);
-            if (!canHandleSlot(state, members, userId, slot.role)) manage();
+            if (!canHandleSlot(state, members, userId, slot.role, policy)) manage();
             if (slot.memberId && slot.attendance !== 'absent') throw new Error('이미 담당자가 있는 자리입니다.');
             const assignedInEvent = new Set(event.slots.map(item => item.memberId).filter(Boolean));
             const targets = everyone.filter(memberId => memberId !== userId && !isPlaceholderMember(memberId) && !assignedInEvent.has(memberId) && !slot.passed?.includes(memberId) && !slot.asked?.includes(memberId));

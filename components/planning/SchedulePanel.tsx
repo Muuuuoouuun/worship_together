@@ -8,6 +8,7 @@ import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { Bell, CalendarDays, CalendarPlus, CalendarX2, Check, ChevronDown, ClipboardCopy, Copy, Download, ExternalLink, List, MessageSquare, Music, Plus, RotateCcw, Search, Send, Share2, Sparkles, Table, Users, X } from 'lucide-react';
 import { downloadIcsFile, getMyGoogleCalendarUrl, generateMyScheduleShareText } from '@/lib/calendarExport';
 import { cn } from '@/lib/utils';
+import { useTeamPolicy } from '@/components/app/TeamConnection';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { STATUS, type StatusTone } from '@/components/ui/status';
 import { Avatar, TONE_BLOCK } from '@/components/conti/ui';
@@ -1298,7 +1299,8 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);
     }, []);
-    const manager = canManagePlanning(members, userId);
+    const policy = useTeamPolicy();
+    const manager = canManagePlanning(members, userId, policy);
     const names = useMemo(() => new Map(members.map(member => [member.userId, member.name])), [members]);
     const eventMap = useMemo(() => new Map(state.events.map(event => [event.id, event])), [state.events]);
     const { alertsByEvent, openAlerts } = useMemo(() => {

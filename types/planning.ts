@@ -1,4 +1,5 @@
 import type { TeamMember, WorshipRole } from './team';
+import { DEFAULT_POLICY, can, type TeamPolicy } from '../lib/permissions';
 
 export const requestKinds = { question: '질문', reminder: '진행 확인 요청', change: '수정 요청' } as const;
 export const requestStatuses = { open: '접수', reviewing: '확인 중', resolved: '완료' } as const;
@@ -120,10 +121,11 @@ export type PlanningPanelProps = {
     state: PlanningState; members: TeamMember[]; userId: string; busy: boolean;
     onCommand: (command: PlanningCommand) => Promise<boolean>;
 };
-export const canManagePlanning = (members: TeamMember[], userId: string) => members.some(member => member.userId === userId && (member.permission === 'owner' || member.role === 'leader'));
+/** 일정 · 배치 · 로테이션을 바꿀 수 있는지 — 팀 권한 설정의 '일정 · 배치 관리' (정책이 없으면 관리자 · 인도자) */
+export const canManagePlanning = (members: TeamMember[], userId: string, policy: TeamPolicy = DEFAULT_POLICY) => can(members.find(member => member.userId === userId), policy, 'planningManage');
 /** 관리자이거나 이 역할 파트의 담당이면 대체 요청·지원자 확정을 할 수 있습니다. */
-export const canHandleSlot = (state: Pick<PlanningState, 'partLeads'>, members: TeamMember[], userId: string, role: WorshipRole) => {
-    if (canManagePlanning(members, userId)) return true;
+export const canHandleSlot = (state: Pick<PlanningState, 'partLeads'>, members: TeamMember[], userId: string, role: WorshipRole, policy: TeamPolicy = DEFAULT_POLICY) => {
+    if (canManagePlanning(members, userId, policy)) return true;
     const part = partOfRole(role);
     return Boolean(part) && (state.partLeads ?? []).some(lead => lead.part === part && lead.memberId === userId);
 };

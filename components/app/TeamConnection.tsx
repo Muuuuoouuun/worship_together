@@ -8,6 +8,7 @@ import { PLANNING_CHANGED_EVENT } from '@/lib/planningDemo';
 import { showAppToast } from '@/lib/appToast';
 import { notifyDevice } from '@/lib/deviceNotify';
 import type { LiveSessionSummary } from '@/lib/server/liveRepository';
+import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
 
 /** 공통 틀이 넘겨주는 지금 팀 정보 (로그인하고 온라인 팀이 있을 때만) */
 export interface TeamConnectionInput {
@@ -19,6 +20,8 @@ export interface TeamConnectionInput {
     isAdmin: boolean;
     canRun: boolean;
     canEditConti: boolean;
+    /** 지금 팀의 권한 설정 (일정 · 공지 버튼을 서버와 같은 규칙으로 보이게) */
+    policy: TeamPolicy;
 }
 
 export interface TeamConnectionValue extends TeamConnectionInput {
@@ -32,6 +35,11 @@ const Context = createContext<TeamConnectionValue | null>(null);
 /** 로그인하지 않았거나 온라인 팀이 없으면 null */
 export function useTeamConnection(): TeamConnectionValue | null {
     return useContext(Context);
+}
+
+/** 지금 팀의 권한 설정. 온라인 팀이 없으면(이 기기 체험) 기본값 */
+export function useTeamPolicy(): TeamPolicy {
+    return useContext(Context)?.policy ?? DEFAULT_POLICY;
 }
 
 export const liveHref = (sessionId: string) => `/live/${encodeURIComponent(sessionId)}`;

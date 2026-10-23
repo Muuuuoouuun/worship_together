@@ -112,7 +112,7 @@ export class TeamRepository {
         return this.db.transaction(() => {
             const members = this.planningMembers(teamId, userId);
             const previous = this.readPlanning(teamId);
-            const state = applyPlanningCommand(previous, members, userId, command);
+            const state = applyPlanningCommand(previous, members, userId, command, this.policy(teamId));
             this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
             const before = new Set(previous.notifications.map((item) => item.id));
             return { state: planningForViewer(state, members, userId), created: state.notifications.filter((item) => !before.has(item.id)) };

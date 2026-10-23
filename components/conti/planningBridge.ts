@@ -7,6 +7,7 @@ import { requestKinds, requestStatuses, type PlanningCommand, type PlanningNotif
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { canHandleSlot, canManagePlanning, leadParts, type LeadPart } from '@/types/planning';
 import { slotKeepers, substituteOptions, type SlotKeeper, type SubstituteOption } from '@/lib/planning';
+import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
 import { diffDays, relativeTime, seoulDateTime, type ContiSetlist } from './model';
 
 export const ROLE_ORDER: WorshipRole[] = ['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member'];
@@ -223,6 +224,8 @@ export interface BuildInput {
     userId: string;
     today: string;
     now: Date;
+    /** 팀 권한 설정 (없으면 기본값: 일정 관리는 관리자 · 인도자) */
+    policy?: TeamPolicy;
     /** 콘티 코멘트를 팀 소식에 섞을 때 */
     setlists?: ContiSetlist[];
     /** 코멘트 소식을 읽은 시각 (ISO). 이보다 늦은 코멘트만 새 소식 */
@@ -238,10 +241,10 @@ const ALERT_KIND_LABEL: Record<UrgentAlert['kind'], string> = { absence: '불참
 const byStart = (a: TeamSchedule, b: TeamSchedule) => Date.parse(a.startsAt) - Date.parse(b.startsAt);
 
 export function buildPlanningView(input: BuildInput): BuiltPlanning {
-    const { state, members, userId, today, now } = input;
+    const { state, members, userId, today, now, policy = DEFAULT_POLICY } = input;
     const me = members.find((member) => member.userId === userId) ?? null;
     const nameOf = (id: string | null | undefined): string | null => members.find((member) => member.userId === id)?.name ?? null;
-    const canManage = me ? canManagePlanning(members, userId) : false;
+    const canManage = me ? canManagePlanning(members, userId, policy) : false;
     const owner = me?.permission === 'owner';
     const ago = (iso: string) => relativeTime(iso, now);
 
@@ -259,7 +262,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
         const needs = !slot.memberId || slot.attendance === 'absent' || openAlert(event.id, slot.id);
         if (!needs) return { keepers: [], asks: { asked: 0, passedNames: [] }, options: [] };
         return {
-            keepers: slotKeepers(state, members, event, slot).map((keeper) => ({ id: keeper.memberId, name: nameOf(keeper.memberId) ?? '팀원', label: KEEPER_LABEL[keeper.as] })),
+            keepers: slotKeepers(state, members, event, slot, policy).map((keeper) => ({ id: keeper.memberId, name: nameOf(keeper.memberId) ?? '팀원', label: KEEPER_LABEL[keeper.as] })),
             asks: { asked: (slot.asked ?? []).length, passedNames: (slot.passed ?? []).map((id) => nameOf(id)).filter((name): name is string => name !== null) },
             options: substituteOptions(state, members, event, slot).map((option) => ({ id: option.memberId, name: nameOf(option.memberId) ?? '팀원', load: option.load, blocker: option.blocker ? BLOCKER_LABEL[option.blocker] : null })),
         };
@@ -286,7 +289,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                     invitedAt: slot.invitedAt,
                     canVolunteer: canVolunteerFor(event, slot),
                     volunteered: slot.volunteers.includes(userId),
-                    canHandle: Boolean(me) && canHandleSlot(state, members, userId, slot.role),
+                    canHandle: Boolean(me) && canHandleSlot(state, members, userId, slot.role, policy),
                     ...substituteView(event, slot),
                 }));
             return {

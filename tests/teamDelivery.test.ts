@@ -143,3 +143,28 @@ test('a member without conti edit permission is told the save was denied, even f
         assert.ok(!again.ok && again.denied && again.conflict?.json === '{"songs":[]}', '서버 사본이 있으면 되돌릴 수 있게 돌려줍니다');
     } finally { repo.close(); }
 });
+
+test('team policy decides who manages schedules; manager notices stay with admins and leaders even when everyone may edit', () => {
+    const { repo, teamId } = seed();
+    try {
+        const songLeader = { id: 'delivery-song-leader', name: '찬양 인도' };
+        repo.join(repo.createInvite(teamId, leader.id).code, songLeader);
+        repo.assignRole(teamId, leader.id, songLeader.id, 'leader');
+        const startsAt = new Date(Date.now() + 5 * 86400000);
+        startsAt.setUTCMinutes(0, 0, 0);
+        const save: PlanningCommand = { type: 'event.save', input: { title: '금요 연습', kind: 'rehearsal', startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + 3600000).toISOString(), location: '', notes: '' } };
+        // 기본: 관리자 · 인도자
+        assert.throws(() => repo.updatePlanning(teamId, vocal.id, save), /인도자 또는 팀 관리자/);
+        repo.updatePlanning(teamId, songLeader.id, save);
+        // 관리자만
+        repo.setPolicy(teamId, leader.id, { ...repo.policy(teamId), planningManage: 'admins' });
+        assert.throws(() => repo.updatePlanning(teamId, songLeader.id, save), /팀 관리자만/);
+        // 모든 팀원
+        repo.setPolicy(teamId, leader.id, { ...repo.policy(teamId), planningManage: 'everyone' });
+        const event = repo.updatePlanning(teamId, vocal.id, save).events.at(-1)!;
+        const slot = repo.updatePlanning(teamId, vocal.id, { type: 'slot.save', eventId: event.id, role: 'vocal', memberId: vocal.id }).events.find(item => item.id === event.id)!.slots[0];
+        const { created } = repo.applyPlanning(teamId, vocal.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'confirmed', reason: '' });
+        const answer = created.find(item => item.title === '참석 응답');
+        assert.deepEqual([...answer!.recipientIds].sort(), [leader.id, songLeader.id].sort(), '참석 응답은 모두가 아니라 관리자 · 인도자에게');
+    } finally { repo.close(); }
+});

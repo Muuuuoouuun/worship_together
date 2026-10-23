@@ -27,6 +27,7 @@ import { usePlanning, type PlanningSource } from './usePlanning';
 import type { ContiData, ContiEditor, SaveResult } from './context';
 import { liveStartHref } from '@/components/live/links';
 import { selectTeam } from '@/actions/teamActions';
+import { useTeamPolicy } from '@/components/app/TeamConnection';
 
 /** 서버에서 읽은 콘티 한 줄 (곡 목록 없이) */
 export interface ServerSetlist {
@@ -362,13 +363,14 @@ export function useLiveContiData(props: LiveContiInputs): LiveContiResult {
         setViewerChoice((current) => ({ ...current, [planningTeamId]: userId }));
     }
 
+    const policy = useTeamPolicy();
     const planningView = useMemo<PlanningView>(() => {
         if (!loaded?.ok) return EMPTY_PLANNING_VIEW;
         const userId = source.planning.kind === 'none' ? null : source.planning.userId;
         if (!userId) return { ...EMPTY_PLANNING_VIEW, ready: true };
         const seenKey = feedSeenStorageKey(planningTeamId, userId);
         const seen = feedSeenAt[seenKey] ?? readStored(seenKey) ?? readStored(feedSeenStorageKey(planningTeamId));
-        const built = buildPlanningView({ state: planning.state, members: planning.members, userId, today: loaded.value.today, now: new Date(minute), setlists: loaded.value.data.setlists, feedSeenAt: seen });
+        const built = buildPlanningView({ state: planning.state, members: planning.members, userId, today: loaded.value.today, now: new Date(minute), setlists: loaded.value.data.setlists, feedSeenAt: seen, policy: source.planning.kind === 'online' ? policy : undefined });
         return {
             ...built,
             sample: false,
@@ -384,7 +386,7 @@ export function useLiveContiData(props: LiveContiInputs): LiveContiResult {
             },
             planningHref: `/dashboard/planning?team=${encodeURIComponent(planningTeamId)}`,
         };
-    }, [loaded, source.planning, planningTeamId, planning, feedSeenAt, minute]);
+    }, [loaded, source.planning, planningTeamId, planning, feedSeenAt, minute, policy]);
 
     const data: ContiData | null = loaded?.ok
         ? { ...loaded.value.data, editor, roster: source.roster.length ? source.roster : planningView.roster.map((member) => member.name), planning: planningView }
