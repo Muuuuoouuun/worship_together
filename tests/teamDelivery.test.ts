@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { TeamRepository } from '../lib/server/teamRepository';
 import { CATCH_UP_LIMIT, TeamEvents } from '../lib/server/teamEvents';
 import { TeamDocs } from '../lib/server/teamDocs';
+import { contiSaveHook } from '../lib/server/notices';
+import { contiNotices } from '../lib/contiNotices';
 import type { PlanningCommand } from '../types/planning';
 
 /*
@@ -221,5 +223,58 @@ test('an announcement to a schedule reaches the people serving it (not those who
         assert.deepEqual(state.announcements![0].recipientIds, [keys.id]);
         repo.setPolicy(teamId, leader.id, { ...repo.policy(teamId), announce: 'everyone' });
         repo.updatePlanning(teamId, vocal.id, { type: 'announcement.create', title: '간식 준비할게요', body: '리허설 끝나고 간식 있어요', audience: { kind: 'all' }, requireAck: false });
+    } finally { repo.close(); }
+});
+
+test('confirming a conti notifies the people serving that day (via doc saves); later edits notify at most every 10 minutes', () => {
+    const { repo, teamId } = seed();
+    try {
+        const events = new TeamEvents(repo.database);
+        const docs = new TeamDocs(repo.database, repo, events);
+        docs.afterSave = contiSaveHook(repo, docs, events);
+        const delivered: { type: string; audience: string[] | null; payload: unknown }[] = [];
+        events.subscribe(teamId, (event) => delivered.push({ type: event.type, audience: event.audience, payload: event.payload }));
+        // 주일 예배 일정: 건반만 배치, 보컬은 배치 안 됨
+        const event = addEvent(repo, teamId);
+        repo.updatePlanning(teamId, leader.id, { type: 'slot.save', eventId: event.id, role: 'keyboard', memberId: keys.id });
+        const enc = encodeURIComponent(teamId);
+        const libraryKey = `worship-together:library:v1:${enc}`;
+        const detailsKey = `worship:setlist-details:v1:${enc}:${encodeURIComponent('set-1')}`;
+        const library = (order: string[]) => JSON.stringify({ version: 1, songs: [{ id: 'a', title: '곡 A' }, { id: 'b', title: '곡 B' }], setlists: [{ id: 'set-1', title: '주일 예배 콘티', worship_date: event.startsAt, song_order: order }] });
+        let libraryVersion = (docs.put(teamId, leader, libraryKey, library(['a', 'b']), 0) as { version: number }).version;
+        // 작성 중 → 알림 없음
+        let detailsVersion = (docs.put(teamId, leader, detailsKey, JSON.stringify({ status: 'writing', overrides: {} }), 0) as { version: number }).version;
+        assert.equal(delivered.filter(item => item.type === 'planning.notice').length, 0);
+        // 확정 → 그날 배치된 건반에게만
+        detailsVersion = (docs.put(teamId, leader, detailsKey, JSON.stringify({ status: 'confirmed', overrides: {} }), detailsVersion) as { version: number }).version;
+        const confirmed = delivered.filter(item => item.type === 'planning.notice');
+        assert.equal(confirmed.length, 1);
+        assert.deepEqual(confirmed[0].audience, [keys.id]);
+        assert.equal((confirmed[0].payload as { title: string; target: string; entityId: string }).title, '콘티가 확정됐어요');
+        assert.equal((confirmed[0].payload as { target: string }).target, 'conti');
+        assert.equal(repo.planning(teamId, keys.id).notifications[0].entityId, 'set-1');
+        assert.equal(repo.planning(teamId, vocal.id).notifications.filter(item => item.target === 'conti').length, 0);
+        // 확정된 콘티의 Key 변경 → 변경 알림, 곧바로 곡 순서 변경은 10분 안이라 묶음
+        detailsVersion = (docs.put(teamId, leader, detailsKey, JSON.stringify({ status: 'confirmed', overrides: { a: { targetKey: 'E' } } }), detailsVersion) as { version: number }).version;
+        libraryVersion = (docs.put(teamId, leader, libraryKey, library(['b', 'a']), libraryVersion) as { version: number }).version;
+        const notices = delivered.filter(item => item.type === 'planning.notice').map(item => (item.payload as { title: string }).title);
+        assert.deepEqual(notices, ['콘티가 확정됐어요', '확정된 콘티가 바뀌었어요']);
+        // 코멘트만 더한 저장은 알리지 않음
+        docs.put(teamId, vocal, detailsKey, JSON.stringify({ status: 'confirmed', overrides: { a: { targetKey: 'E' } }, comments: [{ id: 'c1', songId: 'a', author: '보컬', text: '키 좋아요', createdAt: new Date().toISOString() }] }), detailsVersion);
+        assert.equal(delivered.filter(item => item.type === 'planning.notice').length, 2);
+        void libraryVersion;
+    } finally { repo.close(); }
+});
+
+test('conti notices fall back to the whole team when nobody is scheduled for that conti', () => {
+    const { repo, teamId } = seed();
+    try {
+        const notices = contiNotices({
+            kind: 'setlist-details', setlistId: 's', before: JSON.stringify({ status: 'writing' }), after: JSON.stringify({ status: 'confirmed' }),
+            library: JSON.stringify({ songs: [], setlists: [{ id: 's', title: '수요 예배', worship_date: '2026-10-28T11:00:00Z', song_order: [] }] }),
+            detailsOf: () => null, planning: repo.planningSnapshot(teamId).state, members: repo.planningSnapshot(teamId).members, editor: leader,
+        });
+        assert.deepEqual([...notices[0].recipientIds].sort(), [keys.id, vocal.id].sort());
+        assert.match(notices[0].body, /^인도자 · 수요 예배 · /);
     } finally { repo.close(); }
 });

@@ -35,8 +35,8 @@ export type PlanningNotification = {
     /** 특정 자리에 관한 알림이면 그 자리 (대체 부탁 카드에서 바로 지원·거절) */
     slotId?: string;
 };
-/** 알림을 누르면 열리는 일정 · 요청 화면의 탭 */
-export type PlanningTarget = 'requests' | 'schedule' | 'rotation' | 'announcements';
+/** 알림을 누르면 열리는 곳: 일정 · 요청 화면의 탭, 또는 콘티(entityId 가 콘티 id) */
+export type PlanningTarget = 'requests' | 'schedule' | 'rotation' | 'announcements' | 'conti';
 /** 공지를 받는 사람: 팀 전체 · 몇 개 파트 · 한 일정에 배치된 사람 */
 export type AnnouncementAudience = { kind: 'all' } | { kind: 'roles'; roles: WorshipRole[] } | { kind: 'event'; eventId: string };
 /** 팀 공지. 받는 사람은 올릴 때 정해지고(이후 들어온 팀원은 다시 알림에서 빠짐), 확인을 받으면 누가 확인했는지 남습니다. */

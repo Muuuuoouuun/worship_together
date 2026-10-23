@@ -12,7 +12,7 @@ import { emptyPlanningState, planningDate, type PlanningCommand, type PlanningSt
 import type { OnlineTeam, TeamMember } from '@/types/team';
 import { demoMembers, readLocalActor, writeLocalActor } from '@/lib/planningDemo';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Select } from '@/components/ui/input';
 import Notice from '@/components/ui/Notice';
 import PageTabs from '@/components/ui/PageTabs';
@@ -195,7 +195,9 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
                             <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground/75">{item.body}</p>
                             <p className="mt-1.5 text-[11px] text-muted-foreground">{planningDate(item.createdAt)} · {read ? '확인함' : '미확인'}</p>
                             <div className="mt-2.5 flex flex-wrap gap-1.5">
-                                <Button type="button" variant="outline" size="xs" onClick={() => setTab(item.target)}>내용 보기</Button>
+                                {item.target === 'conti'
+                                    ? <Link href={`/dashboard/songs?${new URLSearchParams({ tab: 'order', setlist: item.entityId })}`} className={buttonVariants({ variant: 'outline', size: 'xs' })}>콘티 보기</Link>
+                                    : <Button type="button" variant="outline" size="xs" onClick={() => setTab(item.target as TabId)}>내용 보기</Button>}
                                 {!read && <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" disabled={busy} onClick={() => void onCommand({ type: 'notification.read', notificationId: item.id })}><CircleCheck size={13} aria-hidden="true" />확인</Button>}
                             </div>
                         </div>

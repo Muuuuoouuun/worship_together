@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { linkedSetlistId, linkableFromLibrary, withLinkedSetlists, eventsForSetlist, summarizeLibrary } from '../lib/serviceLink';
 
-const event = (kind: 'worship' | 'rehearsal', startsAt: string, extra: Record<string, unknown> = {}) => ({ id: `${kind}-${startsAt}`, kind, startsAt, endsAt: startsAt, cancelled: false, ...extra });
+type TestEvent = { id: string; kind: 'worship' | 'rehearsal'; startsAt: string; endsAt: string; cancelled: boolean; setlistId?: string | null; setlistTitle?: string | null; setlistSongs?: string[] | null };
+const event = (kind: 'worship' | 'rehearsal', startsAt: string, extra: Partial<TestEvent> = {}): TestEvent => ({ id: `${kind}-${startsAt}`, kind, startsAt, endsAt: startsAt, cancelled: false, ...extra });
 // 한국 시간 10월 25일(주일) 오전 9시 · 11시 콘티, 11월 1일 콘티
 const library = [
     { id: 'first', title: '주일 1부', worship_date: '2026-10-25T00:00:00Z', songs: ['A'] },

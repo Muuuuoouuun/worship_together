@@ -119,6 +119,23 @@ export class TeamRepository {
             return { state: planningForViewer(state, members, userId, policy), created: state.notifications.filter((item) => !before.has(item.id)) };
         })();
     }
+    /** 서버 안에서 쓰는 일정 상태와 명단 (권한 검사 없음 — 저장 흐름에서 알림을 만들 때) */
+    planningSnapshot(teamId: string): { state: PlanningState; members: TeamMember[] } {
+        const members = this.db.prepare('SELECT user_id AS userId, name, role, permission FROM online_members WHERE team_id = ?').all(teamId) as TeamMember[];
+        return { state: this.readPlanning(teamId), members };
+    }
+    /** 일정 명령이 아닌 곳(콘티 저장 등)에서 생긴 알림을 알림 목록에 더합니다. */
+    addNotices(teamId: string, items: Array<Pick<PlanningNotification, 'title' | 'body' | 'target' | 'entityId' | 'recipientIds'> & { urgent?: boolean }>): PlanningNotification[] {
+        if (!items.length) return [];
+        return this.db.transaction(() => {
+            const state = this.readPlanning(teamId);
+            const now = new Date().toISOString();
+            const created = items.map((item): PlanningNotification => ({ id: randomUUID(), title: item.title, body: item.body, urgent: Boolean(item.urgent), target: item.target, entityId: item.entityId, recipientIds: [...new Set(item.recipientIds)], readBy: [], createdAt: now }));
+            state.notifications = [...created, ...state.notifications].slice(0, 500);
+            this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
+            return created;
+        })();
+    }
     private identity(user: TeamIdentity) {
         if (!user.id || user.id.length > 200 || !user.name.trim()) throw new Error('로그인이 필요합니다.');
     }

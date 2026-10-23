@@ -44,7 +44,10 @@ export function useTeamPolicy(): TeamPolicy {
 }
 
 export const liveHref = (sessionId: string) => `/live/${encodeURIComponent(sessionId)}`;
-const planningHref = (teamId: string, target: string) => `/dashboard/planning?${new URLSearchParams({ team: teamId, tab: target, inbox: '1' })}`;
+/** 알림을 누르면 갈 곳 — 콘티 알림은 그 콘티, 나머지는 일정 · 요청 화면의 탭 */
+const noticeHref = (teamId: string, notice: { target: PlanningTarget; entityId: string }) => notice.target === 'conti'
+    ? `/dashboard/songs?${new URLSearchParams({ tab: 'order', setlist: notice.entityId, team: teamId })}`
+    : `/dashboard/planning?${new URLSearchParams({ team: teamId, tab: notice.target, inbox: '1' })}`;
 
 /** 'planning.notice' 소식 (actions/planningActions 가 보냄) */
 interface PlanningNotice {
@@ -53,6 +56,7 @@ interface PlanningNotice {
     body: string;
     urgent: boolean;
     target: PlanningTarget;
+    entityId: string;
 }
 
 /**
@@ -121,7 +125,7 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                 case 'planning.notice': {
                     // 나에게 온 일정 · 요청 알림 (서버가 받는 사람에게만 보냅니다)
                     const notice = payload as unknown as PlanningNotice;
-                    const href = planningHref(teamId, notice.target);
+                    const href = noticeHref(teamId, notice);
                     void notifyDevice({ title: notice.title, body: notice.body, tag: `plan-${notice.id}`, url: href });
                     // 일정 · 요청 화면은 알림 목록과 자기 알림 줄이 있어 겹쳐 띄우지 않습니다.
                     if (!window.location.pathname.startsWith('/dashboard/planning')) {

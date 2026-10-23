@@ -4,13 +4,15 @@ import { TeamRepository } from './teamRepository';
 import { TeamEvents } from './teamEvents';
 import { TeamDocs } from './teamDocs';
 import { LiveRepository } from './liveRepository';
+import { contiSaveHook, deliverNotices } from './notices';
+import type { PlanningNotification } from '@/types/planning';
 import { getCurrentUser } from '@/lib/auth';
 
 /**
  * 저장소 코드가 바뀌면 올립니다 — 개발 서버가 예전 객체를 계속 쓰지 않게.
  * (Next 는 라우트 핸들러와 서버 컴포넌트에서 이 모듈을 따로 읽으므로, 모듈마다 다른 표식이 아니라 같은 숫자여야 같은 객체를 나눠 씁니다.)
  */
-const STORE_VERSION = 4;
+const STORE_VERSION = 5;
 type Stores = { teams: TeamRepository; events: TeamEvents; docs: TeamDocs; live: LiveRepository; sweeper: ReturnType<typeof setInterval> };
 const globalStores = globalThis as unknown as { worshipStores?: Stores; worshipStoresVersion?: number; worshipTeamRepository?: TeamRepository };
 
@@ -27,6 +29,7 @@ function stores(): Stores {
         const events = new TeamEvents(teams.database);
         const live = new LiveRepository(teams.database, teams, events);
         const docs = new TeamDocs(teams.database, teams, events);
+        docs.afterSave = contiSaveHook(teams, docs, events);
         // 화면을 닫은 기기(소식이 끊긴 기기)를 예배 세션에서 내보냅니다.
         const sweeper = setInterval(() => { try { live.sweep(); } catch (error) { console.error('[live] sweep', error); } }, 15_000);
         sweeper.unref?.();
@@ -40,6 +43,11 @@ export function getTeamRepository() { return stores().teams; }
 export function getTeamEvents() { return stores().events; }
 export function getTeamDocs() { return stores().docs; }
 export function getLiveRepository() { return stores().live; }
+/** 새 알림을 받는 사람에게 보냅니다 (팀 소식 · 푸시) */
+export function deliverTeamNotices(teamId: string, created: PlanningNotification[], byId: string) {
+    const { events } = stores();
+    deliverNotices(events, teamId, created, byId);
+}
 
 export async function getOnlineTeamName(teamId: unknown): Promise<string | undefined> {
     if (typeof teamId !== 'string') return undefined;
