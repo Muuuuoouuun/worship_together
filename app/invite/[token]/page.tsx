@@ -3,6 +3,7 @@ import { CalendarClock, UsersRound } from 'lucide-react';
 import { getViewer } from '@/lib/server/viewer';
 import { getTeamRepository } from '@/lib/server/teams';
 import AcceptInvitation from '@/components/team/AcceptInvitation';
+import LogoMark from '@/components/brand/LogoMark';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Metadata } from 'next';
@@ -17,7 +18,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     const already = Boolean(invite && viewer?.teams.some((team) => team.id === invite.teamId));
     return <main className="flex min-h-dvh items-center justify-center bg-background px-5 py-10">
         <section className="w-full max-w-[440px] rounded-[28px] border border-border bg-card p-6 sm:p-9">
-            <Link href="/dashboard" className="-my-2 inline-flex min-h-9 items-center rounded-full text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">Worship Together</Link>
+            <Link href="/dashboard" className="-my-2 inline-flex min-h-9 items-center gap-2 rounded-full text-[13px] font-semibold text-foreground transition-opacity hover:opacity-80"><LogoMark bold className="size-7" />Worship Together</Link>
             <div className="mb-5 mt-7 flex size-12 items-center justify-center rounded-2xl bg-muted text-foreground"><UsersRound size={22} aria-hidden="true" /></div>
             {invite ? <>
                 <p className="text-xs font-medium text-muted-foreground">함께 준비하는 예배</p>

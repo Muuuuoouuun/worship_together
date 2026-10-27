@@ -59,16 +59,10 @@
       }
 
       .mark {
-        display: inline-grid;
+        display: inline-block;
         width: 60px;
         height: 60px;
         margin-bottom: 20px;
-        place-items: center;
-        border-radius: 18px;
-        background: var(--primary);
-        color: var(--primary-fg);
-        font-size: 24px;
-        font-weight: 700;
       }
 
       h1 {
@@ -118,7 +112,7 @@
   </head>
   <body>
     <main>
-      <div class="mark">W</div>
+      <svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14.5" fill="#153E3B"/><g transform="translate(32 32) scale(0.64) translate(-32 -32)" fill="none" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17 L21 46 L32 17" stroke="#9EC7B5"/><path d="M32 17 L43 46 L54 17" stroke="#FFFFFF"/></g></svg>
       <h1>인터넷 연결이 끊어졌습니다</h1>
       <p>
         Worship Together는 실시간 세션 동기화, 콘티 조회, 예배 알림을 위해 네트워크가 필요합니다. 연결 확인 후 다시 시도해주세요.

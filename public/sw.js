@@ -1,11 +1,12 @@
-// v2: 새 디자인의 오프라인 화면을 배포하고, 예전 v1 캐시(배포마다 쌓이던 코드 조각)를 지웁니다.
-const CACHE_VERSION = "worship-together-v2";
+// v3: W 로고 아이콘 · 오프라인 화면을 새로 배포하고, 예전 캐시를 지웁니다.
+const CACHE_VERSION = "worship-together-v3";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE_URLS = [
   OFFLINE_URL,
   "/icons/icon-192.png",
   "/icons/icon-512.png",
+  "/icons/icon-maskable-512.png",
   "/icons/apple-touch-icon.png",
 ];
 

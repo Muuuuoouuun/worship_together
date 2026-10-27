@@ -7,6 +7,7 @@ import { safeLocalCallbackUrl } from "@/lib/authRedirect";
 import LoginButtons from "@/components/auth/LoginButtons";
 import DevLoginForm from "@/components/auth/DevLoginForm";
 import SignOutButton from "@/components/auth/SignOutButton";
+import LogoMark from "@/components/brand/LogoMark";
 import styles from "./login.module.css";
 
 export const metadata: Metadata = { title: "로그인", robots: { index: false, follow: false } };
@@ -38,7 +39,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   return <main className={styles.page}>
     <section className={styles.card} aria-labelledby="login-heading">
-      <p className={styles.brand}>Worship Together</p>
+      <p className={styles.brand}><LogoMark bold className={styles.brandMark} />Worship Together</p>
       <h1 id="login-heading" className={styles.heading}>{user ? "함께할 준비가 됐어요" : invited ? "초대받은 팀과 함께해요" : "함께 예배를 준비해요"}</h1>
       <p className={styles.description}>{user ? `${user.name}님, 로그인되어 있습니다.` : invited ? "로그인하면 초대받은 팀의 참여 화면으로 이어집니다." : "익숙한 계정으로 로그인하고, 팀원들과 콘티와 악보를 함께 준비하세요."}</p>
       {!user && errorText ? <p role="alert" className={`${styles.notice} ${error !== "OAuthCancelled" ? styles.error : ""}`}>{errorText}</p> : null}
