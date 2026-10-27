@@ -70,14 +70,48 @@
 
 .pulseCaption {
     display: flex;
-    justify-content: center;
-    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
     flex-shrink: 0;
-    padding: 0.75rem 0 1rem;
+    padding: 0.5rem 0 0.75rem;
     color: var(--muted-foreground);
     font-size: 11px;
 }
 .desktopCaption { padding-bottom: 2rem; font-size: 13px; }
+
+/* ───── 박자 효과 (beatEffects) — 박마다 다시 그려 한 번씩만 돕니다 ───── */
+
+/* 펄스 효과: 박 숫자가 살짝 커졌다 돌아옴 (첫 박은 더 크게) */
+.pop { animation: beat-pop 220ms cubic-bezier(0.2, 0.8, 0.3, 1); }
+.popDown { animation: beat-pop-down 300ms cubic-bezier(0.2, 0.8, 0.3, 1); }
+@keyframes beat-pop { from { transform: scale(1.07); } to { transform: scale(1); } }
+@keyframes beat-pop-down { from { transform: scale(1.14); } to { transform: scale(1); } }
+
+/* 펄스 효과: 첫 박(겹박자는 묶음 첫 박)에 링이 바깥으로 퍼짐 */
+.ripple, .rippleSoft {
+    stroke: var(--primary);
+    transform-box: fill-box;
+    transform-origin: center;
+}
+.ripple { animation: beat-ripple 560ms ease-out forwards; }
+.rippleSoft { animation: beat-ripple-soft 420ms ease-out forwards; }
+@keyframes beat-ripple { from { opacity: 0.6; transform: scale(1); } to { opacity: 0; transform: scale(1.16); } }
+@keyframes beat-ripple-soft { from { opacity: 0.35; transform: scale(1); } to { opacity: 0; transform: scale(1.08); } }
+
+/* 깜빡임: 다이얼 안이 짧게 빛나고, 지금 박 칸이 밝게 번쩍 */
+.flash, .flashDown { fill: var(--primary); opacity: 0; }
+.flash { animation: beat-flash 170ms ease-out; }
+.flashDown { animation: beat-flash-down 240ms ease-out; }
+@keyframes beat-flash { from { opacity: 0.16; } to { opacity: 0; } }
+@keyframes beat-flash-down { from { opacity: 0.32; } to { opacity: 0; } }
+.segBlink { animation: beat-seg 200ms ease-out; }
+@keyframes beat-seg { from { stroke: var(--foreground); } to { stroke: var(--primary); } }
+
+/* 깜빡임: 곡 줄 BPM 옆 점 */
+.dotFlash { animation: beat-dot 240ms ease-out forwards; }
+@keyframes beat-dot { from { opacity: 1; transform: scale(1.25); } to { opacity: 0.2; transform: scale(1); } }
 .pulseBody {
     display: flex;
     flex: 1;
