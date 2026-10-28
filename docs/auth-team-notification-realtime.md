@@ -117,7 +117,7 @@ OAuth 키 없이 `next dev` + 격리된 SQLite + 직접 서명한 JWT 쿠키 두
 | 읽음 후 배지 소거 | 6ms |
 | 큐 전달 (탭 간) | 3 ~ 5ms, ACK 표시 208ms |
 
-E2E에서 추가로 발견한 결함:
+E2E에서 추가로 발견한 결함 (**2026-10-28 모두 수정**: `lib/planningView.ts`의 `pickNextDuty`·`summarizeMyDuties`, `PlanningWorkspace`의 비소속 팀 안내·주소 교체, 대시보드 홈의 서버 팀 명단 표시):
 
 - **[확인] 불참한 일정이 "나의 다가오는 섬김"에 "확정됨"으로 남습니다.** `components/planning/SchedulePanel.tsx`의 `nextDuty`가 참석 상태를 거르지 않습니다. 같은 화면의 일정 행과 긴급 알림은 불참으로 맞게 표시됩니다.
 - **[확인] 비소속 팀 id로 `/dashboard/planning?team=`에 들어가면 안내 없이 본인 팀으로 대체됩니다** (`PlanningWorkspace.tsx`의 `?? props.teams[0]`). 데이터 노출은 없으나 URL이 그대로 남아 혼란을 줍니다.
@@ -247,7 +247,7 @@ sequenceDiagram
 
 | 단계 | 변경 | 검증 |
 | --- | --- | --- |
-| 1 | `sessionActions.ts` 전부에 `getCurrentUser` + 팀 멤버십. Supabase 서버 쓰기를 service-role로, `sessions`·`session_feedback` RLS로 anon 쓰기 차단. 죽은 리스너 제거 | 비로그인 호출이 거부되는 단위 테스트. E2E: B가 다른 팀 세션에 큐를 보내면 거부 |
+| 1 | `sessionActions.ts` 전부에 `getCurrentUser`(**적용됨**, 2026-10-28) + 팀 멤버십(Supabase 팀 id와 서버 팀 명단 통합 후). Supabase 서버 쓰기를 service-role로, `sessions`·`session_feedback` RLS로 anon 쓰기 차단. 죽은 리스너 제거 | 비로그인 호출이 거부되는 단위 테스트. E2E: B가 다른 팀 세션에 큐를 보내면 거부 |
 | 2 | 알림 테이블 분리 + `rev` + `loadPlanningInbox` SQL화 + `planningForViewer`에서 `readBy` 제거 + `.immediate()` | `onlineFlow.test.ts`를 새 저장 구조로 통과. 상한 데이터에서 inbox 응답 < 2KB, < 2ms 측정 |
 | 3 | `LiveHub` + `/api/live/stream` + Badge SSE 우선/폴링 폴백 60초 | E2E: 배지 반영 지연 < 1초 (현재 ≤15초). 연결 끊김 후 폴백 동작 |
 | 4 | `/api/session/[id]/events`·`snapshot`·`master` + `useRealtimeSession` SSE 전송 + 무대 모드 마스터 토글 | E2E: 서로 다른 브라우저 컨텍스트 간 큐·ack·state 전달. 늦게 들어온 기기 스냅샷 복구 |

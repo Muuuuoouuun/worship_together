@@ -39,6 +39,22 @@
 | M10 | 낮음 | maskable 아이콘이 any 아이콘과 같은 파일 → Android 마스크에서 로고 잘릴 수 있음. `apple-mobile-web-app-capable` 메타 없음 | `app/manifest.ts`, `app/layout.tsx` | manifest 검사 |
 | M11 | 낮음 | `android/gradlew`가 실행 권한 없이 커밋되어 `./gradlew` 실패 | **이번에 수정** (`git update-index --chmod=+x`) | 빌드 로그 |
 
+## 3-1. 수정 현황 (2026-10-28)
+
+| # | 상태 | 수정 내용 | 재검증 |
+| --- | --- | --- | --- |
+| M1 | 수정 | 설치 배너를 `/session/*`에서 숨김 | iPhone 에뮬레이션에서 배너 0개, ‘예배 시작’ 클릭 가능 |
+| M2 | 수정 | 배너를 하단 내비·라이브 미니바 위로 배치(safe-area 포함), 닫기 44px, z-30 | 배너 하단이 미니바보다 10px, 내비보다 75px 위 |
+| M3 | 수정 | `lib/stageStatus.ts`로 분리해 offline/error를 먼저 판정, 오프라인 송신 문구 “오프라인 · 수신 미확인” | 오프라인 전환 시 필 “오프라인”, 테스트 4개 |
+| M4 | 오탐 | 하단바 안쪽 div에 이미 `pb-safe`(34px) 적용. 바깥 고정 div만 0이었음 | CDP safe-area 34에서 안쪽 패딩 34px 확인 |
+| M5 | 수정 | 수신 역할·큐 대상·스탬프·악보 키·송폼 텍스트 입력 16px | 측정 16px |
+| M6 | 수정 | sw.js v3: 방문 화면 30개 + `/_next/static` 보관, 미방문은 offline.html | 프로덕션 빌드에서 무대 화면 오프라인 재열기 성공(‘예배 시작’ 렌더, 오류 0) |
+| M7 | 수정 | 이전/다음 곡 44×44, 화면 꺼짐 방지·전체화면·잠금 44×48 | 측정값 |
+| M8 | 수정 | 찍기 56×40, 악기 40px, 표준 송폼 적용 40px, 송폼 닫기 40×40, 체크박스 20px | 가로 넘침 없음 |
+| M9 | 미수정 | 콘티 탭·필터·링크 폭, 일정 칩 높이, 미니바 닫기 — 디자인 토큰 수준 정리 필요 | — |
+| M10 | 수정 | `icon-maskable-512.png`(안전 영역 80%), `apple-mobile-web-app-capable` 메타 | HTML에 두 메타 출력 확인 |
+| M11 | 수정 | `gradlew` 실행 권한 | `./gradlew assembleDebug` 성공 |
+
 ## 4. 통과한 항목
 
 - `viewport-fit=cover`, 하단 내비 `pb-[env(safe-area-inset-bottom)]`(iPhone 34px·WebView 24px), 헤더 상단 패딩(iPhone 59px·WebView 28px) 모두 반영.
