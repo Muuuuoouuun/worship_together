@@ -10,7 +10,7 @@ import StageAccentPicker from '@/components/session/stage/StageAccentPicker';
 import WorshipCountIn from '@/components/session/stage/WorshipCountIn';
 import WorshipPulseView from '@/components/session/stage/WorshipPulseView';
 import WorshipStartScreen from '@/components/session/stage/WorshipStartScreen';
-import { useRealtimeSession, type RealtimeConnectionStatus } from '@/hooks/useRealtimeSession';
+import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { isPrototypeSessionId } from '@/lib/constants';
 import { createClientId } from '@/lib/clientId';
 import { useSongSections } from '@/hooks/useSongSections';
@@ -37,6 +37,7 @@ import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { useStageAccent } from '@/hooks/useStageAccent';
 import { getStageAccentStyle } from '@/lib/stageAccent';
+import { getOfflineCueLabel, getRealtimeStatusMeta } from '@/lib/stageStatus';
 import { clearStagePhase, readStagePhase, writeStagePhase } from '@/lib/stagePhaseStorage';
 import { isUsableBpm } from '@/lib/stageTempo';
 import {
@@ -276,6 +277,7 @@ export default function WorshipTeamMode({
     const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen();
 
     const realtimeMeta = getRealtimeStatusMeta(realtimeStatus, localTransportAvailable);
+    const cueLabel = (delivery: Parameters<typeof getCueDeliveryLabel>[0]) => getOfflineCueLabel(getCueDeliveryLabel(delivery), realtimeStatus);
     const latestCue = feedbackLog[feedbackLog.length - 1] ?? null;
     const currentSongIndex = songs.findIndex((song) => song.id === currentSongId);
     const nextSong = currentSongIndex >= 0 ? songs[currentSongIndex + 1] ?? null : songs[1] ?? null;
@@ -594,7 +596,7 @@ export default function WorshipTeamMode({
                         songTitle={currentSong?.title ?? null}
                         songKey={stageCurrentSong?.original_key ?? null}
                         bpm={startBpm}
-                        signalLabel={startSignalId ? getCueDeliveryLabel(cueDeliveries[startSignalId]) : null}
+                        signalLabel={startSignalId ? cueLabel(cueDeliveries[startSignalId]) : null}
                         onCancel={handleCountInCancel}
                         onComplete={handleCountInComplete}
                     />
@@ -641,7 +643,7 @@ export default function WorshipTeamMode({
                             type="button"
                             onClick={handlePrevSong}
                             disabled={currentSongIndex <= 0}
-                            className="p-1 rounded-lg text-white/70 hover:text-white disabled:opacity-20 transition"
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-white/70 hover:text-white disabled:opacity-20 transition"
                             title="이전 곡"
                         >
                             <ChevronLeft size={16} />
@@ -651,7 +653,7 @@ export default function WorshipTeamMode({
                             type="button"
                             onClick={handleNextSong}
                             disabled={currentSongIndex >= songs.length - 1}
-                            className="p-1 rounded-lg text-white/70 hover:text-white disabled:opacity-20 transition"
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-white/70 hover:text-white disabled:opacity-20 transition"
                             title="다음 곡"
                         >
                             <ChevronRight size={16} />
@@ -662,7 +664,7 @@ export default function WorshipTeamMode({
                             <button
                                 type="button"
                                 onClick={toggleWakeLock}
-                                className={`tap-target inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-bold transition ${
+                                className={`tap-target inline-flex min-w-11 items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-bold transition ${
                                     isWakeLockActive
                                         ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
                                         : 'border-white/15 bg-white/5 text-white/60 hover:bg-white/10'
@@ -677,7 +679,7 @@ export default function WorshipTeamMode({
                             <button
                                 type="button"
                                 onClick={() => void toggleFullscreen()}
-                                className="tap-target inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white/80 transition hover:bg-white/10"
+                                className="tap-target inline-flex min-w-11 items-center justify-center gap-1 rounded-full border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white/80 transition hover:bg-white/10"
                                 title="무대 전체화면 전환"
                             >
                                 {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
@@ -695,7 +697,7 @@ export default function WorshipTeamMode({
                                     return next;
                                 });
                             }}
-                            className={`tap-target inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-bold transition ${
+                            className={`tap-target inline-flex min-w-11 items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-bold transition ${
                                 stageLocked
                                     ? 'border-amber-400/50 bg-amber-400/20 text-amber-200'
                                     : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
@@ -787,12 +789,12 @@ export default function WorshipTeamMode({
 
                 <div className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-3 sm:grid-cols-2">
                     <label className="text-xs font-bold text-white/70">내 수신 역할
-                        <select aria-label="내 수신 역할" value={selectedFeedbackRole} onChange={(event) => setFeedbackRole(event.target.value as SessionFeedbackRole)} className="mt-2 block min-h-11 w-full rounded-lg bg-[#152321] px-3 text-sm text-white">
+                        <select aria-label="내 수신 역할" value={selectedFeedbackRole} onChange={(event) => setFeedbackRole(event.target.value as SessionFeedbackRole)} className="mt-2 block min-h-11 w-full rounded-lg bg-[#152321] px-3 text-base sm:text-sm text-white">
                             {Object.entries(ROLE_LABELS).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
                         </select>
                     </label>
                     <label className="text-xs font-bold text-white/70">큐 받을 대상
-                        <select aria-label="큐 받을 대상" value={recipientChoice} onChange={(event) => setRecipientChoice(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg bg-[#152321] px-3 text-sm text-white">
+                        <select aria-label="큐 받을 대상" value={recipientChoice} onChange={(event) => setRecipientChoice(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg bg-[#152321] px-3 text-base sm:text-sm text-white">
                             <option value="preset">버튼에 지정된 대상</option>
                             <option value="everyone">전체</option>
                             {Object.entries(ROLE_LABELS).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
@@ -802,7 +804,7 @@ export default function WorshipTeamMode({
                     <p className="text-xs text-white/75 sm:col-span-2">{realtimeStatus === 'connected' ? '서버 연결됨' : localTransportAvailable ? '같은 브라우저의 열린 탭끼리만 연결됩니다.' : '전송 연결 없음'} · 다른 접속 기기 {participants.length}개 · 역할/기기 큐는 실시간 알림만 제공</p>
                     {lastSentEntryId ? (
                         <div className="flex items-center justify-between gap-2 text-sm font-bold text-[#ffe0b8] sm:col-span-2 rounded-lg bg-white/5 px-3 py-2 border border-white/10">
-                            <span>{getCueDeliveryLabel(cueDeliveries[lastSentEntryId])}{cueDeliveries[lastSentEntryId]?.error && cueDeliveries[lastSentEntryId]?.status !== 'failed' ? ` · ${cueDeliveries[lastSentEntryId].error}` : ''}</span>
+                            <span>{cueLabel(cueDeliveries[lastSentEntryId])}{cueDeliveries[lastSentEntryId]?.error && cueDeliveries[lastSentEntryId]?.status !== 'failed' ? ` · ${cueDeliveries[lastSentEntryId].error}` : ''}</span>
                             {cueDeliveries[lastSentEntryId]?.status === 'failed' && (
                                 <button
                                     type="button"
@@ -901,7 +903,7 @@ export default function WorshipTeamMode({
                                     onSelectSection={(sec) => updateState({ section: sec })}
                                     participantCount={participants.length}
                                     realtimeStatus={realtimeStatus}
-                                    lastSentDeliveryLabel={lastSentEntryId ? getCueDeliveryLabel(cueDeliveries[lastSentEntryId]) : undefined}
+                                    lastSentDeliveryLabel={lastSentEntryId ? cueLabel(cueDeliveries[lastSentEntryId]) : undefined}
                                     onSendCue={(msg, targetRole) => {
                                         sendStageAction({
                                             id: `cue_${Date.now()}`,
@@ -947,7 +949,7 @@ export default function WorshipTeamMode({
                             onNextSong={handleNextSong}
                             startedAt={stageStartedAt}
                             deviceCount={participants.length + 1}
-                            deviceCaption={startSignalId ? `시작 신호 · ${getCueDeliveryLabel(cueDeliveries[startSignalId])}` : connectionLabel}
+                            deviceCaption={startSignalId ? `시작 신호 · ${cueLabel(cueDeliveries[startSignalId])}` : connectionLabel}
                             accentPicker={accentPicker}
                             onReturnToStart={handleReturnToStart}
                         />
@@ -1157,7 +1159,7 @@ export default function WorshipTeamMode({
                                 )}
                             </div>
                             <p className="text-xs font-black text-emerald-300">
-                                {lastSentEntryId ? getCueDeliveryLabel(cueDeliveries[lastSentEntryId]) : '아직 전송된 큐가 없습니다.'}
+                                {lastSentEntryId ? cueLabel(cueDeliveries[lastSentEntryId]) : '아직 전송된 큐가 없습니다.'}
                             </p>
                             <p className="text-[10px] text-white/60">
                                 큐 전송 시 각 팀원 기기에서 수신 확인 신호가 실시간 반환됩니다.
@@ -1223,45 +1225,6 @@ function useNowTick(intervalMs: number) {
     }, [intervalMs]);
 
     return now;
-}
-
-function getRealtimeStatusMeta(status: RealtimeConnectionStatus, localTransportAvailable: boolean) {
-    if (status !== 'connected' && localTransportAvailable) {
-        return {
-            dot: 'bg-white/45',
-            label: '브라우저 탭',
-            tone: 'bg-white/[0.08] text-white/60',
-        };
-    }
-
-    switch (status) {
-        case 'connected':
-            return {
-                dot: 'sync-pulse bg-emerald-400',
-                label: '실시간',
-                tone: 'bg-emerald-300/[0.12] text-emerald-100',
-            };
-        case 'reconnecting':
-            return {
-                dot: 'sync-pulse-warning bg-amber-300',
-                label: '재연결',
-                tone: 'bg-amber-300/[0.12] text-amber-100',
-            };
-        case 'offline':
-        case 'error':
-            return {
-                dot: 'bg-red-400',
-                label: '오프라인',
-                tone: 'bg-red-400/[0.12] text-red-100',
-            };
-        case 'idle':
-        default:
-            return {
-                dot: 'bg-white/35',
-                label: '대기',
-                tone: 'bg-white/[0.08] text-white/60',
-            };
-    }
 }
 
 function formatRealtimeAge(value: string | null, now: number) {

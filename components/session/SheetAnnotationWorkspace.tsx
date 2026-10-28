@@ -1448,7 +1448,7 @@ function SheetAnnotationWorkspace({
                             <Eraser size={16} /> 지우개
                         </button>
 
-                        <div className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card pl-3.5 pr-1 text-sm">
+                        <div className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card pl-3.5 pr-1 text-sm">
                             <span className="text-muted-foreground">스탬프:</span>
                             <select
                                 aria-label="스탬프 문구 선택"
@@ -1457,7 +1457,7 @@ function SheetAnnotationWorkspace({
                                     setStamp(e.target.value);
                                     setTool('stamp');
                                 }}
-                                className="bg-transparent font-medium text-foreground focus:outline-hidden"
+                                className="bg-transparent text-base font-medium text-foreground focus:outline-hidden sm:text-sm"
                             >
                                 {WORSHIP_STAMP_GROUPS.map((group) => (
                                     <optgroup key={group.name} label={group.name}>
@@ -1470,7 +1470,7 @@ function SheetAnnotationWorkspace({
                             <button
                                 type="button"
                                 aria-pressed={tool === 'stamp'}
-                                className={cn(chip, 'text-foreground hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground')}
+                                className={cn(chip, 'h-10 px-4 text-foreground hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground')}
                                 onClick={() => setTool('stamp')}
                             >
                                 찍기
@@ -1720,7 +1720,7 @@ function SheetAnnotationWorkspace({
                                                 autoComplete="off"
                                                 spellCheck={false}
                                                 disabled={busy || !activePage}
-                                                className="min-w-0 flex-1 basis-48 rounded-xl border border-primary/15 bg-background/80 px-3 py-2 text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+                                                className="min-w-0 flex-1 basis-48 rounded-xl border border-primary/15 bg-background/80 px-3 py-2 text-base font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary/30 sm:text-sm"
                                             />
                                             <button type="submit" className={button} disabled={busy || !activePage}>
                                                 적용
@@ -2089,7 +2089,7 @@ function SheetAnnotationWorkspace({
                                 value={keyInfo.key}
                                 disabled={busy}
                                 onChange={(e) => void changeScoreKey(e.target.value as LeadSheetKey)}
-                                className="tap-target rounded-xl border border-primary/15 bg-background/80 px-3 py-2 text-sm font-bold"
+                                className="tap-target rounded-xl border border-primary/15 bg-background/80 px-3 py-2 text-base font-bold sm:text-sm"
                             >
                                 {LEAD_SHEET_KEYS.map((key) => (
                                     <option key={key} value={key}>
@@ -2348,8 +2348,8 @@ function SheetAnnotationWorkspace({
                             <Share2 size={16} /> {page}p 이미지 공유
                         </button>
                     )}
-                    <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                        <input type="checkbox" checked={exportMarks} onChange={(e) => setExportMarks(e.target.checked)} className="size-4 accent-primary" />
+                    <label className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-muted-foreground">
+                        <input type="checkbox" checked={exportMarks} onChange={(e) => setExportMarks(e.target.checked)} className="size-5 accent-primary" />
                         필기·송폼 포함
                     </label>
                     <span className="text-xs text-muted-foreground">{view === 'published' ? '팀 공유본' : '내 필기'} 기준{viewParts ? ' · 보기 필터 적용' : ''}</span>
