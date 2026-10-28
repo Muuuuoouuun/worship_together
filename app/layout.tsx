@@ -31,6 +31,10 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  // Next는 appleWebApp.capable을 mobile-web-app-capable로만 내보내므로 iOS용 메타를 명시합니다.
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
   icons: {
     icon: [
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },

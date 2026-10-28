@@ -1,6 +1,7 @@
 'use server';
 
 import { getSupabaseClient } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/auth';
 import { createClientId } from '@/lib/clientId';
 import {
     getDefaultSessionFeedbackTarget,
@@ -24,7 +25,19 @@ import {
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+/**
+ * 세션을 바꾸는 서버 액션은 로그인한 사용자만 호출할 수 있습니다.
+ * 팀 소속 확인은 아직 Supabase 팀 id 와 서버 팀 명단이 분리되어 있어 넣지 못했습니다
+ * (docs/auth-team-notification-realtime.md 5.2). 지금은 최소한 익명 호출을 막습니다.
+ */
+async function requireSignedInUser() {
+    const user = await getCurrentUser();
+    if (!user) throw new Error('로그인 후 다시 시도해주세요.');
+    return user;
+}
+
 export async function startSession(teamId: string, setlistId: string) {
+    await requireSignedInUser();
     const supabase = getSupabaseClient();
 
     const { data } = await supabase
@@ -96,6 +109,7 @@ export async function updateSessionState(
     teamId: string,
     payload: Partial<SessionCurrentState>
 ) {
+    await requireSignedInUser();
     const { session, supabase } = await getTeamScopedSession(sessionId, teamId);
 
     ensureActiveSession(session);
@@ -167,6 +181,7 @@ export async function appendSessionFeedback(
     teamId: string,
     payload: AppendSessionFeedbackPayload
 ) {
+    await requireSignedInUser();
     const { session, supabase } = await getTeamScopedSession(sessionId, teamId);
     const message = payload.message.trim().slice(0, 220);
 
@@ -259,6 +274,7 @@ export async function addSessionFeedbackPreset(
     teamId: string,
     payload: AddSessionFeedbackPresetPayload
 ) {
+    await requireSignedInUser();
     const { session, supabase } = await getTeamScopedSession(sessionId, teamId);
     const label = payload.label.trim().slice(0, 32);
     const message = payload.message.trim().slice(0, 220);
@@ -322,6 +338,7 @@ export async function addSessionFeedbackPreset(
 }
 
 export async function endSession(sessionId: string, teamId: string) {
+    await requireSignedInUser();
     const supabase = getSupabaseClient();
 
     const { error } = await supabase
