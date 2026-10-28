@@ -143,7 +143,7 @@ export default function SongFormScoreOverlay({
                             <button
                                 type="button"
                                 onClick={handleCreateDefaultSongForm}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 text-[10px] font-bold transition"
+                                className="inline-flex min-h-10 items-center gap-1 px-3 rounded-md bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 text-[11px] font-bold transition"
                                 title="표준 송폼(Intro-V-C-B-O) 저장"
                             >
                                 <Sparkles size={10} />
@@ -228,8 +228,9 @@ export default function SongFormScoreOverlay({
                             <button
                                 type="button"
                                 onClick={() => onDisplayModeChange('hidden')}
-                                className="text-white/40 hover:text-white p-0.5 rounded transition"
+                                className="inline-flex size-10 items-center justify-center text-white/40 hover:text-white rounded transition"
                                 title="송폼 오버레이 닫기"
+                                aria-label="송폼 오버레이 닫기"
                             >
                                 <X size={12} />
                             </button>

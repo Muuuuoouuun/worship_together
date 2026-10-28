@@ -848,7 +848,7 @@ export default function SessionWorkspace({
                             type="button"
                             onClick={() => setFeedbackRole('instrument')}
                             aria-pressed={instrumentMode}
-                            className={cn(choicePill, 'h-7 px-3 text-[11px]', instrumentMode ? choiceOn : 'border-transparent bg-muted text-muted-foreground')}
+                            className={cn(choicePill, 'min-h-10 px-4 text-xs', instrumentMode ? choiceOn : 'border-transparent bg-muted text-muted-foreground')}
                         >
                             악기
                         </button>
