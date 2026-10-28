@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Bell, CheckCheck, ChevronDown, CircleCheck, RefreshCw, X } from 'lucide-react';
 import { loadPlanningContext, updateTeamPlanning } from '@/actions/planningActions';
 import { DEMO_TEAM_ID } from '@/lib/constants';
@@ -37,8 +37,22 @@ export default function PlanningWorkspace(props: Props) {
     return props.teams.length && props.userId ? <OnlinePlanning {...props} /> : <LocalPlanning {...props} />;
 }
 function OnlinePlanning(props: Props) {
-    const [selected, setSelected] = useState(props.initialTeamId ?? props.teams[0].id);
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    // ?team= 이 내 팀이 아니면(없는 팀·비소속 팀) 첫 팀을 보여주되, 안내하고 주소의 낡은 id를 지웁니다.
+    const requestedMissing = Boolean(props.initialTeamId) && !props.teams.some(item => item.id === props.initialTeamId);
+    const [selected, setSelected] = useState(requestedMissing ? props.teams[0].id : props.initialTeamId ?? props.teams[0].id);
+    const [fallbackNotice, setFallbackNotice] = useState(requestedMissing);
+    const replacedUrl = useRef(false);
     const team = props.teams.find(item => item.id === selected) ?? props.teams[0];
+    useEffect(() => {
+        if (!requestedMissing || replacedUrl.current) return;
+        replacedUrl.current = true; // 한 번만 바꿉니다 (바뀐 주소로 다시 그려져도 반복하지 않음)
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('team', team.id);
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }, [requestedMissing, searchParams, team.id, pathname, router]);
     const picker = (
         <label className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-[11px] font-medium text-muted-foreground">함께 준비할 팀</span>
@@ -47,7 +61,17 @@ function OnlinePlanning(props: Props) {
             </Select>
         </label>
     );
-    return <Board key={team.id} teamId={team.id} members={team.members} userId={props.userId!} online toolbar={picker} initialTab={props.initialTab} initialSetlist={team.id === props.initialTeamId ? props.initialSetlist : undefined} />;
+    const board = <Board key={team.id} teamId={team.id} members={team.members} userId={props.userId!} online toolbar={picker} initialTab={props.initialTab} initialSetlist={team.id === props.initialTeamId ? props.initialSetlist : undefined} />;
+    // 안내를 닫아도 Board가 다시 마운트되지 않도록 같은 트리 모양을 유지합니다.
+    return <div className="space-y-4">
+        {fallbackNotice ? <Notice tone="warn" className="flex items-start justify-between gap-3">
+            <span className="min-w-0 pt-0.5" data-testid="team-fallback-notice">요청한 팀을 찾을 수 없거나 접근 권한이 없어 내 팀을 대신 보여줍니다.</span>
+            <button type="button" aria-label="안내 닫기" title="안내 닫기" onClick={() => setFallbackNotice(false)} className="-my-1 -mr-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:hover:bg-white/10">
+                <X size={16} aria-hidden="true" />
+            </button>
+        </Notice> : null}
+        {board}
+    </div>;
 }
 function LocalPlanning(props: Props) {
     const raw = useSyncExternalStore(subscribeToTeams, getTeamSnapshot, getTeamServerSnapshot);

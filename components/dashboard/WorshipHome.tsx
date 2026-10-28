@@ -25,8 +25,22 @@ import { TONE_BLOCK, TONE_ICON } from '@/components/ui/tones';
 import { AvatarStack } from '@/components/conti/ui';
 import { dDay, dayOf, diffDays, md, monthOf, nextSunday, seoulDateTime, weekLabel, weekday } from '@/components/conti/model';
 
+/** 서버 페이지가 넘기는 온라인 팀 요약 (직렬화 가능한 최소 정보) */
+export interface HomeOnlineTeam {
+    id: string;
+    name: string;
+    memberCount: number;
+    myRole: 'owner' | 'member';
+    memberNames: string[];
+    hasLeader: boolean;
+}
+
 interface WorshipHomeProps {
     currentSessionId?: string;
+    /** 로그인한 사용자의 온라인 팀. 비어 있으면 브라우저 체험 팀을 그대로 씁니다. */
+    onlineTeams?: HomeOnlineTeam[];
+    /** ?team= 값. 내 온라인 팀 중 일치하는 팀이 있으면 그 팀을 머리글에 씁니다. */
+    initialTeamId?: string;
 }
 
 interface HomeRow {
@@ -61,7 +75,7 @@ function seoulDate(value: string | number): string | null {
 
 const dayName = (date: string) => (weekday(date) === '일' ? '주일' : `${weekday(date)}요일`);
 
-export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
+export default function WorshipHome({ currentSessionId, onlineTeams = [], initialTeamId }: WorshipHomeProps) {
     const raw = useSyncExternalStore(subscribeToTeams, getTeamSnapshot, getTeamServerSnapshot);
     const team = useMemo(() => {
         try {
@@ -122,9 +136,15 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
         ? `/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(next.id)}&team=${encodeURIComponent(teamId)}`
         : `/session/${currentSessionId ?? DEMO_SESSION_ID}`;
 
+    // 머리글·팀원 수·팀 링크: 온라인 팀이 있으면 ?team= 과 일치하는 팀 → 첫 팀(최근 만든 팀),
+    // 없으면 브라우저 체험 팀(기존 동작).
+    const onlineTeam = onlineTeams.find((item) => item.id === initialTeamId) ?? onlineTeams[0];
     const members = team?.members ?? [];
-    const memberCount = members.length;
-    const hasLeader = members.some((member) => member.role === 'leader');
+    const memberNames = onlineTeam ? onlineTeam.memberNames : members.map((member) => member.name);
+    const memberCount = onlineTeam ? onlineTeam.memberCount : members.length;
+    const hasLeader = onlineTeam ? onlineTeam.hasLeader : members.some((member) => member.role === 'leader');
+    const teamName = onlineTeam ? onlineTeam.name : team ? team.name : '기본 예배팀';
+    const teamHref = onlineTeam ? `/dashboard/team?team=${encodeURIComponent(onlineTeam.id)}` : '/dashboard/team';
     const songCount = next?.song_order?.length ?? 0;
     const estimatedMinutes = songCount * 4;
     const songById = new Map(songs.map((song) => [song.id, song]));
@@ -139,7 +159,7 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
         <div className="space-y-8">
             {ready ? (
                 <PageHeader
-                    eyebrow={`${team ? team.name : '기본 예배팀'}${nextDate ? ` · ${weekLabel(nextDate)}` : ''}`}
+                    eyebrow={`${teamName}${nextDate ? ` · ${weekLabel(nextDate)}` : ''}`}
                     title={nextDate ? `${monthOf(nextDate)}월 ${dayOf(nextDate)}일` : '우리 팀의 예배 준비'}
                     badge={
                         dayStatus && (
@@ -147,7 +167,7 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
                         )
                     }
                     actions={
-                        <Link href="/dashboard/team" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                        <Link href={teamHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                             <UsersRound className="text-muted-foreground" aria-hidden="true" />
                             팀원 {memberCount}명
                         </Link>
@@ -201,7 +221,7 @@ export default function WorshipHome({ currentSessionId }: WorshipHomeProps) {
 
                                 <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-emerald-900/10 pt-3.5 dark:border-white/10">
                                     <span className="inline-flex min-w-0 items-center gap-2 text-xs text-foreground/75">
-                                        {memberCount > 0 && <AvatarStack names={members.map((member) => member.name)} max={4} size="xs" />}
+                                        {memberCount > 0 && <AvatarStack names={memberNames} max={4} size="xs" />}
                                         <span className="truncate">
                                             {memberCount > 0 ? `${memberCount}명 · ${hasLeader ? '인도자 배정 완료' : '팀원 준비 중'}` : '팀원 준비 중'}
                                         </span>

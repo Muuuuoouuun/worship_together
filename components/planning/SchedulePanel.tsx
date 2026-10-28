@@ -8,6 +8,7 @@ import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { Bell, CalendarDays, CalendarPlus, CalendarX2, Check, ChevronDown, ClipboardCopy, Copy, Download, ExternalLink, List, MessageSquare, Music, Plus, RotateCcw, Search, Send, Share2, Sparkles, Table, Users, X } from 'lucide-react';
 import { downloadIcsFile, getMyGoogleCalendarUrl, generateMyScheduleShareText } from '@/lib/calendarExport';
 import { cn } from '@/lib/utils';
+import { DUTY_STATE_LABEL, pickNextDuty, summarizeMyDuties } from '@/lib/planningView';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { STATUS, type StatusTone } from '@/components/ui/status';
 import { Avatar, TONE_BLOCK } from '@/components/conti/ui';
@@ -32,6 +33,7 @@ const outlineXs = cn(buttonVariants({ variant: 'outline', size: 'xs' }));
 const checkbox = 'size-4 shrink-0 rounded accent-foreground';
 const iconTile = 'flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-foreground';
 const attendanceLabels = { pending: '응답 대기', confirmed: '참석 확정', absent: '불참' };
+const DUTY_TONE: Record<ScheduleSlot['attendance'], StatusTone> = { confirmed: 'ok', pending: 'warn', absent: 'danger' };
 const alertLabels = { absence: '불참 알림', substitute: '대체 인원 요청', notice: '긴급 공지' };
 const ABSENCE_REASONS = ['개인 사정', '시험/학업', '출장/야근', '가족 행사', '건강/컨디션'];
 const NO_ALERTS: UrgentAlert[] = [];
@@ -1446,6 +1448,10 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
     const myPendingSlots = useMemo(() => {
         return myUpcomingSlots.filter(item => item.slot.attendance === 'pending');
     }, [myUpcomingSlots]);
+    const myDutySummary = useMemo(() => summarizeMyDuties(myUpcomingSlots), [myUpcomingSlots]);
+    // 불참으로 응답한 사역은 '다음 섬김'으로 고르지 않습니다 (확정 → 응답 대기 순).
+    const nextDuty = useMemo(() => pickNextDuty(myUpcomingSlots), [myUpcomingSlots]);
+    const laterDuties = useMemo(() => myUpcomingSlots.filter(item => item !== nextDuty), [myUpcomingSlots, nextDuty]);
 
     const handleCopyKakao = async (event: TeamSchedule) => {
         const shareText = generateKakaoShareText(event, names);
@@ -1533,7 +1539,6 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
     const linkSetlistSongs = searchParams.get('linkSetlistSongs');
     const linkSetlistId = searchParams.get('linkSetlistId');
     const linkTarget = state.events.find(e => !e.cancelled);
-    const nextDuty = myUpcomingSlots[0];
 
     const panelProps = (event: TeamSchedule) => ({
         ...actions,
@@ -1604,13 +1609,13 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                 <h3 className="text-[17px] font-semibold tracking-tight text-foreground">
                     나의 다가오는 섬김 <span className="font-normal tabular-nums text-muted-foreground">({myUpcomingSlots.length}건)</span>
                 </h3>
-                {myPendingSlots.length > 0 ? (
+                {myDutySummary.tone === 'pending' ? (
                     <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-secondary">
                         <span className="size-1.5 rounded-full bg-secondary" aria-hidden="true" />
-                        응답 필요 {myPendingSlots.length}건
+                        {myDutySummary.label}
                     </span>
-                ) : myUpcomingSlots.length > 0 ? (
-                    <span className="mt-1 shrink-0 text-xs font-semibold text-brand">모두 확정됨</span>
+                ) : myDutySummary.label ? (
+                    <span className={cn('mt-1 shrink-0 text-xs font-semibold', myDutySummary.tone === 'absent' ? STATUS.danger.text : 'text-brand')}>{myDutySummary.label}</span>
                 ) : null}
             </div>
 
@@ -1731,9 +1736,9 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                 </div>
             ) : nextDuty ? (
                 <div>
-                    {/* 확정된 가장 가까운 사역 */}
+                    {/* 불참이 아닌 가장 가까운 사역 (확정 우선) */}
                     <div className="border-t border-black/5 pt-4 dark:border-white/10">
-                        <p className={eyebrow}><span className={cn('font-semibold', STATUS.ok.text)}>확정됨</span> · {worshipRoles[nextDuty.slot.role]}</p>
+                        <p className={eyebrow}><span className={cn('font-semibold', STATUS[DUTY_TONE[nextDuty.slot.attendance]].text)}>{DUTY_STATE_LABEL[nextDuty.slot.attendance]}</span> · {worshipRoles[nextDuty.slot.role]}</p>
                         <p className="mt-0.5 text-[15px] font-medium text-foreground">{nextDuty.event.title}</p>
                         <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{planningDate(nextDuty.event.startsAt)}</p>
 
@@ -1795,7 +1800,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                     </div>
 
                     {/* 이후 다가오는 사역 */}
-                    {myUpcomingSlots.length > 1 && (
+                    {laterDuties.length > 0 && (
                         <div className="mt-3">
                             <button
                                 type="button"
@@ -1803,16 +1808,16 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                 onClick={() => setShowAllMyDuties(!showAllMyDuties)}
                                 className="inline-flex min-h-9 items-center gap-1 text-xs font-medium text-foreground"
                             >
-                                <span>{showAllMyDuties ? '이후 다가오는 사역 접기' : `이후 다가오는 사역 (${myUpcomingSlots.length - 1}건 더보기)`}</span>
+                                <span>{showAllMyDuties ? '이후 다가오는 사역 접기' : `이후 다가오는 사역 (${laterDuties.length}건 더보기)`}</span>
                                 <ChevronDown size={13} aria-hidden="true" className={cn('text-muted-foreground transition-transform', showAllMyDuties && 'rotate-180')} />
                             </button>
 
                             {showAllMyDuties && (
                                 <ul className="divide-y divide-black/5 dark:divide-white/10">
-                                    {myUpcomingSlots.slice(1).map(({ event, slot }) => (
+                                    {laterDuties.map(({ event, slot }) => (
                                         <li key={slot.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
                                             <div className="min-w-0">
-                                                <p className={eyebrow}>{worshipRoles[slot.role]}</p>
+                                                <p className={eyebrow}><span className={cn('font-semibold', STATUS[DUTY_TONE[slot.attendance]].text)}>{DUTY_STATE_LABEL[slot.attendance]}</span> · {worshipRoles[slot.role]}</p>
                                                 <p className="text-sm font-medium text-foreground">{event.title} <span className="font-normal tabular-nums text-muted-foreground">({planningDate(event.startsAt)})</span></p>
                                             </div>
                                             <div className="flex items-center gap-1.5">
@@ -1825,7 +1830,25 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                         </div>
                     )}
                 </div>
-            ) : null}
+            ) : (
+                <div className="border-t border-black/5 pt-4 dark:border-white/10">
+                    {/* 다가오는 배정이 모두 불참 응답인 경우 */}
+                    <p className="text-xs leading-5 text-muted-foreground">불참으로 응답한 사역입니다. 대체 인원은 인도자가 조율합니다. 일정이 바뀌면 인도자에게 알려 주세요.</p>
+                    <ul className="mt-1 divide-y divide-black/5 dark:divide-white/10">
+                        {myUpcomingSlots.map(({ event, slot }) => (
+                            <li key={slot.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
+                                <div className="min-w-0">
+                                    <p className={eyebrow}><span className={cn('font-semibold', STATUS[DUTY_TONE[slot.attendance]].text)}>{DUTY_STATE_LABEL[slot.attendance]}</span> · {worshipRoles[slot.role]}</p>
+                                    <p className="text-sm font-medium text-foreground">{event.title} <span className="font-normal tabular-nums text-muted-foreground">({planningDate(event.startsAt)})</span></p>
+                                </div>
+                                <Button type="button" variant="outline" size="icon-xs" title="이 일정의 전체 사역 동의 현황 확인" aria-label="이 일정의 전체 사역 동의 현황 확인" onClick={() => setRsvpModalEvent(event)}>
+                                    <Users className="text-muted-foreground" />
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             {/* 빈자리 충원 지원 유도 (팀에 빈자리/결석이 있을 때) */}
             {vacantHelpEvents.length > 0 && (
