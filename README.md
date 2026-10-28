@@ -71,6 +71,17 @@ npm run build
 
 자동 테스트의 OAuth 응답은 모의 통신을 사용합니다. 실제 제공자 로그인, 실제 카카오 발송, 실제 휴대폰·태블릿 확인은 앱 키 활성화 후 별도로 수행해야 합니다.
 
+### 브라우저 E2E
+
+`e2e/`에 Playwright 기반 점검이 있습니다(`npm test`·린트와 분리). 처음 한 번 `npx playwright install chromium`으로 브라우저를 설치하세요.
+
+```bash
+npm run test:e2e         # 로그인→팀→초대→일정→알림→참석→실시간→권한 (약 2분)
+npm run test:e2e:mobile  # Pixel 7 / iPhone 14 Pro Max 스모크
+```
+
+로그인 플로우는 **`next dev` 서버**(http localhost에서는 `next start`의 인증이 꺼져 동작하지 않음)가 필요하고, 팀을 만들고 지우므로 `TEAM_DATABASE_PATH`가 **버려도 되는 임시 DB**를 가리켜야 합니다. 서명된 테스트 세션 방식과 환경변수는 [e2e/README.md](e2e/README.md)를 보세요.
+
 ## 프레임워크와 배포
 
 Next.js App Router + React + TypeScript + Tailwind + Zustand를 사용합니다. 인증은 NextAuth v4, 팀 저장은 `better-sqlite3`, 악보 렌더링은 PDF.js, 앱이 그리는 오선 악보는 VexFlow입니다. PDF worker는 개발·빌드 전에 설치된 PDF.js 버전과 맞춰 준비됩니다.
