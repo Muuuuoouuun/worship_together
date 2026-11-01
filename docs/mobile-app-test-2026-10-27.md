@@ -45,15 +45,27 @@
 | --- | --- | --- | --- |
 | M1 | 수정 | 설치 배너를 `/session/*`에서 숨김 | iPhone 에뮬레이션에서 배너 0개, ‘예배 시작’ 클릭 가능 |
 | M2 | 수정 | 배너를 하단 내비·라이브 미니바 위로 배치(safe-area 포함), 닫기 44px, z-30 | 배너 하단이 미니바보다 10px, 내비보다 75px 위 |
-| M3 | 수정 | `lib/stageStatus.ts`로 분리해 offline/error를 먼저 판정, 오프라인 송신 문구 “오프라인 · 수신 미확인” | 오프라인 전환 시 필 “오프라인”, 테스트 4개 |
+| M3 | 재설계로 해소 | master가 예배 화면을 `components/live/*`로 교체하며 연결 상태(online·connecting·offline)와 끊김 토스트를 직접 다룸. 옛 `lib/stageStatus.ts`는 제거 | 2026-11-01 병합 |
 | M4 | 오탐 | 하단바 안쪽 div에 이미 `pb-safe`(34px) 적용. 바깥 고정 div만 0이었음 | CDP safe-area 34에서 안쪽 패딩 34px 확인 |
-| M5 | 수정 | 수신 역할·큐 대상·스탬프·악보 키·송폼 텍스트 입력 16px | 측정 16px |
+| M5 | 수정 | 스탬프·악보 키·송폼 텍스트 입력 16px (펄스 뷰 select는 새 예배 화면으로 대체) | 측정 16px, sheet-workflow.spec 통과 |
 | M6 | 수정 | sw.js v3: 방문 화면 30개 + `/_next/static` 보관, 미방문은 offline.html | 프로덕션 빌드에서 무대 화면 오프라인 재열기 성공(‘예배 시작’ 렌더, 오류 0) |
-| M7 | 수정 | 이전/다음 곡 44×44, 화면 꺼짐 방지·전체화면·잠금 44×48 | 측정값 |
+| M7 | 재설계로 해소 | 옛 무대 화면 삭제. 새 예배 화면은 live-stage.spec이 320px·가로모드를 검사 | 2026-11-01 병합 |
 | M8 | 수정 | 찍기 56×40, 악기 40px, 표준 송폼 적용 40px, 송폼 닫기 40×40, 체크박스 20px | 가로 넘침 없음 |
-| M9 | 미수정 | 콘티 탭·필터·링크 폭, 일정 칩 높이, 미니바 닫기 — 디자인 토큰 수준 정리 필요 | — |
+| M9 | 수정 (2026-11-01) | `@utility hit-44`(모자란 축만 44px까지 넓히는 투명 영역)를 `max-lg:`에만 적용. 콘티 탭·필터·링크, 일정 칩·달력 이동, 미니바, PageTabs | 4개 폭에서 324개 컨트롤 중 43px 미만 0개, surfaces.spec 통과 |
 | M10 | 수정 | `icon-maskable-512.png`(안전 영역 80%), `apple-mobile-web-app-capable` 메타 | HTML에 두 메타 출력 확인 |
 | M11 | 수정 | `gradlew` 실행 권한 | `./gradlew assembleDebug` 성공 |
+
+## 3-2. Android 셸 · PWA 후속 (2026-11-01)
+
+| 항목 | 상태 | 내용 |
+| --- | --- | --- |
+| 뒤로가기 | 구현 | `@capacitor/app` + `components/app/NativeBridge`: 열린 창 닫기 → 이전 화면 → 시작 화면에서 두 번 눌러 종료 |
+| 앱 링크 | 구현 | autoVerify intent-filter (`/invite/` · `/session/` · `/live/` · `/dashboard`), 호스트는 `APP_LINK_HOST`. 같은 출처 · 허용 경로만 앱 안에서 엶. 절차는 `docs/android-app-links.md` |
+| 혼합 콘텐츠 | 구현 | http 서버(에뮬레이터)일 때만 cleartext · allowMixedContent |
+| OAuth (WebView) | 설계만 | Custom Tabs + 일회용 코드 교환 (`docs/android-app-links.md`) |
+| 셸 푸시 (FCM) | 미구현 | 웹 푸시는 동작, Android 셸은 앱이 닫히면 알림 없음 |
+| 오프라인 보관본 개인정보 | 구현 | 로그아웃 · 세션 만료 · 계정 전환 때 `-pages` 캐시 삭제, 오류 · 이동 화면은 보관하지 않음 |
+| 실기기 확인 | 미확인 | 이 환경에 KVM이 없어 에뮬레이터 불가. APK 빌드 · 매니페스트 · 플러그인 등록과 가짜 브리지 Playwright 16/16만 확인 |
 
 ## 4. 통과한 항목
 

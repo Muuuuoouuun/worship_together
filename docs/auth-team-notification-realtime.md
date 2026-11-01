@@ -260,3 +260,22 @@ sequenceDiagram
 1. Supabase를 곡·콘티 저장에 계속 쓸지, SQLite로 모을지. 리얼타임·인가는 어느 쪽이든 위 설계(Next 서버 중계)로 갑니다.
 2. 무대 모드에서 마스터를 누가 잡는지: 그 예배의 인도자 자리 담당을 기본값으로, 관리자가 넘겨받을 수 있게 하는 안을 권합니다.
 3. 알림 보관 한도를 사용자별 몇 건으로 할지(제안: 300, 읽은 것부터 정리).
+
+## 8. 진행 현황 (2026-11-01, master 병합 이후)
+
+master가 계정 · 팀 권한 서버, SSE 팀 스트림, 실시간 예배 세션 서버(`/api/live`), Web Push, 팀 공지를 넣으면서 5 · 6장의 상당 부분이 다른 형태로 구현됐습니다. 남은 항목과 상태는 아래와 같습니다.
+
+| 항목 | 상태 | 근거 |
+| --- | --- | --- |
+| P1 세션 인가 | 해소 | `/api/live/[sessionId]`가 로그인 · 팀원 · `sessionRun` 정책 확인. 옛 `sessionActions.ts` 삭제, `libraryActions` · `getSessionDetail`에 인증 (`lib/legacyAccess.ts`), Supabase RLS는 `supabase/migrations/20261101_rls.sql` |
+| P2 기기 간 리얼타임 | 해소(재설계) | SQLite `team_events` + SSE (`/api/teams/[teamId]/stream`, `/api/me/stream`). 단일 서버 인스턴스 전제 |
+| P3 폴링 · 블롭 파싱 | 미해결 | 배지는 SSE 신호로 즉시 갱신되지만 15초 폴링과 팀별 블롭 전체 파싱은 남음 |
+| P4 읽음 정보 노출 | 해소 | `planningForViewer`가 본인 수신 · 읽음만 내보냄 |
+| P5 SQLite 잠금 | 해소 | `writeTransaction`(BEGIN IMMEDIATE + 1회 재시도), busy_timeout 1500ms, 소식은 커밋 뒤. 2프로세스 부하 실패 0 |
+| P6 readAll 팀 단위 · 500 한도 | 미해결 | 알림 테이블 분리와 함께 |
+| P7 죽은 리스너 | 해소 | 옛 `useRealtimeSession` 삭제 |
+| 5.3 시작 신호 startAt | 미해결 | 기기 간 박 위상은 각자 로컬 시계 |
+
+검증: `npm test` 311개, Playwright 스위트(`npm run test:e2e`) 병합본 39 통과 + `planning-notices.spec.ts` 8 통과.
+
+다음 작업 후보 (우선순위): ① Android 셸 OAuth (Custom Tabs + 일회용 코드), ② 셸 푸시(FCM), ③ 알림 테이블 분리와 15초 폴링 제거(P3 · P6), ④ 시작 신호 `startAt`과 서버 시각 오프셋, ⑤ `Button` 작은 크기(`xs` · `sm` · `icon-sm`)의 모바일 터치 영역.
