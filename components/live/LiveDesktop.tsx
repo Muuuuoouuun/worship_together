@@ -102,7 +102,7 @@ export default function LiveDesktop({
                 <div className="flex min-w-0 items-center gap-3">
                     <h2 className="min-w-0 truncate text-[22px] font-semibold tracking-tight">{song.title}</h2>
                     <span className="inline-flex h-7 shrink-0 items-center border-l border-border pl-3 text-sm font-semibold">Key {keyText(song.key)}</span>
-                    <TempoBeat bpm={model.bpm} meter={song.meter} desktop />
+                    <TempoBeat bpm={model.bpm} meter={song.meter} desktop resetKey={pos.beatKey} showBlink={!pulse} />
                 </div>
                 <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
                     {pos.songIndex + 1} / {model.songs.length}곡

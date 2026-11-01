@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
-import { FileText, Gauge, Lock, Maximize, Minus, Plus, SunMedium, type LucideIcon } from 'lucide-react';
+import { FileText, Gauge, Lock, Maximize, Minus, Plus, SunMedium, type LucideIcon, Activity, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useBeatEffects } from './beatEffects';
 import { buttonVariants } from '@/components/ui/button';
 import { Avatar, TONE_BLOCK } from '@/components/conti/ui';
 import { worshipRoles } from '@/types/team';
@@ -94,6 +95,7 @@ export function MoreBody({
 }) {
     const online = model.members.filter((member) => member.online).length;
     const who = controllerText(model.controllerNames);
+    const [effects, setEffect] = useBeatEffects();
     return (
         <div className="space-y-7">
             <section aria-label="내 역할">
@@ -116,6 +118,8 @@ export function MoreBody({
                 <ul className="mt-1 divide-y divide-border">
                     {device.wakeSupported ? <ToggleRow icon={SunMedium} label="화면 꺼짐 방지" hint="예배 중 화면이 꺼지지 않아요" on={device.awake} onToggle={device.toggleAwake} /> : null}
                     {device.fullscreenSupported ? <ToggleRow icon={Maximize} label="전체화면" hint="주소창과 상태 막대를 숨겨요" on={device.fullscreen} onToggle={device.toggleFullscreen} /> : null}
+                    <ToggleRow icon={Activity} label="펄스 효과" hint="박마다 숫자가 살짝 커지고 첫 박에 링이 퍼져요" on={effects.pulse} onToggle={() => setEffect('pulse', !effects.pulse)} />
+                    <ToggleRow icon={Zap} label="깜빡임" hint="박마다 빛나요 · 지금 · 악보 화면의 BPM 옆 점도" on={effects.blink} onToggle={() => setEffect('blink', !effects.blink)} />
                     <li className="flex items-center gap-3 py-3">
                         <RowIcon icon={Lock} />
                         <div className="min-w-0 flex-1">

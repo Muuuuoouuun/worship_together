@@ -1,6 +1,7 @@
-// v3: 방문한 화면과 빌드 코드 조각을 보관해, 오프라인에서도 이미 열어 본 화면(악보·무대)을 다시 열 수 있게 합니다.
+// v4: W 로고 아이콘 · 오프라인 화면을 새로 배포하고(예전 캐시를 지움), 방문한 화면과 빌드 코드 조각을 보관해
+//     오프라인에서도 이미 열어 본 화면(악보 · 무대)을 다시 열 수 있게 합니다.
 //     네트워크가 되면 항상 서버 응답을 먼저 쓰고, 보관본은 실패했을 때만 씁니다.
-const CACHE_VERSION = "worship-together-v3";
+const CACHE_VERSION = "worship-together-v4";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGE_CACHE = `${CACHE_VERSION}-pages`;
 const BUILD_CACHE = `${CACHE_VERSION}-build`;
@@ -11,6 +12,7 @@ const PRECACHE_URLS = [
   OFFLINE_URL,
   "/icons/icon-192.png",
   "/icons/icon-512.png",
+  "/icons/icon-maskable-512.png",
   "/icons/apple-touch-icon.png",
 ];
 

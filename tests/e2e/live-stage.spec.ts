@@ -141,3 +141,44 @@ test('small phone, landscape, and compact desktop keep pulse and controls on scr
         await accessible(page);
     }
 });
+
+test('beat effects: pulse and blink switch on and off, persist on this device, and match the more sheet', async ({ page }, info) => {
+    test.skip(info.project.name === 'tablet', 'Same component as phone');
+    await openPulse(page, 'control=1&bar=0');
+    const effects = page.getByRole('group', { name: '박자 효과' });
+    // Reduced motion (this config) starts quiet: no transform, no flash, no ripple.
+    await expect(effects.getByRole('button', { name: /펄스 효과/ })).toHaveAttribute('aria-pressed', 'false');
+    await expect(effects.getByRole('button', { name: /깜빡임/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(await page.locator('[data-pulse-count]').evaluate(e => getComputedStyle(e).transform)).toBe('none');
+
+    await effects.getByRole('button', { name: /펄스 효과/ }).click();
+    await expect.poll(() => page.locator('[data-pulse-count]').evaluate(e => e.getAnimations().length), { intervals: [50] }).toBeGreaterThan(0);
+    await expect.poll(() => page.locator('[data-beat-ripple]').count(), { intervals: [50] }).toBeGreaterThan(0);
+    await effects.getByRole('button', { name: /깜빡임/ }).click();
+    await expect.poll(() => page.locator('[data-beat-flash]').count(), { intervals: [40] }).toBeGreaterThan(0);
+    // One-shot effects only — nothing loops forever.
+    expect(await page.locator('main').evaluate(e => e.getAnimations({ subtree: true }).filter(a => a.effect?.getComputedTiming().iterations === Infinity).length)).toBe(0);
+
+    await page.reload();
+    await page.getByRole('button', { name: '펄스', exact: true }).click();
+    await expect(page.getByRole('group', { name: '박자 효과' }).getByRole('button', { name: /깜빡임/ })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: /더보기/ }).first().click();
+    await expect(page.getByRole('switch', { name: '펄스 효과' })).toHaveAttribute('aria-checked', 'true');
+    await page.getByRole('switch', { name: '펄스 효과' }).click();
+    await page.getByRole('switch', { name: '깜빡임' }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('group', { name: '박자 효과' }).getByRole('button', { name: /펄스 효과/ })).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('[data-beat-flash], [data-beat-ripple]')).toHaveCount(0);
+    await accessible(page);
+});
+
+test('blink lights a beat dot next to the BPM outside the pulse view', async ({ page }, info) => {
+    test.skip(info.project.name !== 'phone', 'Strip dot runs once');
+    await openPulse(page, 'control=1&bar=0');
+    await page.getByRole('group', { name: '박자 효과' }).getByRole('button', { name: /깜빡임/ }).click();
+    await expect(page.locator('[data-blink-dot]')).toHaveCount(0);
+    await page.getByRole('button', { name: '지금', exact: true }).click();
+    await expect(page.locator('[data-blink-dot]')).toHaveCount(1);
+    const seen = new Set<string>();
+    await expect.poll(async () => { seen.add((await page.locator('[data-blink-dot]').getAttribute('data-blink-dot'))!); return seen.size; }, { intervals: [60], timeout: 6000 }).toBe(2);
+});

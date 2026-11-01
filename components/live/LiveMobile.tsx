@@ -150,7 +150,7 @@ export default function LiveMobile({
                                     model={model}
                                     pos={pos}
                                     onOrder={() => openSheet('order')}
-                                    beat={<TempoBeat bpm={model.bpm} meter={song.meter} />}
+                                    beat={<TempoBeat bpm={model.bpm} meter={song.meter} resetKey={pos.beatKey} showBlink={!pulse} />}
                                 />
                             </div>
 

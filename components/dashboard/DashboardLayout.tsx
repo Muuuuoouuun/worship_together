@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import LogoMark from '@/components/brand/LogoMark';
 import AppToaster from '@/components/app/AppToaster';
 import TeamConnection, { type TeamConnectionInput } from '@/components/app/TeamConnection';
 import TeamSwitcher from '@/components/app/TeamSwitcher';
@@ -17,9 +18,7 @@ import SidebarNav from './SidebarNav';
 function Brand({ compact = false }: { compact?: boolean }) {
     return (
         <Link href="/dashboard" className="inline-flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl transition-opacity hover:opacity-80">
-            <span aria-hidden="true" className={compact ? 'flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground' : 'flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-base font-bold text-primary-foreground'}>
-                W
-            </span>
+            <LogoMark bold={compact} className={compact ? 'size-7' : 'size-9'} />
             <span className="min-w-0">
                 <span className={compact ? 'block truncate text-[15px] font-bold tracking-tight text-foreground' : 'block text-[17px] font-bold tracking-tight text-foreground'}>Worship Together</span>
                 {!compact && <span className="block text-[11px] text-muted-foreground">함께 준비하는 예배</span>}
@@ -28,10 +27,10 @@ function Brand({ compact = false }: { compact?: boolean }) {
     );
 }
 
-function LogoMark() {
+function HomeMark() {
     return (
         <Link href="/dashboard" aria-label="Worship Together 홈" className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl transition-opacity hover:opacity-80">
-            <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">W</span>
+            <LogoMark bold className="size-7" />
         </Link>
     );
 }
@@ -94,7 +93,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                     <div className="safe-area-x flex h-14 items-center justify-between gap-2">
                         {connection ? (
                             <div className="-ml-2 flex min-w-0 items-center">
-                                <LogoMark />
+                                <HomeMark />
                                 {switcher('compact')}
                             </div>
                         ) : <Brand compact />}

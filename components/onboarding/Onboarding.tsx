@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, KeyRound, Plus, UsersRound } from 'lucide-react'
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
 import Notice from '@/components/ui/Notice';
+import LogoMark from '@/components/brand/LogoMark';
 import AcceptInvitation from '@/components/team/AcceptInvitation';
 import { completeOnboarding, createOnlineTeam, previewInvitation, updateProfileName } from '@/actions/teamActions';
 import type { InvitationPreview } from '@/types/team';
@@ -87,7 +88,7 @@ export default function Onboarding({ name: initialName, hasTeams, startAtTeam, i
                         >
                             <ArrowLeft className="size-5" aria-hidden="true" />
                         </button>
-                    ) : <span className="text-xs font-medium text-muted-foreground">Worship Together</span>}
+                    ) : <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-foreground"><LogoMark bold className="size-7" />Worship Together</span>}
                     {hasTeams ? <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground">닫기</Link> : <StepDots step={step} />}
                 </div>
 
