@@ -15,9 +15,7 @@
     "mobile:open:android": "cap open android",
     "mobile:run:android": "cap run android",
     "mobile:run:emulator": "node scripts/mobile-emulator.mjs run",
-    "test:e2e": "node scripts/prepare-pdf-worker.mjs && playwright test",
-    "test:e2e:flow": "node e2e/login-flow.cjs",
-    "test:e2e:mobile": "node e2e/mobile-smoke.cjs"
+    "test:e2e": "node scripts/prepare-pdf-worker.mjs && playwright test"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.1",

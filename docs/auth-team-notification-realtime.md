@@ -117,6 +117,8 @@ OAuth 키 없이 `next dev` + 격리된 SQLite + 직접 서명한 JWT 쿠키 두
 | 읽음 후 배지 소거 | 6ms |
 | 큐 전달 (탭 간) | 3 ~ 5ms, ACK 표시 208ms |
 
+이 중 불참 → 리더 긴급 알림, "불참 응답함" 표시, 비소속 팀 주소 안내와 자료 비노출, 팀원이 아닌 사람의 API·서버 동작 거부는 이제 저장소의 Playwright 스위트 `tests/e2e/planning-notices.spec.ts`(`npm run test:e2e`)가 매번 확인합니다. 위 지연 측정값은 15초 주기 확인만 있던 때의 값이고, 팀 소식 실시간 전달 뒤로는 이 스펙이 열어 둔 인도자 화면의 배지가 10초 안에 바뀌는지를 확인합니다.
+
 E2E에서 추가로 발견한 결함 (**2026-10-28 모두 수정**: `lib/planningView.ts`의 `pickNextDuty`·`summarizeMyDuties`, `PlanningWorkspace`의 비소속 팀 안내·주소 교체, 대시보드 홈의 서버 팀 명단 표시):
 
 - **[확인] 불참한 일정이 "나의 다가오는 섬김"에 "확정됨"으로 남습니다.** `components/planning/SchedulePanel.tsx`의 `nextDuty`가 참석 상태를 거르지 않습니다. 같은 화면의 일정 행과 긴급 알림은 불참으로 맞게 표시됩니다.

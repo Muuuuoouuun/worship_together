@@ -96,21 +96,11 @@ npm run test:e2e
 - 시스템 Chromium 사용: `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e`
 - WebKit 추가: `npx playwright install --with-deps webkit` 후 `E2E_WEBKIT=1 npm run test:e2e`
 - 병렬로 별도 실행할 때는 서로 다른 `E2E_OUTPUT_DIR`을 지정합니다. 실패 스크린샷·추적 파일은 기본적으로 OS 임시 디렉터리에 남습니다.
+- `tests/e2e/planning-notices.spec.ts`(데스크톱·휴대폰만): 인도자·팀원·다른 팀 인도자 세 브라우저로, 팀원이 배정된 역할에 불참하면 인도자의 알림 배지·내 알림에 "긴급 · 결석 · 대체 인원이 필요해요"가 15초 주기 확인 없이 뜨는지, 불참한 팀원의 "나의 다가오는 섬김"이 "불참 응답함"이고 "확정됨"이 아닌지, 소속되지 않은 팀의 `?team=` 주소가 안내와 함께 내 팀으로 바뀌고 그 팀 일정이 화면·HTML에 없는지, 팀원이 아닌 사람이 그 팀의 API와 일정 서버 동작을 거부당하는지 확인합니다.
 
 자동 시나리오는 실제 팀원을 모집한 사용성 조사와 구분합니다. 운영 PWA 오프라인 복구는 `npm run build`와 `npm run start -- --port 4001`로 따로 확인하세요.
 
 자동 테스트의 OAuth 응답은 모의 통신을 사용합니다. 실제 제공자 로그인, 실제 카카오 발송, 실제 휴대폰·태블릿 확인은 앱 키 활성화 후 별도로 수행해야 합니다.
-
-### 보조 E2E 스크립트 (`e2e/`)
-
-위 `npm run test:e2e`(Playwright 스위트)와 별개로 `e2e/`에 서명된 테스트 세션을 쓰는 보조 점검이 있습니다(`npm test`·린트와 분리). 처음 한 번 `npx playwright install chromium`으로 브라우저를 설치하세요.
-
-```bash
-npm run test:e2e:flow    # 로그인→팀→초대→일정→알림→참석→권한 (약 1~2분)
-npm run test:e2e:mobile  # Pixel 7 / iPhone 14 Pro Max 스모크
-```
-
-로그인 플로우는 **`next dev` 서버**(http localhost에서는 `next start`의 인증이 꺼져 동작하지 않음)가 필요하고, 팀을 만들고 지우므로 `TEAM_DATABASE_PATH`가 **버려도 되는 임시 DB**를 가리켜야 합니다. 서명된 테스트 세션 방식과 환경변수는 [e2e/README.md](e2e/README.md)를 보세요.
 
 ## 프레임워크와 배포
 
