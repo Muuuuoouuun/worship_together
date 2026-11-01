@@ -20,3 +20,28 @@ export async function clearOfflinePageCache(storage: Pick<CacheStorage, 'keys' |
         return 0;
     }
 }
+
+/** 화면 보관본을 마지막으로 만든 사람 (localStorage). 로그인하지 않은 상태는 'anon'. */
+export const OFFLINE_OWNER_KEY = 'worship-together:offline-owner';
+const ANONYMOUS = 'anon';
+
+type OwnerStore = Pick<Storage, 'getItem' | 'setItem'>;
+
+/**
+ * 로그아웃 버튼을 거치지 않고 사람이 바뀐 경우(세션 만료 · 쿠키 삭제 · 다른 계정으로 로그인)에도
+ * 앞사람의 화면 보관본이 오프라인에서 보이지 않게, 지금 사람과 마지막 보관 주인이 다르면 보관본을 지웁니다.
+ * 주인을 모르면(처음 · 이 기능 이전 보관본) 안전하게 지웁니다. 지웠으면 true.
+ */
+export async function syncOfflineCacheOwner(
+    currentUserId: string | null,
+    owners: OwnerStore | undefined = typeof localStorage === 'undefined' ? undefined : localStorage,
+    storage: Pick<CacheStorage, 'keys' | 'delete'> | undefined = globalThis.caches,
+): Promise<boolean> {
+    const current = currentUserId || ANONYMOUS;
+    let previous: string | null = null;
+    try { previous = owners?.getItem(OFFLINE_OWNER_KEY) ?? null; } catch { /* 저장소를 못 쓰면 모르는 주인으로 */ }
+    const changed = previous !== current;
+    if (changed) await clearOfflinePageCache(storage);
+    try { owners?.setItem(OFFLINE_OWNER_KEY, current); } catch { /* 다음 방문 때 다시 확인 */ }
+    return changed;
+}
