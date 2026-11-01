@@ -3,6 +3,7 @@ import { can } from '../permissions';
 import type { TeamIdentity } from '../../types/team';
 import type { TeamRepository } from './teamRepository';
 import type { TeamEvents } from './teamEvents';
+import { writeTransaction } from './sqliteRetry';
 
 /*
  * 팀 공유 자료. 온라인 팀의 콘티 · 곡 보관함 · 송폼 · 곡 링크는 서버가 원본이고, 각 기기의 브라우저 저장소는 사본입니다.
@@ -115,24 +116,31 @@ export class TeamDocs {
         if (!kind) return { ok: false, conflict: null, error: '이 팀의 자료가 아닙니다.' };
         if (typeof json !== 'string' || json.length > (kind === 'sheet' ? MAX_SHEET_BYTES : MAX_DOC_BYTES)) return { ok: false, conflict: null, error: kind === 'sheet' ? '악보가 너무 큽니다. 페이지 수를 줄여 주세요.' : '자료가 너무 큽니다.' };
         try { JSON.parse(json); } catch { return { ok: false, conflict: null, error: '자료 형식이 올바르지 않습니다.' }; }
-        return this.db.transaction((): PutResult => {
+        // 저장은 BEGIN IMMEDIATE 트랜잭션 하나로 하고, 소식 · 알림(afterSave)은 커밋한 뒤에 보냅니다 —
+        // 되돌려진 저장의 소식이 다른 화면에 가지 않고, 잠금 충돌로 다시 시도해도 소식이 두 번 나가지 않습니다.
+        const outcome = writeTransaction(this.db, (): { result: PutResult; saved?: { version: number; before: string | null } } => {
             const current = this.db.prepare('SELECT doc_key AS key, kind, json, version, updated_at AS updatedAt, updated_by_name AS updatedByName FROM online_docs WHERE team_id = ? AND doc_key = ?').get(teamId, key) as TeamDoc | undefined;
-            if ((current?.version ?? 0) !== (Number(baseVersion) || 0)) return { ok: false, conflict: current ?? null };
-            if (current?.json === json) return { ok: true, version: current.version };
+            if ((current?.version ?? 0) !== (Number(baseVersion) || 0)) return { result: { ok: false, conflict: current ?? null } };
+            if (current?.json === json) return { result: { ok: true, version: current.version } };
             const policy = this.teams.policy(teamId);
             const allowed = can(member, policy, 'contiEdit') || (kind === 'setlist-details' && onlyAddsComments(current?.json ?? null, json));
-            if (!allowed) return { ok: false, conflict: current ?? null, error: '콘티를 편집할 권한이 없습니다. 코멘트는 남길 수 있어요.', denied: true };
+            if (!allowed) return { result: { ok: false, conflict: current ?? null, error: '콘티를 편집할 권한이 없습니다. 코멘트는 남길 수 있어요.', denied: true } };
             const sheets = kind === 'sheet';
             const total = (this.db.prepare(`SELECT coalesce(sum(length(json)), 0) AS n FROM online_docs WHERE team_id = ? AND doc_key <> ? AND kind ${sheets ? '=' : '<>'} 'sheet'`).get(teamId, key) as { n: number }).n;
-            if (total + json.length > (sheets ? MAX_TEAM_SHEET_BYTES : MAX_TEAM_BYTES)) return { ok: false, conflict: null, error: '팀 저장 공간이 가득 찼습니다.' };
+            if (total + json.length > (sheets ? MAX_TEAM_SHEET_BYTES : MAX_TEAM_BYTES)) return { result: { ok: false, conflict: null, error: '팀 저장 공간이 가득 찼습니다.' } };
             const version = (this.db.prepare('SELECT coalesce(max(version), 0) + 1 AS v FROM online_docs WHERE team_id = ?').get(teamId) as { v: number }).v;
             const now = new Date().toISOString();
             this.db.prepare(`INSERT INTO online_docs(team_id, doc_key, kind, json, version, updated_at, updated_by, updated_by_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(team_id, doc_key) DO UPDATE SET json = excluded.json, version = excluded.version, updated_at = excluded.updated_at, updated_by = excluded.updated_by, updated_by_name = excluded.updated_by_name`)
                 .run(teamId, key, kind, json, version, now, user.id, member.name);
-            this.events.publish(teamId, 'docs.changed', { key, kind, version, by: user.id, byName: member.name });
-            try { this.afterSave?.({ teamId, user: { id: user.id, name: member.name }, key, kind, before: current?.json ?? null, after: json }); } catch (error) { console.error('[docs] afterSave', error); }
-            return { ok: true, version };
-        })();
+            return { result: { ok: true, version }, saved: { version, before: current?.json ?? null } };
+        });
+        if (outcome.saved) {
+            const { version, before } = outcome.saved;
+            // 저장은 이미 끝났으므로 소식을 못 보내도 저장 실패로 알리지 않습니다 (다른 기기는 다음 동기화 때 받아 갑니다).
+            try { this.events.publish(teamId, 'docs.changed', { key, kind, version, by: user.id, byName: member.name }); } catch (error) { console.error('[docs] event', error); }
+            try { this.afterSave?.({ teamId, user: { id: user.id, name: member.name }, key, kind, before, after: json }); } catch (error) { console.error('[docs] afterSave', error); }
+        }
+        return outcome.result;
     }
 }

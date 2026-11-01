@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { writeTransaction } from './sqliteRetry';
 
 /*
  * 앱을 닫아도 오는 알림 (Web Push).
@@ -92,18 +93,18 @@ export class PushStore {
             throw new Error('알림 구독 정보를 확인해주세요.');
         }
         const device = typeof deviceId === 'string' && /^[\w-]{8,64}$/.test(deviceId) ? deviceId : endpoint.slice(-64);
-        this.db.transaction(() => {
+        writeTransaction(this.db, () => {
             this.db.prepare(`INSERT INTO push_subscriptions(endpoint, user_id, device_id, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, device_id = excluded.device_id, p256dh = excluded.p256dh, auth = excluded.auth`)
                 .run(endpoint, userId, device, keys.p256dh, keys.auth, new Date().toISOString());
             // 한 사람의 오래된 기기 구독은 최근 MAX_PER_USER 개만 남깁니다.
             this.db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint NOT IN (SELECT endpoint FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?)').run(userId, userId, MAX_PER_USER);
-        })();
+        });
     }
 
     unsubscribe(userId: string, endpoint: unknown): void {
         if (typeof endpoint !== 'string') return;
-        this.db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?').run(userId, endpoint);
+        writeTransaction(this.db, () => this.db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?').run(userId, endpoint));
     }
 
     subscriptionCount(userId: string): number {
@@ -142,8 +143,10 @@ export class PushStore {
                 sent += 1;
             } catch (error) {
                 const status = (error as { statusCode?: number }).statusCode;
-                if (status === 404 || status === 410) this.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(row.endpoint);
-                else console.error('[push] send', status ?? error);
+                if (status === 404 || status === 410) {
+                    // 보내기는 화면 요청과 따로 돕니다 — 지우다 실패해도(잠금 충돌 등) 던지지 않고 다음 보내기 때 다시 지웁니다.
+                    try { writeTransaction(this.db, () => this.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(row.endpoint)); } catch (cause) { console.error('[push] cleanup', cause); }
+                } else console.error('[push] send', status ?? error);
             }
         }));
         return sent;

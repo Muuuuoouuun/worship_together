@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import LibraryTeamWorkspace from '@/components/library/LibraryTeamWorkspace';
 import { getViewer } from '@/lib/server/viewer';
 import { can } from '@/lib/permissions';
+import { LIBRARY_DENIAL_MESSAGES } from '@/lib/legacyAccess';
 
 export const metadata: Metadata = {
     title: '곡 보관함',
@@ -38,6 +39,8 @@ const errorMessages: Record<string, string> = {
     'invalid-worship-date': '예배 일시 형식이 올바르지 않습니다.',
     'create-setlist': '콘티를 저장하지 못했습니다. Supabase 권한을 확인해주세요.',
     'duplicate-setlist': '콘티를 복제하지 못했습니다. Supabase 권한을 확인해주세요.',
+    // 서버 액션 권한 확인(actions/libraryActions → lib/legacyAccess)에서 거부된 경우
+    ...LIBRARY_DENIAL_MESSAGES,
 };
 
 export default async function SongArchivePage({ searchParams }: LibraryPageProps) {

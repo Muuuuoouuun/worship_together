@@ -1,4 +1,5 @@
-import { DEMO_SESSION_ID, DEMO_TEAM_ID } from '@/lib/constants';
+import { DEMO_SESSION_ID, DEMO_TEAM_ID, isPrototypeSessionId } from '@/lib/constants';
+import { canReadLegacySession, type LegacySessionAccess } from '@/lib/legacyAccess';
 import { supabase } from '@/lib/supabase';
 import {
     getDefaultSessionFeedbackPresets,
@@ -262,7 +263,12 @@ export async function getSetlistsByTeam(teamId: string, { withSongs = true }: { 
     return setlistsWithSongs;
 }
 
-export async function getSessionDetail(sessionId: string): Promise<SessionDetail | null> {
+/**
+ * 예배 화면(/session/[id])이 보여 줄 세션.
+ * 데모 세션은 누구나(환경 변수 없이도) 볼 수 있고, Supabase 세션은 로그인한 그 팀의 팀원만 봅니다 — 아니면 null(찾을 수 없음).
+ * access 는 서버 페이지가 lib/server/legacyAccess 의 legacySessionAccess() 로 만들어 넘깁니다. 없으면 데모 세션만 돌려줍니다.
+ */
+export async function getSessionDetail(sessionId: string, access?: LegacySessionAccess | null): Promise<SessionDetail | null> {
     if (sessionId === DEMO_SESSION_ID) {
         const currentState = normalizeSessionState(DEMO_SESSION_ROW.current_state, DEMO_SONGS);
 
@@ -275,7 +281,13 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
         };
     }
 
-    if (!supabase) {
+    // 프로토타입 세션은 이 기기에서만 도는 세션이라 서버에 읽을 기록이 없습니다.
+    if (!supabase || isPrototypeSessionId(sessionId)) {
+        return null;
+    }
+
+    // 로그인하지 않았으면 세션 id 만으로 다른 팀의 예배를 읽지 못하게, Supabase 를 묻기 전에 막습니다.
+    if (!access?.user) {
         return null;
     }
 
@@ -287,6 +299,11 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
 
     if (sessionError || !session) {
         console.error('Failed to fetch session detail:', sessionError);
+        return null;
+    }
+
+    const teamId = typeof session.team_id === 'string' ? session.team_id : null;
+    if (!canReadLegacySession({ sessionId, user: access.user, teamId, membership: teamId ? access.membershipOf(teamId) : null })) {
         return null;
     }
 

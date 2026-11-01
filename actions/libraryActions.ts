@@ -2,12 +2,25 @@
 
 import { DEMO_TEAM_ID } from '@/lib/constants';
 import { normalizeSetlistSongOrder } from '@/lib/libraryPrototypeStorage';
-import { getSupabaseClient, supabase as configuredSupabase } from '@/lib/supabase';
+import { libraryMutationAccess } from '@/lib/server/legacyAccess';
+import { getSupabaseClient } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+/*
+ * 예전 Supabase 곡 보관함 경로 (NEXT_PUBLIC_SUPABASE_URL 을 넣었을 때만 동작). 온라인 팀의 곡 · 콘티는 lib/server/teamDocs 가 원본입니다.
+ * 모든 액션은 Supabase 에 쓰기 전에 로그인 · 팀원 · '콘티 · 곡 편집' 권한을 확인합니다(lib/legacyAccess).
+ * 거부하면 다른 오류와 같이 /dashboard/songs/library?error=<키> 로 돌려보냅니다 —
+ * backend-unavailable(연결 없음) · sign-in-required('로그인 후 다시 시도해주세요.') · library-forbidden('이 팀의 곡을 바꿀 권한이 없어요.').
+ */
+async function requireLibraryAccess(teamId: string) {
+    const access = await libraryMutationAccess(teamId);
+    if (!access.ok) redirect(`/dashboard/songs/library?error=${access.reason}`);
+}
+
 export async function createSong(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
+    await requireLibraryAccess(teamId);
     const supabase = getSupabaseClient();
     const title = getString(formData, 'title');
     const artist = getNullableString(formData, 'artist');
@@ -16,7 +29,6 @@ export async function createSong(formData: FormData) {
     const dataXml = getNullableString(formData, 'dataXml');
     const bpmValue = getNullableString(formData, 'bpm');
     const parsedBpm = bpmValue ? Number(bpmValue) : null;
-    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
     if (!title) {
         redirect('/dashboard/songs/library?error=missing-song-title');
@@ -49,9 +61,9 @@ export async function createSong(formData: FormData) {
 }
 
 export async function createSetlist(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
-    const supabase = getSupabaseClient();
     const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
+    await requireLibraryAccess(teamId);
+    const supabase = getSupabaseClient();
     const title = getString(formData, 'title');
     const theme = getNullableString(formData, 'theme');
     const worshipDateInput = getString(formData, 'worshipDate');
@@ -106,10 +118,10 @@ export async function createSetlist(formData: FormData) {
 }
 
 export async function duplicateSetlistFromTemplate(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
+    await requireLibraryAccess(teamId);
     const supabase = getSupabaseClient();
     const setlistId = getString(formData, 'setlistId');
-    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
     if (!setlistId) {
         redirect('/dashboard/songs/library?error=missing-setlist-id');
@@ -154,10 +166,10 @@ export async function duplicateSetlistFromTemplate(formData: FormData) {
 }
 
 export async function deleteSong(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
+    await requireLibraryAccess(teamId);
     const supabase = getSupabaseClient();
     const songId = getString(formData, 'songId');
-    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
     if (!songId) redirect('/dashboard/songs/library?error=missing-song-id');
 
@@ -178,10 +190,10 @@ export async function deleteSong(formData: FormData) {
 }
 
 export async function deleteSetlist(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
+    await requireLibraryAccess(teamId);
     const supabase = getSupabaseClient();
     const setlistId = getString(formData, 'setlistId');
-    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
 
     if (!setlistId) redirect('/dashboard/songs/library?error=missing-setlist-id');
 
@@ -202,10 +214,10 @@ export async function deleteSetlist(formData: FormData) {
 }
 
 export async function updateSongBpmPreset(formData: FormData) {
-    if (!configuredSupabase) redirect('/dashboard/songs/library?error=backend-unavailable');
+    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
+    await requireLibraryAccess(teamId);
     const supabase = getSupabaseClient();
     const songId = getString(formData, 'songId');
-    const teamId = getString(formData, 'teamId') || DEMO_TEAM_ID;
     const bpmValue = getNullableString(formData, 'bpm');
     const parsedBpm = bpmValue ? Number(bpmValue) : null;
 

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
+import { writeTransaction } from './sqliteRetry';
 
 /*
  * 팀 소식 흐름. 저장(콘티 · 일정) · 팀 변경 · 예배 세션의 모든 변화가 여기 한 줄로 쌓이고,
@@ -74,18 +75,26 @@ export class TeamEvents {
         `);
     }
 
+    /**
+     * 소식을 쌓고 열려 있는 화면에 보냅니다. 저장소 쓰기 트랜잭션이 커밋된 뒤에 부르세요 —
+     * 트랜잭션 안에서 부르면 그 저장이 되돌려져도 화면은 이미 소식을 받습니다.
+     */
     publish(teamId: string, type: TeamEventType, payload: unknown, audience: string[] | null = null): TeamEvent {
         const createdAt = new Date().toISOString();
-        const result = this.db.prepare('INSERT INTO team_events(team_id, type, payload_json, audience_json, created_at) VALUES (?, ?, ?, ?, ?)')
-            .run(teamId, type, JSON.stringify(payload ?? null), audience ? JSON.stringify([...new Set(audience)]) : null, createdAt);
-        const event: TeamEvent = { id: Number(result.lastInsertRowid), teamId, type, payload, audience: audience ? [...new Set(audience)] : null, createdAt };
+        const recipients = audience ? [...new Set(audience)] : null;
         const count = (this.published.get(teamId) ?? 0) + 1;
+        const id = writeTransaction(this.db, () => {
+            const result = this.db.prepare('INSERT INTO team_events(team_id, type, payload_json, audience_json, created_at) VALUES (?, ?, ?, ?, ?)')
+                .run(teamId, type, JSON.stringify(payload ?? null), recipients ? JSON.stringify(recipients) : null, createdAt);
+            if (count >= 50) {
+                // 번호는 모든 팀이 함께 쓰므로, 이 팀의 최근 KEEP_PER_TEAM 개를 세어서 그보다 오래된 것을 지웁니다.
+                const floor = this.db.prepare('SELECT id FROM team_events WHERE team_id = ? ORDER BY id DESC LIMIT 1 OFFSET ?').get(teamId, KEEP_PER_TEAM) as { id: number } | undefined;
+                if (floor) this.db.prepare('DELETE FROM team_events WHERE team_id = ? AND id <= ?').run(teamId, floor.id);
+            }
+            return Number(result.lastInsertRowid);
+        });
         this.published.set(teamId, count % 50);
-        if (count >= 50) {
-            // 번호는 모든 팀이 함께 쓰므로, 이 팀의 최근 KEEP_PER_TEAM 개를 세어서 그보다 오래된 것을 지웁니다.
-            const floor = this.db.prepare('SELECT id FROM team_events WHERE team_id = ? ORDER BY id DESC LIMIT 1 OFFSET ?').get(teamId, KEEP_PER_TEAM) as { id: number } | undefined;
-            if (floor) this.db.prepare('DELETE FROM team_events WHERE team_id = ? AND id <= ?').run(teamId, floor.id);
-        }
+        const event: TeamEvent = { id, teamId, type, payload, audience: recipients, createdAt };
         this.emitter.emit(teamId, event);
         return event;
     }

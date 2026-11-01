@@ -2,6 +2,7 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { getCurrentUser, type CurrentUser } from '@/lib/auth';
 import { getTeamRepository } from './teams';
+import { isSqliteBusy } from './sqliteRetry';
 
 export const noStore = { 'Cache-Control': 'no-store' };
 
@@ -13,7 +14,9 @@ export function json(body: unknown, status = 200) {
 export function failure(error: unknown, status = 400) {
     const message = error instanceof Error && /[가-힣]/.test(error.message) ? error.message : '처리하지 못했습니다. 잠시 후 다시 시도해주세요.';
     if (!(error instanceof Error && /[가-힣]/.test(error.message))) console.error('[api]', error);
-    const code = /접근할 수 없|권한/.test(message) ? 403 : /찾지 못/.test(message) ? 404 : status;
+    // 다른 기기가 저장 중이라 잠금을 못 잡은 경우는 요청 잘못이 아니라 일시적 상태이므로 503 (다시 시도 가능).
+    const code = isSqliteBusy(error) || (error instanceof Error && (error as { code?: unknown }).code === 'WT_SQLITE_BUSY') ? 503
+        : /접근할 수 없|권한/.test(message) ? 403 : /찾지 못/.test(message) ? 404 : status;
     return json({ error: message }, code);
 }
 

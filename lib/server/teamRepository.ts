@@ -6,6 +6,7 @@ import { applyPlanningCommand, parsePlanningState, planningForViewer } from '../
 import { DEFAULT_POLICY, parsePolicy, type TeamPolicy } from '../permissions';
 import type { PlanningCommand, PlanningNotification, PlanningState } from '../../types/planning';
 import type { InvitationPreview, OnlineTeam, TeamIdentity, TeamMember, UserProfile, WorshipRole } from '../../types/team';
+import { writeTransaction } from './sqliteRetry';
 
 const roles = new Set(['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member']);
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -45,15 +46,25 @@ export class TeamRepository {
     close() { this.db.close(); }
     /** 같은 파일을 쓰는 다른 저장소(팀 자료 · 예배 세션 · 팀 소식)가 함께 씁니다. */
     get database() { return this.db; }
+    /**
+     * 모든 쓰기는 여기로 — BEGIN IMMEDIATE 로 쓰기 잠금을 먼저 잡고(busy_timeout 이 적용됨), 잠금 충돌이면 한 번 더 시도합니다.
+     * 권한 확인 → 쓰기를 한 트랜잭션에 넣어, 그 사이 다른 기기가 권한 · 명단을 바꿔도 어긋나지 않게 합니다.
+     */
+    private write<T>(fn: () => T): T { return writeTransaction(this.db, fn); }
 
     /* ───── 사용자 ───── */
 
     /** 로그인할 때마다 부릅니다. 처음이면 만들고, 이미 있으면 직접 바꾼 이름을 지킵니다. */
     ensureUser(user: TeamIdentity): UserProfile {
         this.identity(user);
+        // 화면을 열 때마다 불리므로, 이미 있는 사람은 쓰기 잠금 없이 읽기만 합니다.
+        const existing = this.profile(user.id);
+        if (existing) return existing;
         const now = new Date().toISOString();
-        this.db.prepare('INSERT INTO users(id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING').run(user.id, user.name.trim().slice(0, 40), now, now);
-        return this.profile(user.id)!;
+        return this.write(() => {
+            this.db.prepare('INSERT INTO users(id, name, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING').run(user.id, user.name.trim().slice(0, 40), now, now);
+            return this.profile(user.id)!;
+        });
     }
     profile(userId: string): UserProfile | null {
         const row = this.db.prepare('SELECT id, name, created_at AS createdAt, onboarded_at AS onboardedAt FROM users WHERE id = ?').get(userId) as UserProfile | undefined;
@@ -63,15 +74,15 @@ export class TeamRepository {
     updateProfile(userId: string, name: string): UserProfile {
         const trimmed = name.trim();
         if (!trimmed || trimmed.length > 40) throw new Error('이름은 1~40자로 입력해주세요.');
-        return this.db.transaction(() => {
+        return this.write(() => {
             const result = this.db.prepare('UPDATE users SET name = ?, updated_at = ? WHERE id = ?').run(trimmed, new Date().toISOString(), userId);
             if (result.changes !== 1) throw new Error('로그인 정보를 찾지 못했습니다. 다시 로그인해주세요.');
             this.db.prepare('UPDATE online_members SET name = ? WHERE user_id = ?').run(trimmed, userId);
             return this.profile(userId)!;
-        })();
+        });
     }
     markOnboarded(userId: string) {
-        this.db.prepare('UPDATE users SET onboarded_at = coalesce(onboarded_at, ?) WHERE id = ?').run(new Date().toISOString(), userId);
+        this.write(() => this.db.prepare('UPDATE users SET onboarded_at = coalesce(onboarded_at, ?) WHERE id = ?').run(new Date().toISOString(), userId));
     }
 
     /* ───── 권한 ───── */
@@ -87,10 +98,12 @@ export class TeamRepository {
         try { return parsePolicy(JSON.parse(row.policy_json)); } catch { return DEFAULT_POLICY; }
     }
     setPolicy(teamId: string, userId: string, value: unknown): TeamPolicy {
-        this.owner(teamId, userId);
         const policy = parsePolicy(value);
-        this.db.prepare('INSERT INTO online_team_policy(team_id, policy_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET policy_json = excluded.policy_json').run(teamId, JSON.stringify(policy));
-        return policy;
+        return this.write(() => {
+            this.owner(teamId, userId);
+            this.db.prepare('INSERT INTO online_team_policy(team_id, policy_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET policy_json = excluded.policy_json').run(teamId, JSON.stringify(policy));
+            return policy;
+        });
     }
     private planningMembers(teamId: string, userId: string): TeamMember[] {
         this.member(teamId, userId);
@@ -109,7 +122,7 @@ export class TeamRepository {
     }
     /** 저장하고, 이번 명령으로 새로 생긴 알림도 돌려줍니다 — 받는 사람 화면에 바로 띄우도록 */
     applyPlanning(teamId: string, userId: string, command: PlanningCommand | unknown): { state: PlanningState; created: PlanningNotification[] } {
-        return this.db.transaction(() => {
+        return this.write(() => {
             const members = this.planningMembers(teamId, userId);
             const previous = this.readPlanning(teamId);
             const policy = this.policy(teamId);
@@ -117,7 +130,7 @@ export class TeamRepository {
             this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
             const before = new Set(previous.notifications.map((item) => item.id));
             return { state: planningForViewer(state, members, userId, policy), created: state.notifications.filter((item) => !before.has(item.id)) };
-        })();
+        });
     }
     /** 팀 이름 (없는 팀이면 null) */
     teamName(teamId: string): string | null {
@@ -131,14 +144,14 @@ export class TeamRepository {
     /** 일정 명령이 아닌 곳(콘티 저장 등)에서 생긴 알림을 알림 목록에 더합니다. */
     addNotices(teamId: string, items: Array<Pick<PlanningNotification, 'title' | 'body' | 'target' | 'entityId' | 'recipientIds'> & { urgent?: boolean }>): PlanningNotification[] {
         if (!items.length) return [];
-        return this.db.transaction(() => {
+        return this.write(() => {
             const state = this.readPlanning(teamId);
             const now = new Date().toISOString();
             const created = items.map((item): PlanningNotification => ({ id: randomUUID(), title: item.title, body: item.body, urgent: Boolean(item.urgent), target: item.target, entityId: item.entityId, recipientIds: [...new Set(item.recipientIds)], readBy: [], createdAt: now }));
             state.notifications = [...created, ...state.notifications].slice(0, 500);
             this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
             return created;
-        })();
+        });
     }
     private identity(user: TeamIdentity) {
         if (!user.id || user.id.length > 200 || !user.name.trim()) throw new Error('로그인이 필요합니다.');
@@ -163,17 +176,17 @@ export class TeamRepository {
         this.identity(user);
         const trimmed = name.trim();
         if (!trimmed || trimmed.length > 40) throw new Error('팀 이름은 1~40자로 입력해주세요.');
-        return this.db.transaction(() => {
+        return this.write(() => {
             const count = this.db.prepare('SELECT count(*) AS count FROM online_teams WHERE owner_id = ?').get(user.id) as { count: number };
             if (count.count >= 30) throw new Error('한 계정에서 최대 30개 팀을 만들 수 있습니다.');
             const row: TeamRow = { id: randomUUID(), name: trimmed, owner_id: user.id, created_at: new Date().toISOString() };
             this.db.prepare('INSERT INTO online_teams(id, name, owner_id, created_at) VALUES (?, ?, ?, ?)').run(row.id, row.name, row.owner_id, row.created_at);
             this.db.prepare('INSERT INTO online_members(team_id, user_id, name, role, permission) VALUES (?, ?, ?, ?, ?)').run(row.id, user.id, (this.profile(user.id)?.name ?? user.name).trim().slice(0, 40), 'leader', 'owner');
             return this.load(row);
-        })();
+        });
     }
     createInvite(teamId: string, userId: string): { token: string; code: string; expiresAt: string } {
-        return this.db.transaction(() => {
+        return this.write(() => {
             this.owner(teamId, userId);
             const token = randomBytes(32).toString('hex');
             const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
@@ -182,7 +195,7 @@ export class TeamRepository {
             while (this.db.prepare('SELECT 1 FROM online_invites WHERE code = ?').get(code)) code = newInviteCode();
             this.db.prepare('INSERT INTO online_invites(token_hash, team_id, expires_at, code) VALUES (?, ?, ?, ?)').run(tokenHash(token), teamId, expiresAt, code);
             return { token, code, expiresAt };
-        })();
+        });
     }
     /** 관리자가 다시 보여 줄 수 있게, 아직 유효한 초대 코드 (링크 토큰은 저장하지 않으므로 코드만) */
     activeInviteCode(teamId: string, userId: string): { code: string; expiresAt: string } | null {
@@ -191,8 +204,10 @@ export class TeamRepository {
         return row && !row.revoked && Date.parse(row.expires_at) > Date.now() ? { code: row.code, expiresAt: row.expires_at } : null;
     }
     revokeInvites(teamId: string, userId: string) {
-        this.owner(teamId, userId);
-        this.db.prepare('UPDATE online_invites SET revoked = 1 WHERE team_id = ?').run(teamId);
+        this.write(() => {
+            this.owner(teamId, userId);
+            this.db.prepare('UPDATE online_invites SET revoked = 1 WHERE team_id = ?').run(teamId);
+        });
     }
     /** 초대 링크 토큰(64자) 또는 초대 코드(8자)로 초대를 찾습니다. */
     preview(tokenOrCode: string): InvitationPreview | null {
@@ -215,7 +230,7 @@ export class TeamRepository {
      */
     join(tokenOrCode: string, user: TeamIdentity, claimMemberId?: string): string {
         this.identity(user);
-        return this.db.transaction(() => {
+        return this.write(() => {
             const invite = this.preview(tokenOrCode);
             if (!invite) throw new Error('초대가 만료되었거나 취소되었습니다. 새 링크를 요청해주세요.');
             if (this.db.prepare('SELECT 1 FROM online_members WHERE team_id = ? AND user_id = ?').get(invite.teamId, user.id)) return invite.teamId;
@@ -232,31 +247,33 @@ export class TeamRepository {
             if (count.count >= 100) throw new Error('이 팀의 참여 인원이 가득 찼습니다.');
             this.db.prepare('INSERT INTO online_members(team_id, user_id, name, role, permission) VALUES (?, ?, ?, ?, ?)').run(invite.teamId, user.id, name, 'member', 'member');
             return invite.teamId;
-        })();
+        });
     }
     assignRole(teamId: string, userId: string, memberId: string, role: WorshipRole) {
-        this.owner(teamId, userId);
-        if (!roles.has(role)) throw new Error('담당 역할을 확인해주세요.');
-        const result = this.db.prepare('UPDATE online_members SET role = ? WHERE team_id = ? AND user_id = ?').run(role, teamId, memberId);
-        if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
+        this.write(() => {
+            this.owner(teamId, userId);
+            if (!roles.has(role)) throw new Error('담당 역할을 확인해주세요.');
+            const result = this.db.prepare('UPDATE online_members SET role = ? WHERE team_id = ? AND user_id = ?').run(role, teamId, memberId);
+            if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
+        });
     }
     addMemberDirect(teamId: string, userId: string, name: string, role: WorshipRole): TeamMember {
-        this.owner(teamId, userId);
-        const trimmed = name.trim();
-        if (!trimmed || trimmed.length > 40) throw new Error('팀원 이름은 1~40자로 입력해주세요.');
-        if (!roles.has(role)) throw new Error('담당 역할을 확인해주세요.');
-        return this.db.transaction(() => {
+        return this.write(() => {
+            this.owner(teamId, userId);
+            const trimmed = name.trim();
+            if (!trimmed || trimmed.length > 40) throw new Error('팀원 이름은 1~40자로 입력해주세요.');
+            if (!roles.has(role)) throw new Error('담당 역할을 확인해주세요.');
             const count = this.db.prepare('SELECT count(*) AS count FROM online_members WHERE team_id = ?').get(teamId) as { count: number };
             if (count.count >= 100) throw new Error('이 팀의 참여 인원이 가득 찼습니다.');
             const memberId = `direct-${randomUUID()}`;
             this.db.prepare('INSERT INTO online_members(team_id, user_id, name, role, permission) VALUES (?, ?, ?, ?, ?)').run(teamId, memberId, trimmed, role, 'member');
             return { userId: memberId, name: trimmed, role, permission: 'member' as const };
-        })();
+        });
     }
     addMembersBatch(teamId: string, userId: string, items: Array<{ name: string; role: WorshipRole }>): TeamMember[] {
-        this.owner(teamId, userId);
-        if (!items.length) throw new Error('추가할 팀원 명단이 없습니다.');
-        return this.db.transaction(() => {
+        return this.write(() => {
+            this.owner(teamId, userId);
+            if (!items.length) throw new Error('추가할 팀원 명단이 없습니다.');
             const count = this.db.prepare('SELECT count(*) AS count FROM online_members WHERE team_id = ?').get(teamId) as { count: number };
             if (count.count + items.length > 100) throw new Error('이 팀의 최대 인원(100명)을 초과합니다.');
             const added: TeamMember[] = [];
@@ -269,44 +286,48 @@ export class TeamRepository {
                 added.push({ userId: memberId, name: trimmed.slice(0, 40), role: r, permission: 'member' });
             }
             return added;
-        })();
+        });
     }
     private creator(teamId: string): string | null {
         return (this.db.prepare('SELECT owner_id FROM online_teams WHERE id = ?').get(teamId) as { owner_id: string } | undefined)?.owner_id ?? null;
     }
     setMemberPermission(teamId: string, userId: string, targetUserId: string, permission: 'owner' | 'member'): void {
-        this.owner(teamId, userId);
-        if (permission !== 'owner' && permission !== 'member') throw new Error('권한을 확인해주세요.');
-        if (targetUserId.startsWith('direct-') && permission === 'owner') throw new Error('아직 계정으로 들어오지 않은 팀원은 관리자로 지정할 수 없습니다.');
-        if (targetUserId === this.creator(teamId) && userId !== targetUserId && permission === 'member') throw new Error('팀을 만든 사람의 권한은 본인만 바꿀 수 있습니다.');
-        if (userId === targetUserId && permission === 'member') {
-            const ownerCount = this.db.prepare('SELECT count(*) AS count FROM online_members WHERE team_id = ? AND permission = ?').get(teamId, 'owner') as { count: number };
-            if (ownerCount.count <= 1) throw new Error('마지막 관리자는 일반 팀원으로 변경할 수 없습니다.');
-        }
-        const result = this.db.prepare('UPDATE online_members SET permission = ? WHERE team_id = ? AND user_id = ?').run(permission, teamId, targetUserId);
-        if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
+        this.write(() => {
+            this.owner(teamId, userId);
+            if (permission !== 'owner' && permission !== 'member') throw new Error('권한을 확인해주세요.');
+            if (targetUserId.startsWith('direct-') && permission === 'owner') throw new Error('아직 계정으로 들어오지 않은 팀원은 관리자로 지정할 수 없습니다.');
+            if (targetUserId === this.creator(teamId) && userId !== targetUserId && permission === 'member') throw new Error('팀을 만든 사람의 권한은 본인만 바꿀 수 있습니다.');
+            if (userId === targetUserId && permission === 'member') {
+                const ownerCount = this.db.prepare('SELECT count(*) AS count FROM online_members WHERE team_id = ? AND permission = ?').get(teamId, 'owner') as { count: number };
+                if (ownerCount.count <= 1) throw new Error('마지막 관리자는 일반 팀원으로 변경할 수 없습니다.');
+            }
+            const result = this.db.prepare('UPDATE online_members SET permission = ? WHERE team_id = ? AND user_id = ?').run(permission, teamId, targetUserId);
+            if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
+        });
     }
     deleteTeam(teamId: string, userId: string): void {
-        this.owner(teamId, userId);
-        if (this.creator(teamId) !== userId) throw new Error('팀은 만든 사람만 삭제할 수 있습니다.');
-        this.db.transaction(() => {
+        this.write(() => {
+            this.owner(teamId, userId);
+            if (this.creator(teamId) !== userId) throw new Error('팀은 만든 사람만 삭제할 수 있습니다.');
             this.db.prepare('DELETE FROM online_invites WHERE team_id = ?').run(teamId);
             this.db.prepare('DELETE FROM online_members WHERE team_id = ?').run(teamId);
             this.db.prepare('DELETE FROM online_planning WHERE team_id = ?').run(teamId);
             this.db.prepare('DELETE FROM online_teams WHERE id = ?').run(teamId);
-        })();
+        });
     }
     removeMember(teamId: string, userId: string, targetUserId: string): void {
-        this.owner(teamId, userId);
-        if (userId === targetUserId) throw new Error('팀 관리자는 직접 탈퇴하거나 팀을 삭제해야 합니다.');
-        if (targetUserId === this.creator(teamId)) throw new Error('팀을 만든 사람은 내보낼 수 없습니다.');
-        const result = this.db.prepare('DELETE FROM online_members WHERE team_id = ? AND user_id = ?').run(teamId, targetUserId);
-        if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
+        this.write(() => {
+            this.owner(teamId, userId);
+            if (userId === targetUserId) throw new Error('팀 관리자는 직접 탈퇴하거나 팀을 삭제해야 합니다.');
+            if (targetUserId === this.creator(teamId)) throw new Error('팀을 만든 사람은 내보낼 수 없습니다.');
+            const result = this.db.prepare('DELETE FROM online_members WHERE team_id = ? AND user_id = ?').run(teamId, targetUserId);
+            if (result.changes !== 1) throw new Error('팀원을 찾지 못했습니다.');
+        });
     }
     leaveTeam(teamId: string, userId: string): void {
-        const member = this.db.prepare('SELECT permission FROM online_members WHERE team_id = ? AND user_id = ?').get(teamId, userId) as { permission: string } | undefined;
-        if (!member) throw new Error('이 팀의 팀원이 아닙니다.');
-        this.db.transaction(() => {
+        this.write(() => {
+            const member = this.db.prepare('SELECT permission FROM online_members WHERE team_id = ? AND user_id = ?').get(teamId, userId) as { permission: string } | undefined;
+            if (!member) throw new Error('이 팀의 팀원이 아닙니다.');
             if (member.permission === 'owner') {
                 // 다른 관리자가 있으면 나갈 수 있고, 만든 사람이 나가면 다른 관리자에게 팀을 넘깁니다.
                 const other = this.db.prepare("SELECT user_id FROM online_members WHERE team_id = ? AND permission = 'owner' AND user_id <> ? ORDER BY name LIMIT 1").get(teamId, userId) as { user_id: string } | undefined;
@@ -314,6 +335,6 @@ export class TeamRepository {
                 if (this.creator(teamId) === userId) this.db.prepare('UPDATE online_teams SET owner_id = ? WHERE id = ?').run(other.user_id, teamId);
             }
             this.db.prepare('DELETE FROM online_members WHERE team_id = ? AND user_id = ?').run(teamId, userId);
-        })();
+        });
     }
 }

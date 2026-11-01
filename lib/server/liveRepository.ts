@@ -4,7 +4,8 @@ import { can, type TeamPolicy } from '../permissions';
 import { CUE_TARGET_LABEL, cueById, cueGroupOf, type CueTarget, type LiveSong } from '../../components/live/model';
 import type { TeamIdentity, TeamMember } from '../../types/team';
 import type { TeamRepository } from './teamRepository';
-import type { TeamEvents } from './teamEvents';
+import type { TeamEvents, TeamEventType } from './teamEvents';
+import { writeTransaction } from './sqliteRetry';
 
 /*
  * 예배 세션 (서버). 한 팀에 진행 중인 세션은 하나 — 인도자가 시작하면 팀원 모두가 같은 세션에 들어옵니다.
@@ -187,6 +188,14 @@ export class LiveRepository {
         `);
     }
 
+    /** 쓰기 트랜잭션 (BEGIN IMMEDIATE · 잠금 충돌이면 한 번 더). 소식은 이 안에서 보내지 않고 커밋한 뒤 emit 으로 보냅니다. */
+    private write<T>(fn: () => T): T { return writeTransaction(this.db, fn); }
+
+    /** 커밋한 뒤 소식 보내기. 저장은 이미 끝났으므로 소식을 못 보내도 요청을 실패로 돌리지 않습니다. */
+    private emit(teamId: string, type: TeamEventType, payload: unknown, audience: string[] | null = null) {
+        try { this.events.publish(teamId, type, payload, audience); } catch (error) { console.error('[live] event', error); }
+    }
+
     /* ───── 읽기 ───── */
 
     private row(sessionId: string): SessionRow {
@@ -282,18 +291,22 @@ export class LiveRepository {
         const member = this.memberOf(teamId, user.id);
         if (!can(member, this.teams.policy(teamId), 'sessionRun')) throw new Error('예배를 시작할 권한이 없습니다. 팀 관리자에게 요청해주세요.');
         this.sweep();
-        const existing = this.db.prepare('SELECT * FROM live_sessions WHERE team_id = ? AND ended_at IS NULL').get(teamId) as SessionRow | undefined;
-        if (existing) return { session: this.summary(existing), created: false };
-        const snapshot = sanitizeSnapshot(input);
-        const now = new Date().toISOString();
-        const id = randomUUID();
         const by = { id: user.id, name: member.name };
-        this.db.prepare('INSERT INTO live_sessions(id, team_id, snapshot_json, state_json, started_by, started_by_name, started_at, last_activity_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-            .run(id, teamId, JSON.stringify(snapshot), JSON.stringify(firstState(snapshot, by)), user.id, member.name, now, now);
-        const session = this.summary(this.row(id));
-        this.events.publish(teamId, 'live.started', session);
-        try { this.afterStart?.(session, user.id); } catch (error) { console.error('[live] afterStart', error); }
-        return { session, created: true };
+        // 확인과 만들기를 한 트랜잭션에 — 두 사람이(다른 서버 프로세스에서도) 동시에 눌러도 세션은 하나입니다.
+        const started = this.write(() => {
+            const existing = this.db.prepare('SELECT * FROM live_sessions WHERE team_id = ? AND ended_at IS NULL').get(teamId) as SessionRow | undefined;
+            if (existing) return { session: this.summary(existing), created: false };
+            const snapshot = sanitizeSnapshot(input);
+            const now = new Date().toISOString();
+            const id = randomUUID();
+            this.db.prepare('INSERT INTO live_sessions(id, team_id, snapshot_json, state_json, started_by, started_by_name, started_at, last_activity_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                .run(id, teamId, JSON.stringify(snapshot), JSON.stringify(firstState(snapshot, by)), user.id, member.name, now, now);
+            return { session: this.summary(this.row(id)), created: true };
+        });
+        if (!started.created) return started;
+        this.emit(teamId, 'live.started', started.session);
+        try { this.afterStart?.(started.session, user.id); } catch (error) { console.error('[live] afterStart', error); }
+        return started;
     }
 
     end(sessionId: string, user: TeamIdentity): void {
@@ -306,17 +319,19 @@ export class LiveRepository {
 
     private finish(row: SessionRow, byName: string | null) {
         const now = new Date().toISOString();
-        this.db.transaction(() => {
-            this.db.prepare('UPDATE live_sessions SET ended_at = ?, ended_by_name = ? WHERE id = ? AND ended_at IS NULL').run(now, byName, row.id);
+        const ended = this.write(() => {
+            const result = this.db.prepare('UPDATE live_sessions SET ended_at = ?, ended_by_name = ? WHERE id = ? AND ended_at IS NULL').run(now, byName, row.id);
             this.db.prepare('DELETE FROM live_presence WHERE session_id = ?').run(row.id);
-        })();
-        this.events.publish(row.team_id, 'live.ended', { sessionId: row.id, endedAt: now, endedByName: byName });
+            return result.changes === 1;
+        });
+        // 다른 요청(다른 서버 프로세스)이 먼저 마쳤으면 그쪽이 이미 알렸습니다.
+        if (ended) this.emit(row.team_id, 'live.ended', { sessionId: row.id, endedAt: now, endedByName: byName });
     }
 
     /* ───── 입장 · 퇴장 ───── */
 
     private publishPresence(row: SessionRow) {
-        this.events.publish(row.team_id, 'live.presence', { sessionId: row.id, presence: this.presence(row.id, this.members(row.team_id)) });
+        this.emit(row.team_id, 'live.presence', { sessionId: row.id, presence: this.presence(row.id, this.members(row.team_id)) });
     }
 
     private requireOpen(row: SessionRow) {
@@ -329,11 +344,14 @@ export class LiveRepository {
         this.requireOpen(row);
         const device = text(deviceId, 64);
         if (!device) throw new Error('기기 정보를 확인해주세요.');
-        const wasPresent = this.presentIds(sessionId).has(userId);
-        const now = new Date().toISOString();
-        this.db.prepare('INSERT INTO live_presence(session_id, user_id, device_id, joined_at, last_seen) VALUES (?, ?, ?, ?, ?) ON CONFLICT(session_id, user_id, device_id) DO UPDATE SET last_seen = excluded.last_seen')
-            .run(sessionId, userId, device, now, Date.now());
-        this.db.prepare('UPDATE live_sessions SET last_activity_at = ? WHERE id = ?').run(now, sessionId);
+        const wasPresent = this.write(() => {
+            const present = this.presentIds(sessionId).has(userId);
+            const now = new Date().toISOString();
+            this.db.prepare('INSERT INTO live_presence(session_id, user_id, device_id, joined_at, last_seen) VALUES (?, ?, ?, ?, ?) ON CONFLICT(session_id, user_id, device_id) DO UPDATE SET last_seen = excluded.last_seen')
+                .run(sessionId, userId, device, now, Date.now());
+            this.db.prepare('UPDATE live_sessions SET last_activity_at = ? WHERE id = ?').run(now, sessionId);
+            return present;
+        });
         if (!wasPresent) this.publishPresence(row);
     }
 
@@ -341,7 +359,7 @@ export class LiveRepository {
     heartbeat(sessionId: string, userId: string, deviceId: string): void {
         const row = this.row(sessionId);
         this.requireOpen(row);
-        const result = this.db.prepare('UPDATE live_presence SET last_seen = ? WHERE session_id = ? AND user_id = ? AND device_id = ?').run(Date.now(), sessionId, userId, deviceId);
+        const result = this.write(() => this.db.prepare('UPDATE live_presence SET last_seen = ? WHERE session_id = ? AND user_id = ? AND device_id = ?').run(Date.now(), sessionId, userId, deviceId));
         if (result.changes === 0) this.join(sessionId, userId, deviceId);
         this.sweep();
     }
@@ -349,18 +367,23 @@ export class LiveRepository {
     leave(sessionId: string, userId: string, deviceId: string): void {
         const row = this.row(sessionId);
         if (row.ended_at) return;
-        this.db.prepare('DELETE FROM live_presence WHERE session_id = ? AND user_id = ? AND device_id = ?').run(sessionId, userId, deviceId);
-        if (!this.presentIds(sessionId).has(userId)) this.publishPresence(row);
+        const stillPresent = this.write(() => {
+            this.db.prepare('DELETE FROM live_presence WHERE session_id = ? AND user_id = ? AND device_id = ?').run(sessionId, userId, deviceId);
+            return this.presentIds(sessionId).has(userId);
+        });
+        if (!stillPresent) this.publishPresence(row);
     }
 
     /** 소식이 끊긴 기기를 내보내고, 오래 비어 있던 세션은 마칩니다. 요청마다 불러도 가볍습니다. */
     sweep(now = Date.now()): void {
         const stale = this.db.prepare('SELECT DISTINCT session_id FROM live_presence WHERE last_seen < ?').all(now - PRESENCE_STALE_MS) as { session_id: string }[];
         for (const { session_id: sessionId } of stale) {
-            const before = this.presentIds(sessionId);
-            this.db.prepare('DELETE FROM live_presence WHERE session_id = ? AND last_seen < ?').run(sessionId, now - PRESENCE_STALE_MS);
-            const after = this.presentIds(sessionId);
-            if (after.size !== before.size) this.publishPresence(this.row(sessionId));
+            const changed = this.write(() => {
+                const before = this.presentIds(sessionId);
+                this.db.prepare('DELETE FROM live_presence WHERE session_id = ? AND last_seen < ?').run(sessionId, now - PRESENCE_STALE_MS);
+                return this.presentIds(sessionId).size !== before.size;
+            });
+            if (changed) this.publishPresence(this.row(sessionId));
         }
         const open = this.db.prepare('SELECT * FROM live_sessions WHERE ended_at IS NULL').all() as SessionRow[];
         for (const row of open) {
@@ -376,7 +399,7 @@ export class LiveRepository {
         this.requireOpen(row);
         const member = this.memberOf(row.team_id, user.id);
         if (!can(member, this.teams.policy(row.team_id), 'sessionRun')) throw new Error('진행 권한이 없습니다. 인도자를 따라가요.');
-        return this.db.transaction(() => {
+        const moved = this.write((): { state: LiveState; changed: boolean } => {
             const current = JSON.parse((this.db.prepare('SELECT state_json FROM live_sessions WHERE id = ?').get(sessionId) as { state_json: string }).state_json) as LiveState;
             const snapshot = JSON.parse(row.snapshot_json) as LiveSnapshot;
             const next = { ...current };
@@ -394,13 +417,14 @@ export class LiveRepository {
             if (typeof patch.page === 'number' && Number.isInteger(patch.page)) next.page = Math.max(1, Math.min(99, patch.page));
             if (patch.bpm === null || isBpm(patch.bpm)) next.bpm = patch.bpm === null ? null : Math.round(patch.bpm);
             const changed = next.songIndex !== current.songIndex || next.sectionIndex !== current.sectionIndex || next.page !== current.page || next.bpm !== current.bpm;
-            if (!changed) return current;
+            if (!changed) return { state: current, changed: false };
             const now = new Date().toISOString();
             const state: LiveState = { ...next, version: current.version + 1, movedBy: user.id, movedByName: member.name, updatedAt: now };
             this.db.prepare('UPDATE live_sessions SET state_json = ?, last_activity_at = ? WHERE id = ?').run(JSON.stringify(state), now, sessionId);
-            this.events.publish(row.team_id, 'live.state', { sessionId, state });
-            return state;
-        })();
+            return { state, changed: true };
+        });
+        if (moved.changed) this.emit(row.team_id, 'live.state', { sessionId, state: moved.state });
+        return moved.state;
     }
 
     /* ───── 큐 ───── */
@@ -413,25 +437,28 @@ export class LiveRepository {
         const id = text(entryId, 64);
         const definition = typeof cueId === 'string' ? cueById(cueId) : undefined;
         if (!id || !definition) throw new Error('보낼 큐를 확인해주세요.');
-        const existing = this.db.prepare('SELECT * FROM live_cues WHERE id = ?').get(id) as CueRow | undefined;
-        if (existing) {
-            if (existing.session_id !== sessionId || existing.from_user !== user.id || existing.cue_id !== definition.id) throw new Error('보낼 큐를 확인해주세요.');
-            return this.cueRecord(existing);
-        }
-        if (definition.target === 'all' && !can(member, this.teams.policy(row.team_id), 'cueAll')) throw new Error('전체 큐를 보낼 권한이 없습니다.');
-        const present = this.presentIds(sessionId);
-        // 받는 사람: 지금 들어와 있는 사람 중 받는 묶음에 속한 사람 (보낸 사람 제외)
-        const recipients = this.members(row.team_id)
-            .filter((item) => item.userId !== user.id && present.has(item.userId))
-            .filter((item) => definition.target === 'all' || cueGroupOf(item.role) === definition.target)
-            .map((item) => item.userId);
-        const now = new Date().toISOString();
-        this.db.prepare('INSERT INTO live_cues(id, session_id, cue_id, label, target, from_user, from_name, created_at, recipients_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-            .run(id, sessionId, definition.id, definition.label, definition.target, user.id, member.name, now, JSON.stringify(recipients));
-        this.db.prepare('UPDATE live_sessions SET last_activity_at = ? WHERE id = ?').run(now, sessionId);
-        const record: LiveCueRecord = { id, cueId: definition.id, label: definition.label, target: definition.target, fromUserId: user.id, fromName: member.name, createdAt: now, recipients, acks: [] };
-        this.events.publish(row.team_id, 'live.cue', { sessionId, cue: record, targetLabel: CUE_TARGET_LABEL[definition.target] }, [user.id, ...recipients]);
-        return record;
+        // 같은 큐 다시 보내기 확인 · 받는 사람 고르기 · 저장을 한 트랜잭션에 (소식은 커밋한 뒤에)
+        const sent = this.write((): { record: LiveCueRecord; created: boolean } => {
+            const existing = this.db.prepare('SELECT * FROM live_cues WHERE id = ?').get(id) as CueRow | undefined;
+            if (existing) {
+                if (existing.session_id !== sessionId || existing.from_user !== user.id || existing.cue_id !== definition.id) throw new Error('보낼 큐를 확인해주세요.');
+                return { record: this.cueRecord(existing), created: false };
+            }
+            if (definition.target === 'all' && !can(member, this.teams.policy(row.team_id), 'cueAll')) throw new Error('전체 큐를 보낼 권한이 없습니다.');
+            const present = this.presentIds(sessionId);
+            // 받는 사람: 지금 들어와 있는 사람 중 받는 묶음에 속한 사람 (보낸 사람 제외)
+            const recipients = this.members(row.team_id)
+                .filter((item) => item.userId !== user.id && present.has(item.userId))
+                .filter((item) => definition.target === 'all' || cueGroupOf(item.role) === definition.target)
+                .map((item) => item.userId);
+            const now = new Date().toISOString();
+            this.db.prepare('INSERT INTO live_cues(id, session_id, cue_id, label, target, from_user, from_name, created_at, recipients_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                .run(id, sessionId, definition.id, definition.label, definition.target, user.id, member.name, now, JSON.stringify(recipients));
+            this.db.prepare('UPDATE live_sessions SET last_activity_at = ? WHERE id = ?').run(now, sessionId);
+            return { record: { id, cueId: definition.id, label: definition.label, target: definition.target, fromUserId: user.id, fromName: member.name, createdAt: now, recipients, acks: [] }, created: true };
+        });
+        if (sent.created) this.emit(row.team_id, 'live.cue', { sessionId, cue: sent.record, targetLabel: CUE_TARGET_LABEL[definition.target] }, [user.id, ...sent.record.recipients]);
+        return sent.record;
     }
 
     ack(sessionId: string, user: TeamIdentity, entryId: unknown): void {
@@ -442,7 +469,7 @@ export class LiveRepository {
         const recipients = JSON.parse(cue.recipients_json) as string[];
         if (!recipients.includes(user.id)) throw new Error('나에게 온 큐가 아닙니다.');
         const at = new Date().toISOString();
-        const result = this.db.prepare('INSERT OR IGNORE INTO live_acks(cue_id, user_id, name, at) VALUES (?, ?, ?, ?)').run(cue.id, user.id, member.name, at);
-        if (result.changes) this.events.publish(row.team_id, 'live.ack', { sessionId, cueId: cue.id, userId: user.id, name: member.name, at }, [cue.from_user, user.id]);
+        const result = this.write(() => this.db.prepare('INSERT OR IGNORE INTO live_acks(cue_id, user_id, name, at) VALUES (?, ?, ?, ?)').run(cue.id, user.id, member.name, at));
+        if (result.changes) this.emit(row.team_id, 'live.ack', { sessionId, cueId: cue.id, userId: user.id, name: member.name, at }, [cue.from_user, user.id]);
     }
 }
