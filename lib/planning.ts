@@ -145,7 +145,11 @@ export function planningForViewer(state: PlanningState, members: TeamMember[], u
     return {
         ...state,
         requests: state.requests.filter(item => item.authorId === userId || item.leaderId === userId || owner),
-        notifications: state.notifications.filter(item => item.recipientIds.includes(userId)),
+        // 알림은 받는 사람 본인 것만, 그리고 본인의 수신 · 읽음 정보만 내보냅니다.
+        // 같은 알림을 누가 더 받았는지, 다른 사람이 읽었는지는 보는 사람에게 필요 없는 개인 정보입니다.
+        notifications: state.notifications
+            .filter(item => item.recipientIds.includes(userId))
+            .map(item => ({ ...item, recipientIds: [userId], readBy: item.readBy.includes(userId) ? [userId] : [] })),
         announcements: (state.announcements ?? []).filter(item => announcer || item.authorId === userId || item.recipientIds.includes(userId)),
     };
 }

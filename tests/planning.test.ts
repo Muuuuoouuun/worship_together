@@ -30,6 +30,14 @@ function seed(repo: TeamRepository, joiningRepo = repo) {
         members: repo.list(owner.id).find(item => item.id === team.id)!.members,
         read: (actor = owner.id) => repo.planning(team.id, actor),
         send: (actor: string, command: PlanningCommand | unknown) => repo.updatePlanning(team.id, actor, command),
+        // 화면 데이터에는 본인 수신 · 읽음만 실리므로(planningForViewer), 누가 받았는지 · 읽었는지는
+        // 팀원마다 자기 화면에서 그 알림이 보이는지로 확인합니다.
+        recipientsOf: (notificationId: string) => people
+            .filter(person => repo.planning(team.id, person.id).notifications.some(item => item.id === notificationId))
+            .map(person => person.id).sort(),
+        readersOf: (notificationId: string) => people
+            .filter(person => repo.planning(team.id, person.id).notifications.some(item => item.id === notificationId && item.readBy.includes(person.id)))
+            .map(person => person.id).sort(),
     };
 }
 
@@ -126,7 +134,7 @@ test('request replies and statuses notify only the other participants with the r
     const f = fixture(t);
     const request = createRequest(f);
     const initial = f.read(leader.id).notifications[0];
-    assert.deepEqual(initial.recipientIds, [leader.id]);
+    assert.deepEqual(f.recipientsOf(initial.id), [leader.id]);
     assert.equal(initial.target, 'requests');
     assert.equal(initial.entityId, request.id);
     rejectsAtomically(f, author.id, { type: 'request.status', requestId: request.id, status: 'resolved' }, /수신 인도자 또는 관리자/);
@@ -137,13 +145,13 @@ test('request replies and statuses notify only the other participants with the r
         const leaderNotifications = f.read(leader.id).notifications;
         f.send(leader.id, command);
         const notification = f.read(author.id).notifications[0];
-        assert.deepEqual(notification.recipientIds, [author.id]);
+        assert.deepEqual(f.recipientsOf(notification.id), [author.id]);
         assert.equal(notification.target, 'requests');
         assert.equal(notification.entityId, request.id);
         assert.deepEqual(f.read(leader.id).notifications, leaderNotifications, 'actor should not notify themselves');
     }
     f.send(author.id, { type: 'request.reply', requestId: request.id, body: '작성자 답변' });
-    assert.deepEqual(f.read(leader.id).notifications[0].recipientIds, [leader.id]);
+    assert.deepEqual(f.recipientsOf(f.read(leader.id).notifications[0].id), [leader.id]);
     f.send(owner.id, { type: 'request.reply', requestId: request.id, body: '소유자 답변' });
     f.send(owner.id, { type: 'request.status', requestId: request.id, status: 'resolved' });
     const result = f.read().requests[0];
@@ -151,7 +159,7 @@ test('request replies and statuses notify only the other participants with the r
     assert.deepEqual(result.replies.map(reply => [reply.authorId, reply.body]), [
         [leader.id, '인도자 답변'], [author.id, '작성자 답변'], [owner.id, '소유자 답변'],
     ]);
-    assert.deepEqual(f.read(author.id).notifications[0].recipientIds.sort(), [author.id, leader.id].sort());
+    assert.deepEqual(f.recipientsOf(f.read(author.id).notifications[0].id), [author.id, leader.id].sort());
     assert.deepEqual(f.read(other.id).notifications, []);
     assert.deepEqual(f.read(otherLeader.id).notifications, []);
 });
@@ -349,7 +357,7 @@ test('only an assignee can respond; repeated absence creates exactly one urgent 
     assert.equal(urgent[0].target, 'schedule');
     assert.equal(urgent[0].entityId, event.id);
     // 예배 인도자도 파트 담당도 없으면 인도자·관리자에게 (팀 전체가 아니라)
-    assert.deepEqual([...urgent[0].recipientIds].sort(), [owner.id, leader.id, otherLeader.id].sort());
+    assert.deepEqual(f.recipientsOf(urgent[0].id), [owner.id, leader.id, otherLeader.id].sort());
     const snapshot = allViews(f);
     f.send(author.id, command);
     assert.deepEqual(allViews(f), snapshot);
@@ -385,7 +393,7 @@ test('volunteering is idempotent; leader acceptance replaces the assignment, cle
     const snapshot = allViews(f);
     f.send(other.id, volunteer);
     assert.deepEqual(allViews(f), snapshot);
-    assert.deepEqual(f.read(leader.id).notifications[0].recipientIds.sort(), [owner.id, leader.id, otherLeader.id].sort());
+    assert.deepEqual(f.recipientsOf(f.read(leader.id).notifications[0].id), [owner.id, leader.id, otherLeader.id].sort());
     f.send(otherLeader.id, volunteer);
     const accept: PlanningCommand = { type: 'slot.accept', eventId: event.id, slotId: slot.id, memberId: other.id };
     rejectsAtomically(f, other.id, accept, managerError);
@@ -399,7 +407,7 @@ test('volunteering is idempotent; leader acceptance replaces the assignment, cle
     const notification = f.read(author.id).notifications[0];
     assert.equal(notification.target, 'schedule');
     assert.equal(notification.entityId, event.id);
-    assert.deepEqual([...notification.recipientIds].sort(), people.filter(person => person.id !== leader.id).map(person => person.id).sort());
+    assert.deepEqual(f.recipientsOf(notification.id), people.filter(person => person.id !== leader.id).map(person => person.id).sort());
     rejectsAtomically(f, author.id, { type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance: 'absent', reason: '' }, /본인의 참석/);
 });
 
@@ -447,12 +455,13 @@ test('notification reads are recipient-only, self-only and idempotent, including
     const event = createEvent(f);
     const shared = f.read(author.id).notifications.find(item => item.entityId === event.id)!;
     f.send(author.id, { type: 'notification.read', notificationId: shared.id, readBy: [other.id], userId: other.id });
-    assert.deepEqual(f.read(other.id).notifications.find(item => item.id === shared.id)!.readBy, [author.id]);
+    assert.deepEqual(f.readersOf(shared.id), [author.id], 'forged readBy/userId must not mark another person');
+    assert.deepEqual(f.read(other.id).notifications.find(item => item.id === shared.id)!.readBy, [], 'others never see who else read');
     const snapshot = allViews(f);
     f.send(author.id, { type: 'notification.read', notificationId: shared.id });
     assert.deepEqual(allViews(f), snapshot);
     f.send(other.id, { type: 'notification.read', notificationId: shared.id });
-    assert.deepEqual(f.read(author.id).notifications.find(item => item.id === shared.id)!.readBy, [author.id, other.id]);
+    assert.deepEqual(f.readersOf(shared.id), [author.id, other.id].sort());
 });
 
 test('cancelled schedules close urgent alerts and reject subsequent schedule mutations', async t => {
@@ -517,7 +526,7 @@ test('two SQLite connections preserve private requests and read receipts across 
     const notification = f.read(author.id).notifications.find(item => item.entityId === event.id)!;
     first.updatePlanning(f.teamId, author.id, { type: 'notification.read', notificationId: notification.id });
     second.updatePlanning(f.teamId, other.id, { type: 'notification.read', notificationId: notification.id });
-    assert.deepEqual(f.read(author.id).notifications.find(item => item.id === notification.id)!.readBy, [author.id, other.id]);
+    assert.deepEqual(f.readersOf(notification.id), [author.id, other.id].sort());
     const snapshot = allViews(f);
     first.close(); connections.delete(first);
     second.close(); connections.delete(second);

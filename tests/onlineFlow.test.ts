@@ -129,7 +129,7 @@ test('팀원이 아닌 사람, 탈퇴한 팀원, 취소된 초대는 팀 자료�
     assert.equal(inbox(repo, keys.id).count, 0);
 });
 
-test('알림에는 다른 수신자의 읽음 상태가 그대로 실려 나간다 (설계 개선 대상)', (t) => {
+test('알림에는 보는 사람 본인의 수신 · 읽음 정보만 실리고, 다른 수신자 정보는 나가지 않는다', (t) => {
     const repo = setup(t);
     const team = repo.create('E2E 예배팀', leader);
     repo.join(repo.createInvite(team.id, leader.id).token, keys);
@@ -138,6 +138,13 @@ test('알림에는 다른 수신자의 읽음 상태가 그대로 실려 나간�
     repo.updatePlanning(team.id, keys.id, { type: 'notification.readAll' });
 
     const seenByOutsider = repo.planning(team.id, outsider.id).notifications[0];
-    assert.ok(seenByOutsider.recipientIds.includes(keys.id));
-    assert.ok(seenByOutsider.readBy.includes(keys.id), '현재 구현은 남의 읽음 여부를 노출합니다');
+    assert.deepEqual(seenByOutsider.recipientIds, [outsider.id], '다른 수신자 목록이 나가면 안 됩니다');
+    assert.deepEqual(seenByOutsider.readBy, [], '다른 사람이 읽었는지가 나가면 안 됩니다');
+    // 본인이 읽으면 본인 읽음만 보이고, 배지 집계는 그대로 동작합니다.
+    assert.equal(inbox(repo, outsider.id).count, 1);
+    repo.updatePlanning(team.id, outsider.id, { type: 'notification.read', notificationId: seenByOutsider.id });
+    assert.deepEqual(repo.planning(team.id, outsider.id).notifications[0].readBy, [outsider.id]);
+    assert.equal(inbox(repo, outsider.id).count, 0);
+    // 저장된 원본에는 모든 수신자의 읽음이 그대로 남아 있습니다 (다른 사람의 화면이 맞게 보이도록).
+    assert.deepEqual(repo.planning(team.id, keys.id).notifications[0].readBy, [keys.id]);
 });
