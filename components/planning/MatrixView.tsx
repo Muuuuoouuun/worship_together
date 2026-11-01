@@ -133,7 +133,7 @@ export default function MatrixView({
                         type="button"
                         onClick={handlePrevMonth}
                         aria-label="이전 달"
-                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-lg:hit-44"
                     >
                         <ChevronLeft size={18} />
                     </button>
@@ -144,11 +144,11 @@ export default function MatrixView({
                         type="button"
                         onClick={handleNextMonth}
                         aria-label="다음 달"
-                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-lg:hit-44"
                     >
                         <ChevronRight size={18} />
                     </button>
-                    <Button type="button" variant="outline" size="xs" className="ml-1.5" onClick={handleToday}>
+                    <Button type="button" variant="outline" size="xs" className="ml-1.5 max-lg:hit-44" onClick={handleToday}>
                         오늘
                     </Button>
                 </div>
@@ -162,7 +162,7 @@ export default function MatrixView({
                                 aria-pressed={filterKind === value}
                                 onClick={() => setFilterKind(value)}
                                 className={cn(
-                                    'inline-flex h-8 items-center rounded-full px-3 text-xs font-medium transition-colors',
+                                    'inline-flex h-8 items-center rounded-full px-3 text-xs font-medium transition-colors max-lg:hit-44',
                                     filterKind === value ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                                 )}
                             >

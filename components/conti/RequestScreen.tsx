@@ -54,7 +54,7 @@ export default function RequestScreen() {
                             role="tab"
                             aria-selected={active}
                             onClick={() => setFilter(item.id)}
-                            className={cn('relative -mb-px flex h-11 items-center gap-1 border-b-2 text-sm transition', active ? tabOn : tabOff)}
+                            className={cn('relative -mb-px flex h-11 items-center gap-1 border-b-2 text-sm transition max-lg:hit-44', active ? tabOn : tabOff)}
                         >
                             {item.label}
                             <span className="text-xs tabular-nums opacity-70">{count}</span>

@@ -164,7 +164,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                     title="팀 소식"
                     badge={sample}
                     meta={unread > 0 ? `새 소식 ${unread}` : undefined}
-                    action={<button type="button" onClick={() => go('alerts')} className={cn('text-xs font-medium underline-offset-2 hover:underline', body)}>모두 보기</button>}
+                    action={<button type="button" onClick={() => go('alerts')} className={cn('text-xs font-medium underline-offset-2 hover:underline max-lg:hit-44', body)}>모두 보기</button>}
                 />
                 <ul>
                     {planning.notices.slice(0, 3).map((notice) => (
@@ -189,7 +189,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                     title={`${dayName(day)} 일정`}
                     badge={sample}
                     meta={`${monthOf(day)}/${dayOf(day)}`}
-                    action={<button type="button" onClick={() => go('team')} className={cn('text-xs font-medium underline-offset-2 hover:underline', body)}>팀 배치</button>}
+                    action={<button type="button" onClick={() => go('team')} className={cn('text-xs font-medium underline-offset-2 hover:underline max-lg:hit-44', body)}>팀 배치</button>}
                 />
                 <ul className={divide}>
                     {events.map((event) => {

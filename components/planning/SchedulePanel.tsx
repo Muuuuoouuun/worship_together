@@ -1638,11 +1638,12 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                 ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 max-lg:gap-y-3">
                 {myPendingSlots.length > 1 ? (
                     <Button
                         type="button"
                         size="xs"
+                        className="max-lg:hit-44"
                         disabled={actions.disabled}
                         onClick={() => void actions.send({
                             type: 'attendance.batchConfirm',
@@ -1653,7 +1654,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                     </Button>
                 ) : null}
                 {myUpcomingSlots.length > 0 && (
-                    <Button type="button" variant="outline" size="xs" onClick={() => void handleCopyMySchedule()} title="내 이번 달 사역 일정을 카카오톡용으로 원클릭 복사합니다">
+                    <Button type="button" variant="outline" size="xs" className="max-lg:hit-44" onClick={() => void handleCopyMySchedule()} title="내 이번 달 사역 일정을 카카오톡용으로 원클릭 복사합니다">
                         {copiedMySchedule ? (
                             <><Check className="text-brand" /><span className="text-brand">내 사역 복사됨!</span></>
                         ) : (
@@ -1661,7 +1662,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                         )}
                     </Button>
                 )}
-                <Button type="button" variant="outline" size="xs" onClick={() => setBlockedDatesModalOpen(true)} title="섬길 수 없는 날짜를 미리 등록해 두면 자동 배분에서 제외됩니다">
+                <Button type="button" variant="outline" size="xs" className="max-lg:hit-44" onClick={() => setBlockedDatesModalOpen(true)} title="섬길 수 없는 날짜를 미리 등록해 두면 자동 배분에서 제외됩니다">
                     <CalendarX2 className="text-muted-foreground" />
                     <span>사역 불가일 등록</span>
                     {myBlockedCount > 0 ? <span className="font-semibold tabular-nums text-destructive">{myBlockedCount}</span> : null}
@@ -1947,7 +1948,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                             type="button"
                             aria-pressed={viewMode === value}
                             className={cn(
-                                'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
+                                'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors max-lg:h-9 max-lg:hit-44',
                                 viewMode === value ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                             )}
                             onClick={() => setViewMode(value)}
@@ -1956,7 +1957,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                         </button>
                     ))}
                 </div>
-                <Button type="button" variant="outline" size="sm" className="max-sm:w-9 max-sm:px-0" title="이번 달 다가오는 모든 예배/연습 섬김 명단을 카카오톡 단톡방용으로 전체 복사합니다" onClick={() => void handleCopyMonthly()}>
+                <Button type="button" variant="outline" size="sm" className="max-sm:w-9 max-sm:px-0 max-lg:hit-44" title="이번 달 다가오는 모든 예배/연습 섬김 명단을 카카오톡 단톡방용으로 전체 복사합니다" onClick={() => void handleCopyMonthly()}>
                     {copiedMonthly ? (
                         <><Check className="text-brand" /><span className="max-sm:sr-only text-brand">사역표 복사됨!</span></>
                     ) : (
@@ -1985,7 +1986,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                     <button
                                         type="button"
                                         onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }}
-                                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground max-lg:hit-44"
                                         title="검색어 지우기 (Esc)"
                                         aria-label="검색어 지우기"
                                     >
@@ -2007,7 +2008,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                 type="button"
                                 aria-pressed={filter === value}
                                 className={cn(
-                                    '-mb-px flex h-11 shrink-0 items-center border-b-2 text-sm transition-colors',
+                                    '-mb-px flex h-11 shrink-0 items-center border-b-2 text-sm transition-colors max-lg:hit-44',
                                     filter === value ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
                                 )}
                                 onClick={() => { setFilter(value); setNow(Date.now()); }}
@@ -2018,14 +2019,14 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                     </div>
 
                     {/* 파트별 빠른 필터 */}
-                    <div role="group" aria-label="파트별 필터" className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 pt-1">
+                    <div role="group" aria-label="파트별 필터" className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 max-lg:py-1.5">
                         {PART_FILTERS.map(([val, lbl]) => (
                             <button
                                 key={val}
                                 type="button"
                                 aria-pressed={roleFilter === val}
                                 className={cn(
-                                    'inline-flex h-8 shrink-0 items-center rounded-full px-3 text-xs font-medium transition-colors',
+                                    'inline-flex h-8 shrink-0 items-center rounded-full px-3 text-xs font-medium transition-colors max-lg:hit-44',
                                     roleFilter === val ? 'bg-primary font-semibold text-primary-foreground' : 'border border-border text-foreground/75 hover:bg-muted',
                                 )}
                                 onClick={() => setRoleFilter(val)}

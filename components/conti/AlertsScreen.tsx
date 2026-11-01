@@ -108,7 +108,7 @@ export default function AlertsScreen({ onBack, openOrder, go }: { onBack?: () =>
                             role="tab"
                             aria-selected={active}
                             onClick={() => setFilter(item.id)}
-                            className={cn('-mb-px h-11 border-b-2 text-sm transition', active ? tabOn : tabOff)}
+                            className={cn('-mb-px h-11 border-b-2 text-sm transition max-lg:hit-44', active ? tabOn : tabOff)}
                         >
                             {item.label}
                         </button>

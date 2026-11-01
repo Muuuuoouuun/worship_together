@@ -130,13 +130,13 @@ export default function LiveSessionMiniBar() {
                             <span className="block truncate text-sm font-semibold">{live.currentSongTitle ? `지금 「${live.currentSongTitle}」` : live.title}</span>
                         </span>
                     </Link>
-                    <Link href={liveHref(live.id)} className="inline-flex h-9 shrink-0 items-center rounded-full bg-brand-foreground px-4 text-xs font-semibold text-brand transition-opacity hover:opacity-90">
+                    <Link href={liveHref(live.id)} className="inline-flex h-9 shrink-0 items-center rounded-full bg-brand-foreground px-4 text-xs font-semibold text-brand transition-opacity hover:opacity-90 max-lg:hit-44">
                         입장
                     </Link>
                     <button
                         type="button"
                         onClick={() => setDismissed(dismissKey)}
-                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-brand-foreground/75 transition-colors hover:bg-brand-foreground/15 hover:text-brand-foreground"
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-brand-foreground/75 transition-colors hover:bg-brand-foreground/15 hover:text-brand-foreground max-lg:hit-44"
                         aria-label="진행 중인 예배 바 닫기"
                     >
                         <X size={15} />
@@ -188,7 +188,7 @@ export default function LiveSessionMiniBar() {
                     {connection ? null : (
                         <Link
                             href={teamSessionHref}
-                            className="hidden h-9 items-center gap-1 whitespace-nowrap rounded-full border border-border px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted sm:inline-flex"
+                            className="hidden h-9 items-center gap-1 whitespace-nowrap rounded-full border border-border px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted max-lg:hit-44 sm:inline-flex"
                             title="팀원 화면으로 입장"
                         >
                             <Users size={13} className="text-muted-foreground" aria-hidden="true" />
@@ -197,7 +197,7 @@ export default function LiveSessionMiniBar() {
                     )}
                     <Link
                         href={sessionHref}
-                        className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-3.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                        className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-3.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 max-lg:hit-44"
                     >
                         <Radio size={13} aria-hidden="true" />
                         <span>{startLabel}</span>
@@ -205,7 +205,7 @@ export default function LiveSessionMiniBar() {
                     <button
                         type="button"
                         onClick={() => setDismissed(dismissKey)}
-                        className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-lg:hit-44"
                         aria-label="미니 플레이어 닫기"
                     >
                         <X size={15} />

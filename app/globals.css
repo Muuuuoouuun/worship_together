@@ -142,6 +142,22 @@
   }
 }
 
+/*
+ * 보이는 크기는 그대로 두고 손가락이 닿는 면만 44×44px 이상으로 넓힙니다 (모양 없는 ::after 가 컨트롤을 덮음).
+ * 컨트롤이 이미 44px 이상인 쪽은 넓히지 않습니다. 이웃 컨트롤과는 중심 사이가 44px 이상이거나 가장자리가 맞닿게 두세요.
+ * 가로(overflow-x)로 스크롤되는 줄 안에서는 세로로 넓힌 면이 잘리므로 줄 안쪽 여백을 함께 키워 둡니다.
+ * 폰·태블릿에서만 쓰려면 max-lg:hit-44.
+ */
+@utility hit-44 {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: min(0px, calc((100% - 44px) / 2));
+  }
+}
+
 @layer utilities {
   .safe-area-x {
     padding-left: max(1rem, env(safe-area-inset-left));

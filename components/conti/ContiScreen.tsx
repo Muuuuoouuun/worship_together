@@ -49,11 +49,11 @@ export default function ContiScreen({ openOrder }: { openOrder: (id: string) => 
                     <p className={cn('text-sm font-semibold', ink)}>
                         {view.year}년 {view.month}월
                     </p>
-                    <div className="flex items-center gap-1">
-                        <button type="button" aria-label="이전 달" onClick={() => shiftMonth(-1)} className={cn('flex size-8 items-center justify-center rounded-full', sub)}>
+                    <div className="flex items-center gap-1 max-lg:gap-3.5">
+                        <button type="button" aria-label="이전 달" onClick={() => shiftMonth(-1)} className={cn('flex size-8 items-center justify-center rounded-full max-lg:hit-44', sub)}>
                             <ChevronLeft size={18} />
                         </button>
-                        <button type="button" aria-label="다음 달" onClick={() => shiftMonth(1)} className={cn('flex size-8 items-center justify-center rounded-full', sub)}>
+                        <button type="button" aria-label="다음 달" onClick={() => shiftMonth(1)} className={cn('flex size-8 items-center justify-center rounded-full max-lg:hit-44', sub)}>
                             <ChevronRight size={18} />
                         </button>
                     </div>

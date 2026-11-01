@@ -33,7 +33,7 @@ export default function PageTabs<T extends string>({ tabs, value, onChange, labe
                         aria-controls={tab.controls}
                         onClick={() => onChange(tab.id)}
                         className={cn(
-                            '-mb-px flex h-11 shrink-0 items-center gap-1.5 border-b-2 text-sm transition-colors',
+                            '-mb-px flex h-11 shrink-0 items-center gap-1.5 border-b-2 text-sm transition-colors max-lg:hit-44',
                             active ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
                         )}
                     >

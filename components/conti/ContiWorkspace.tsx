@@ -136,7 +136,7 @@ export default function ContiWorkspace({
                                     aria-selected={active}
                                     onClick={() => go(tab.id)}
                                     className={cn(
-                                        'relative -mb-px flex h-12 shrink-0 items-center gap-1.5 border-b-2 text-sm transition',
+                                        'relative -mb-px flex h-12 shrink-0 items-center gap-1.5 border-b-2 text-sm transition max-lg:hit-44',
                                         active ? cn('border-foreground font-semibold', ink) : cn('border-transparent', sub),
                                     )}
                                 >

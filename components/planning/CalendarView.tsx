@@ -155,12 +155,12 @@ export default function CalendarView({
                     <h3 className="text-[15px] font-semibold tabular-nums text-foreground">
                         {year}년 {month}월
                     </h3>
-                    <Button type="button" variant="outline" size="xs" onClick={handleToday}>
+                    <Button type="button" variant="outline" size="xs" className="max-lg:hit-44" onClick={handleToday}>
                         오늘
                     </Button>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 max-lg:gap-3.5">
                     {manager && (
                         <Button type="button" variant="outline" size="xs" className="mr-1 hidden sm:inline-flex" onClick={onOpenMonthlySundaysModal}>
                             <CalendarDays className="text-muted-foreground" />
@@ -170,7 +170,7 @@ export default function CalendarView({
                     <button
                         type="button"
                         onClick={handlePrevMonth}
-                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-lg:hit-44"
                         aria-label="이전 달"
                     >
                         <ChevronLeft size={18} />
@@ -178,7 +178,7 @@ export default function CalendarView({
                     <button
                         type="button"
                         onClick={handleNextMonth}
-                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-lg:hit-44"
                         aria-label="다음 달"
                     >
                         <ChevronRight size={18} />
