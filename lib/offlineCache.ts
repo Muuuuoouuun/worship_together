@@ -1,0 +1,22 @@
+/**
+ * 서비스 워커(public/sw.js)는 오프라인에서 다시 열 수 있게 방문한 화면 HTML 을 `<버전>-pages` 캐시에 보관합니다.
+ * 이 화면에는 로그인한 사람의 팀 · 일정이 들어 있으므로, 로그아웃할 때 지워 같은 기기의 다음 사람이
+ * 오프라인에서 앞사람의 화면을 보지 않게 합니다. 아이콘 · 빌드 조각 캐시는 개인 정보가 없어 남깁니다.
+ */
+export const PAGE_CACHE_SUFFIX = '-pages';
+
+export function isPageCacheName(name: string): boolean {
+    return name.startsWith('worship-together-') && name.endsWith(PAGE_CACHE_SUFFIX);
+}
+
+export async function clearOfflinePageCache(storage: Pick<CacheStorage, 'keys' | 'delete'> | undefined = globalThis.caches): Promise<number> {
+    if (!storage) return 0;
+    try {
+        const names = (await storage.keys()).filter(isPageCacheName);
+        await Promise.all(names.map((name) => storage.delete(name)));
+        return names.length;
+    } catch {
+        // 저장소를 쓸 수 없는 환경(비공개 창 등)에서는 지울 것도 없습니다.
+        return 0;
+    }
+}

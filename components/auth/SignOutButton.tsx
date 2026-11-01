@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signOut } from "next-auth/react";
 import styles from "./AuthControls.module.css";
 import { dropPushSubscription } from "@/lib/pushClient";
+import { clearOfflinePageCache } from "@/lib/offlineCache";
 
 export default function SignOutButton() {
   const [pending, setPending] = useState(false);
@@ -14,6 +15,8 @@ export default function SignOutButton() {
     try {
       // 이 기기로 앞사람의 알림이 계속 오지 않게, 로그아웃 전에 푸시를 끊습니다.
       await dropPushSubscription();
+      // 오프라인용으로 보관한 화면에는 내 팀 자료가 들어 있으므로 함께 지웁니다.
+      await clearOfflinePageCache();
       await signOut({ callbackUrl: "/login?signedOut=1" });
     }
     catch { setFailed(true); setPending(false); }
