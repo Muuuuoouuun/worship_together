@@ -181,9 +181,13 @@ export default function TeamConnection({ value, children }: { value: TeamConnect
                     return;
                 default:
             }
-        }, (status) => { if (active) setStream(status); });
+        }, (status) => {
+            // 연결 상태를 <html data-team-stream> 에도 남깁니다 (e2e 가 소식 흐름이 붙은 뒤에 다음 단계로 가도록 기다리는 표시).
+            if (active) { setStream(status); document.documentElement.dataset.teamStream = status; }
+        });
         return () => {
             active = false;
+            delete document.documentElement.dataset.teamStream;
             unsubscribe();
             if (refreshTimer.current) clearTimeout(refreshTimer.current);
             if (syncTimer.current) clearTimeout(syncTimer.current);

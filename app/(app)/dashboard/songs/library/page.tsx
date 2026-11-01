@@ -8,6 +8,7 @@ import LibraryTeamWorkspace from '@/components/library/LibraryTeamWorkspace';
 import { getViewer } from '@/lib/server/viewer';
 import { can } from '@/lib/permissions';
 import { LIBRARY_DENIAL_MESSAGES } from '@/lib/legacyAccess';
+import { libraryMutationAccess } from '@/lib/server/legacyAccess';
 
 export const metadata: Metadata = {
     title: '곡 보관함',
@@ -50,6 +51,10 @@ export default async function SongArchivePage({ searchParams }: LibraryPageProps
     const onlineTeams = viewer ? viewer.teams.map(team => ({ id: team.id, name: team.name })) : [];
     const createdKey = getParam(params.created);
     const errorKey = getParam(params.error);
+    // Supabase 가 연결돼 있고 온라인 팀이 없으면 예전 Supabase 저장 폼(서버 액션)이 보입니다. 이 사람이 이 팀을 바꿀 수 없으면
+    // (lib/legacyAccess canMutateLibrary — 지금은 데모 팀이라 항상 거부) 누를 때마다 실패하는 버튼 대신 그 안내를 보여 줍니다.
+    const legacyAccess = hasSupabase && !onlineTeams.length ? await libraryMutationAccess(DEMO_TEAM_ID) : null;
+    const legacyDenied = legacyAccess && !legacyAccess.ok ? legacyAccess.reason : null;
 
     return (
         <>
@@ -58,8 +63,9 @@ export default async function SongArchivePage({ searchParams }: LibraryPageProps
 
                 {createdKey && successMessages[createdKey] && <Notice tone="success">{successMessages[createdKey]}</Notice>}
                 {errorKey && errorMessages[errorKey] && <Notice tone="error">{errorMessages[errorKey]}</Notice>}
+                {legacyDenied && legacyDenied !== errorKey && <Notice>{errorMessages[legacyDenied]}</Notice>}
 
-                <LibraryTeamWorkspace initialSongs={withoutMusicXml(songs)} initialSetlists={setlists} teamId={DEMO_TEAM_ID} hasBackend={hasSupabase} onlineTeams={onlineTeams} onlineTeamId={viewer?.team?.id} canEditConti={viewer?.member ? can(viewer.member, viewer.policy, 'contiEdit') : true} />
+                <LibraryTeamWorkspace initialSongs={withoutMusicXml(songs)} initialSetlists={setlists} teamId={DEMO_TEAM_ID} hasBackend={hasSupabase} onlineTeams={onlineTeams} onlineTeamId={viewer?.team?.id} canEditConti={viewer?.member ? can(viewer.member, viewer.policy, 'contiEdit') : true} canEdit={legacyDenied ? false : undefined} />
             </div>
         </>
     );

@@ -78,6 +78,8 @@ export class TeamEvents {
     /**
      * 소식을 쌓고 열려 있는 화면에 보냅니다. 저장소 쓰기 트랜잭션이 커밋된 뒤에 부르세요 —
      * 트랜잭션 안에서 부르면 그 저장이 되돌려져도 화면은 이미 소식을 받습니다.
+     * 잠금 충돌이면 다시 시도하지 않고 바로 던집니다(부르는 쪽이 잡아 기록). 저장은 이미 끝났고, 놓친 소식은
+     * 화면이 다시 연결 · 주기 확인 때 따라잡으므로, 두 번째 시도로 서버를 busy_timeout 만큼 더 붙잡지 않습니다.
      */
     publish(teamId: string, type: TeamEventType, payload: unknown, audience: string[] | null = null): TeamEvent {
         const createdAt = new Date().toISOString();
@@ -92,7 +94,7 @@ export class TeamEvents {
                 if (floor) this.db.prepare('DELETE FROM team_events WHERE team_id = ? AND id <= ?').run(teamId, floor.id);
             }
             return Number(result.lastInsertRowid);
-        });
+        }, { attempts: 1 });
         this.published.set(teamId, count % 50);
         const event: TeamEvent = { id, teamId, type, payload, audience: recipients, createdAt };
         this.emitter.emit(teamId, event);

@@ -6,10 +6,10 @@
 -- Supabase 는 NEXT_PUBLIC_SUPABASE_URL · NEXT_PUBLIC_SUPABASE_ANON_KEY 를 넣었을 때만 쓰는 예전 경로
 -- (actions/libraryActions.ts 의 곡 · 콘티 저장, /session/[id] 의 세션 읽기)이며, 비워 두는 것이 기본입니다.
 --
--- 보안 기본값: 모든 테이블에 RLS 를 켜고 anon 에게는 아무 정책도 주지 않습니다(= 읽기 · 쓰기 모두 거부).
--- 이 앱은 Supabase Auth 가 아니라 NextAuth 로 로그인하므로, 브라우저의 anon 키로는 auth.uid() 가 없습니다.
--- 예전 경로를 다시 쓰려면 서버에서만 service_role 키로 쓰고(RLS 를 건너뜀), anon 쓰기 정책은 만들지 마세요.
--- 아래의 읽기 정책은 Supabase Auth 로 로그인한 그 팀의 팀원(team_members)에게만 열려 있습니다.
+-- 보안(RLS · 권한 · 정책)은 supabase/migrations/20261101_rls.sql 에 따로 있습니다 — 이 파일 다음에 실행하세요.
+-- 그 파일은 모든 팀 데이터 테이블에 RLS 를 켜고 anon 에게는 아무 정책도 주지 않습니다(= 읽기 · 쓰기 모두 거부).
+-- 적용하면 anon 키를 쓰는 예전 경로는 동작하지 않으므로, 다시 쓰려면 서버 전용 service_role 클라이언트가 필요합니다
+-- (아직 없음 — 자세한 내용은 그 파일 머리말).
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- Enable UUID extension
@@ -183,74 +183,6 @@ create table annotations (
 -- Storage Buckets Configuration (Pseudo-code, to be set up in dashboard)
 -- insert into storage.buckets (id, name, public) values ('sheets', 'sheets', true);
 
--- RLS Policies
-alter table profiles enable row level security;
-create policy "Public profiles are viewable by everyone." on profiles for select using (true);
-create policy "Users can insert their own profile." on profiles for insert with check (auth.uid() = id);
-create policy "Users can update own profile." on profiles for update using (auth.uid() = id);
-
--- 팀 데이터: RLS 를 켜면 정책이 없는 동작은 모두 거부됩니다(anon · authenticated 모두).
--- service_role(서버 전용 키)은 RLS 를 건너뛰므로, 쓰기는 서버에서 권한을 확인한 뒤 service_role 로만 하세요.
-alter table teams enable row level security;
-alter table team_members enable row level security;
-alter table songs enable row level security;
-alter table setlists enable row level security;
-alter table service_preparation enable row level security;
-alter table service_assignments enable row level security;
-alter table service_readiness_checks enable row level security;
-alter table song_preparation_notes enable row level security;
-alter table sessions enable row level security;
-alter table session_feedback enable row level security;
-alter table session_state enable row level security;
-alter table annotations enable row level security;
-
--- anon 키로는 팀 데이터에 아예 닿지 않게 테이블 권한도 거둡니다 (RLS 와 이중 잠금).
-revoke all on teams, team_members, songs, setlists, service_preparation, service_assignments,
-  service_readiness_checks, song_preparation_notes, sessions, session_feedback, session_state, annotations
-  from anon;
-
--- 이 사람(auth.uid())이 그 팀의 팀원인지. team_members 정책이 자기 자신을 다시 읽으며 무한히 도는 것을 막으려고
--- security definer 함수로 확인합니다.
-create or replace function public.is_team_member(target_team uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.team_members m
-    where m.team_id = target_team and m.user_id = auth.uid()
-  );
-$$;
-revoke all on function public.is_team_member(uuid) from public;
-grant execute on function public.is_team_member(uuid) to authenticated;
-
--- 읽기: 로그인한(Supabase Auth) 그 팀의 팀원만. 쓰기 정책은 일부러 만들지 않습니다(= 거부).
-create policy "Members can view their teams." on teams for select to authenticated using (public.is_team_member(id));
-create policy "Members can view their team roster." on team_members for select to authenticated using (public.is_team_member(team_id));
-create policy "Members can view team songs." on songs for select to authenticated using (public.is_team_member(team_id));
-create policy "Members can view team setlists." on setlists for select to authenticated using (public.is_team_member(team_id));
-create policy "Members can view service preparation." on service_preparation for select to authenticated using (public.is_team_member(team_id));
-create policy "Members can view service assignments." on service_assignments for select to authenticated using (
-  exists (select 1 from service_preparation p where p.id = service_preparation_id and public.is_team_member(p.team_id))
-);
-create policy "Members can view readiness checks." on service_readiness_checks for select to authenticated using (
-  exists (
-    select 1 from service_assignments a
-    join service_preparation p on p.id = a.service_preparation_id
-    where a.id = service_assignment_id and public.is_team_member(p.team_id)
-  )
-);
-create policy "Members can view song preparation notes." on song_preparation_notes for select to authenticated using (
-  exists (select 1 from service_preparation p where p.id = service_preparation_id and public.is_team_member(p.team_id))
-);
-create policy "Members can view team sessions." on sessions for select to authenticated using (public.is_team_member(team_id));
-create policy "Members can view session feedback." on session_feedback for select to authenticated using (public.is_team_member(team_id));
-create policy "Members can view session state." on session_state for select to authenticated using (
-  exists (select 1 from sessions s where s.id = session_id and public.is_team_member(s.team_id))
-);
-create policy "Members view shared annotations; owners view private ones." on annotations for select to authenticated using (
-  user_id = auth.uid()
-  or (not is_private and exists (select 1 from songs s where s.id = song_id and public.is_team_member(s.team_id)))
-);
+-- RLS · 권한 · 정책은 supabase/migrations/20261101_rls.sql 에 있습니다.
+-- 이 파일(테이블 만들기)을 실행한 뒤 그 파일을 실행하세요. 그 파일은 여러 번 실행해도 되고, 이미 테이블이 있는
+-- 운영 프로젝트에는 이 파일 대신 그 파일만 실행합니다(이 파일의 create table 은 이미 있으면 오류로 멈춥니다).

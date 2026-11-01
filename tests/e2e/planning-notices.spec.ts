@@ -125,9 +125,18 @@ test.describe('불참 응답과 비소속 팀 주소', () => {
 
     test('a declined slot reaches the leader as an urgent absence notice without a reload', async () => {
         // 인도자는 일정 화면이 아닌 홈에 있습니다 (일정 화면 밖에서도 배지와 알림 줄이 떠야 합니다).
+        // 배지는 0건이면 아무것도 그리지 않으므로, 배지가 처음 읽은 결과(loadPlanningInbox 응답)를 직접 기다려 0건임을 확인합니다.
+        const firstInbox = leader.page.waitForResponse(async response => {
+            if (response.request().method() !== 'POST' || !response.request().headers()['next-action'] || new URL(response.url()).pathname !== '/dashboard') return false;
+            return /"count":\d+,"urgent":\d+/.test(await response.text().catch(() => ''));
+        });
         await leader.page.goto('/dashboard');
+        const inboxBody = await (await firstInbox).text();
+        expect(inboxBody.match(/"count":\d+,"urgent":(\d+)/)?.[1]).toBe('0');
         const badge = leader.page.locator('aside[aria-label="팀 준비 알림"]');
         await expect(badge.getByText(/긴급 미확인/)).toHaveCount(0);
+        // 팀 소식 흐름은 연결한 뒤의 소식만 보내므로, 인도자 화면이 연결된 뒤에 팀원이 응답합니다.
+        await expect(leader.page.locator('html')).toHaveAttribute('data-team-stream', 'online');
 
         const duty = member.page.getByRole('region', { name: '나의 다가오는 섬김과 참석 응답' });
         await member.page.goto('/dashboard/planning');

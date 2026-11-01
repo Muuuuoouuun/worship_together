@@ -5,6 +5,8 @@ import type Database from 'better-sqlite3';
  * - 쓰기는 BEGIN IMMEDIATE 로 시작해 처음부터 쓰기 잠금을 잡습니다. 그래야 busy_timeout 동안 기다립니다
  *   (BEGIN DEFERRED 로 읽다가 쓰기로 올리면, 그새 다른 프로세스가 저장한 경우 기다리지 않고 바로 SQLITE_BUSY_SNAPSHOT 이 납니다).
  * - 그래도 잠금 충돌이면 한 번 더 시도하고, 그래도 안 되면 화면에 보여 줄 한국어 안내로 바꿔 던집니다.
+ *   기다리는 동안 이벤트 루프가 멈추므로 busy_timeout 은 짧게(teamRepository BUSY_TIMEOUT_MS) 두고,
+ *   잃어도 되는 쓰기(팀 소식 publish)는 attempts: 1 로 다시 시도하지 않습니다.
  * - 트랜잭션 안에서는 소식(events.publish)을 내보내지 않습니다. 저장이 끝난(커밋된) 뒤에 내보내야
  *   되돌려진 저장의 소식을 다른 화면이 받지 않고, 다시 시도할 때 소식이 두 번 나가지도 않습니다.
  */

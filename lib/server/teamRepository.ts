@@ -8,6 +8,8 @@ import type { PlanningCommand, PlanningNotification, PlanningState } from '../..
 import type { InvitationPreview, OnlineTeam, TeamIdentity, TeamMember, UserProfile, WorshipRole } from '../../types/team';
 import { writeTransaction } from './sqliteRetry';
 
+/** 다른 프로세스의 쓰기 잠금을 기다리는 최대 시간(ms). 2프로세스 부하 검사(쓰기 · 소식 · 팀 자료 섞어서)에서 실패 0 을 지키는 값 */
+export const BUSY_TIMEOUT_MS = 1500;
 const roles = new Set(['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member']);
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 type TeamRow = { id: string; name: string; owner_id: string; created_at: string };
@@ -28,7 +30,9 @@ export class TeamRepository {
         this.db = new Database(filename);
         this.db.pragma('journal_mode = WAL');
         this.db.pragma('foreign_keys = ON');
-        this.db.pragma('busy_timeout = 5000');
+        // 잠금을 기다리는 동안 better-sqlite3 는 Node 이벤트 루프를 멈춥니다(모든 요청 · 실시간 소식이 함께 멈춤).
+        // 그래서 짧게 기다리고(1.5초 × 저장 2번 시도), 그래도 안 되면 "잠시 후 다시" 안내로 돌려줍니다.
+        this.db.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS online_teams (id TEXT PRIMARY KEY, name TEXT NOT NULL, owner_id TEXT NOT NULL, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS online_members (team_id TEXT NOT NULL REFERENCES online_teams(id) ON DELETE CASCADE, user_id TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member', permission TEXT NOT NULL CHECK(permission IN ('owner','member')), PRIMARY KEY(team_id, user_id));

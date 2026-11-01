@@ -25,14 +25,18 @@ export interface NoticePayload {
 
 export type NoticePush = (recipientIds: string[], notice: NoticePayload) => void;
 
-export function deliverNotices(events: TeamEvents, teamId: string, created: PlanningNotification[], byId: string, push?: NoticePush | null) {
+/**
+ * 알림마다 따로 보냅니다. 한 알림의 소식(planning.notice) 저장이 실패해도(잠금 충돌 등)
+ * 그 알림의 푸시와 뒤따르는 알림은 그대로 나갑니다 — 열린 화면은 알림 배지의 주기 확인으로 따라잡습니다.
+ */
+export function deliverNotices(events: Pick<TeamEvents, 'publish'>, teamId: string, created: PlanningNotification[], byId: string, push?: NoticePush | null) {
     // 알림 목록은 최신이 앞이므로, 만든 순서대로 보내려고 뒤집습니다.
     for (const item of [...created].reverse()) {
         const audience = item.recipientIds.filter((id) => !isPlaceholderMember(id));
         if (!audience.length) continue;
         const payload: NoticePayload = { id: item.id, teamId, title: item.title, body: item.body, urgent: item.urgent, target: item.target, entityId: item.entityId, slotId: item.slotId ?? null, by: byId };
-        events.publish(teamId, 'planning.notice', payload, audience);
-        try { push?.(audience, payload); } catch (error) { console.error('[notices] push', error); }
+        try { events.publish(teamId, 'planning.notice', payload, audience); } catch (error) { console.error('[notices] publish', item.id, error); }
+        try { push?.(audience, payload); } catch (error) { console.error('[notices] push', item.id, error); }
     }
 }
 
@@ -40,7 +44,7 @@ const setlistDetailsPrefix = (teamId: string) => `worship:setlist-details:v1:${e
 const libraryKey = (teamId: string) => `worship-together:library:v1:${encodeURIComponent(teamId)}`;
 
 /** 콘티가 저장되면 확정 · 변경 알림을 만듭니다 (lib/contiNotices). */
-export function contiSaveHook(teams: TeamRepository, docs: TeamDocs, events: TeamEvents, push?: () => NoticePush | null): DocSavedHook {
+export function contiSaveHook(teams: TeamRepository, docs: TeamDocs, events: Pick<TeamEvents, 'publish'>, push?: () => NoticePush | null): DocSavedHook {
     return ({ teamId, user, key, kind, before, after }) => {
         if (kind !== 'setlist-details' && kind !== 'library') return;
         const { state, members } = teams.planningSnapshot(teamId);
@@ -57,7 +61,8 @@ export function contiSaveHook(teams: TeamRepository, docs: TeamDocs, events: Tea
         });
         if (!notices.length) return;
         const created = teams.addNotices(teamId, notices.map((item) => ({ title: item.title, body: item.body, target: 'conti' as const, entityId: item.setlistId, recipientIds: item.recipientIds })));
-        events.publish(teamId, 'planning.changed', { by: user.id });
+        // 알림은 이미 저장됐습니다. 화면 새로고침 소식이 실패해도 알림 · 푸시는 보냅니다.
+        try { events.publish(teamId, 'planning.changed', { by: user.id }); } catch (error) { console.error('[notices] planning.changed', error); }
         deliverNotices(events, teamId, created, user.id, push?.());
     };
 }

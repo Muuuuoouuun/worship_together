@@ -15,12 +15,15 @@ async function run(teamId: string, command?: PlanningCommand): Promise<TeamActio
         const { state: value, created } = repository.applyPlanning(teamId, user.id, command);
         // 여기부터는 이미 저장된 뒤입니다. 소식 전달이 실패해도 저장은 성공으로 돌려주고
         // (다른 화면은 다시 연결 · 폴링 때 따라잡습니다), 같은 명령을 다시 보내 중복 저장되지 않게 합니다.
+        // 두 단계는 따로 시도합니다 — 화면 새로고침 소식이 실패(잠금 충돌 등)해도 긴급 알림 · 푸시는 나가야 합니다.
         try {
             // 일정 · 요청 · 소식을 보고 있는 다른 팀원 화면이 바로 다시 읽습니다.
             getTeamEvents().publish(teamId, 'planning.changed', { by: user.id });
+        } catch (error) { console.error('[planning] planning.changed 발행 실패', error); }
+        try {
             // 새 알림은 받는 사람에게만, 어느 화면에 있든 바로 띄웁니다.
             deliverTeamNotices(teamId, created, user.id);
-        } catch (error) { console.error('[planning] 저장 후 소식 전달 실패', error); }
+        } catch (error) { console.error('[planning] 알림 전달 실패', error); }
         return { ok: true, value };
     } catch (error) {
         const message = error instanceof Error ? error.message : '';

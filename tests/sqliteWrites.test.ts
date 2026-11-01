@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { SQLITE_BUSY_MESSAGE, SqliteBusyError, isSqliteBusy, withBusyRetry, writeTransaction } from '../lib/server/sqliteRetry';
-import { TeamRepository } from '../lib/server/teamRepository';
+import { BUSY_TIMEOUT_MS, TeamRepository } from '../lib/server/teamRepository';
 import { TeamEvents, type TeamEvent } from '../lib/server/teamEvents';
 import { TeamDocs } from '../lib/server/teamDocs';
 import { LiveRepository } from '../lib/server/liveRepository';
@@ -121,6 +121,41 @@ test('a repository write blocked by another process retries once, then fails wit
         assert.throws(() => repo.updatePlanning(team.id, owner.id, command), (error: unknown) => error instanceof Error && error.message === SQLITE_BUSY_MESSAGE);
         other.exec('COMMIT');
         assert.equal(repo.updatePlanning(team.id, owner.id, command).requests.length, 1);
+    } finally { other.close(); repo.close(); cleanup(); }
+});
+
+test('the lock wait stays short: each connection waits at most ~1.5 s, so a contended save blocks the event loop for at most ~3 s', () => {
+    const repo = new TeamRepository(':memory:');
+    try {
+        assert.equal(BUSY_TIMEOUT_MS, 1500);
+        assert.equal(repo.database.pragma('busy_timeout', { simple: true }), BUSY_TIMEOUT_MS);
+    } finally { repo.close(); }
+});
+
+test('a team-event publish blocked by another process fails after one attempt (no retry) and works once the lock is released', () => {
+    const { file, cleanup } = tempFile();
+    const repo = new TeamRepository(file);
+    const other = new Database(file);
+    // TeamEvents 가 쓰기 트랜잭션을 몇 번 시작했는지 셉니다 (BEGIN IMMEDIATE 한 번 = 시도 한 번).
+    let eventAttempts = 0;
+    const counted = new Proxy(repo.database, {
+        get(target, prop) {
+            if (prop === 'transaction') return (fn: () => unknown) => { const tx = target.transaction(fn); return Object.assign(() => tx(), { immediate: () => { eventAttempts += 1; return tx.immediate(); } }); };
+            const value = Reflect.get(target, prop, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+        },
+    });
+    const events = new TeamEvents(counted);
+    try {
+        const owner = { id: 'publish-owner', name: '인도자' };
+        const team = repo.create('소식 재시도 팀', owner);
+        repo.database.pragma('busy_timeout = 0');
+        other.exec('BEGIN IMMEDIATE');
+        assert.throws(() => events.publish(team.id, 'planning.changed', { by: owner.id }), SqliteBusyError);
+        assert.equal(eventAttempts, 1, '팀 소식은 다시 시도하지 않습니다 (사용자 저장의 한 번 더 시도는 위 테스트)');
+        other.exec('COMMIT');
+        assert.equal(events.publish(team.id, 'planning.changed', { by: owner.id }).type, 'planning.changed');
+        assert.equal(eventAttempts, 2);
     } finally { other.close(); repo.close(); cleanup(); }
 });
 
