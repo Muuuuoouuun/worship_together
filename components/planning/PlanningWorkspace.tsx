@@ -61,7 +61,8 @@ function OnlinePlanning(props: Props) {
         params.set('team', team.id);
         router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }, [requestedMissing, searchParams, team.id, pathname, router]);
-    const board = <Board key={team.id} teamId={team.id} members={team.members} userId={props.userId!} online initialTab={props.initialTab} initialSetlist={props.initialSetlist} />;
+    // 남의 팀 주소로 들어와 지금 팀을 대신 보여 줄 때는, 주소에 딸려 온 (남의 팀) 콘티로 요청 작성기를 채우지 않습니다.
+    const board = <Board key={team.id} teamId={team.id} members={team.members} userId={props.userId!} online initialTab={props.initialTab} initialSetlist={requestedMissing ? undefined : props.initialSetlist} />;
     // 안내를 닫아도 Board가 다시 마운트되지 않도록 같은 트리 모양을 유지합니다.
     return <div className="space-y-4">
         {fallbackNotice ? <Notice tone="warn" className="flex items-start justify-between gap-3">

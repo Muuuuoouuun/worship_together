@@ -13,11 +13,16 @@ interface BeforeInstallPromptEvent extends Event {
 const emptySubscribe = () => () => {};
 
 // 모바일: 하단 내비(4rem) 위로 띄우고, 라이브 미니바(4.25rem 위, 약 3.75rem 높이)가 떠 있으면 그 위로 올립니다.
+// 팀 준비 알림 배지(PlanningInboxBadge: 모바일 5rem · 미니바 있으면 9.5rem 위, 데스크톱 1.5rem 위, 높이 2.75rem)가
+// 떠 있으면 같은 자리를 쓰므로 배지 위로 한 칸 더 올립니다 (배지가 배너의 설치 · 닫기를 가리지 않게).
 // 데스크톱: 사이드바(16rem) 옆 본문 왼쪽 아래. 모달(z-50)보다 낮은 z-30.
 const BANNER_POSITION =
     "fixed z-30 inset-x-4 mx-auto max-w-md bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] " +
     "max-lg:[body:has(aside[aria-label='라이브_예배_빠른_실행_바'])_&]:bottom-[calc(env(safe-area-inset-bottom)+8.75rem)] " +
+    "max-lg:[body:has(aside[aria-label='팀_준비_알림'])_&]:bottom-[calc(env(safe-area-inset-bottom)+8.5rem)] " +
+    "max-lg:[body:has(aside[aria-label='팀_준비_알림']):has(aside[aria-label='라이브_예배_빠른_실행_바'])_&]:bottom-[calc(env(safe-area-inset-bottom)+13rem)] " +
     "lg:bottom-6 lg:left-[calc(16rem+1.5rem)] lg:right-auto lg:inset-x-auto lg:mx-0 lg:max-w-sm " +
+    "lg:[body:has(aside[aria-label='팀_준비_알림'])_&]:bottom-20 " +
     "animate-in slide-in-from-bottom duration-300";
 
 function checkIosEligibility(): boolean {
@@ -76,8 +81,8 @@ export default function PwaInstallPrompt() {
         localStorage.setItem('worship_pwa_prompt_dismissed', Date.now().toString());
     };
 
-    // 무대/세션 화면에서는 조작 버튼을 가리지 않도록 표시하지 않습니다.
-    if (pathname?.startsWith('/session')) return null;
+    // 예배 화면(옛 /session, 새 /live)에서는 조작 버튼을 가리지 않도록 표시하지 않습니다.
+    if (pathname?.startsWith('/session') || pathname?.startsWith('/live')) return null;
     if (manuallyDismissed) return null;
 
     // 1) Chrome/Android/Desktop 설치 프롬프트가 지원되는 경우
