@@ -23,7 +23,7 @@ export default function LiveContiWorkspace(props: Props) {
                 description={
                     <>
                         {source.kind === 'server' ? '서버에 저장된 콘티' : '곡 보관함에 저장된 콘티'}를 이번 주 순서·송폼·특이사항과 함께 봐요
-                        <Link href="/dashboard/songs/deadline" className="ml-1.5 inline-flex items-center text-xs font-semibold text-brand underline-offset-2 hover:underline">
+                        <Link href="/dashboard/songs/deadline" className="ml-1.5 inline-flex min-h-6 items-center align-middle text-xs font-semibold text-brand underline-offset-2 hover:underline">
                             마감 알림 목업 →
                         </Link>
                     </>
@@ -56,7 +56,7 @@ export default function LiveContiWorkspace(props: Props) {
                                 aria-label="보는 사람"
                                 value={localViewerId}
                                 onChange={(event) => chooseViewer(event.target.value)}
-                                className="max-w-32 bg-transparent text-base font-semibold text-foreground outline-none sm:text-xs"
+                                className="h-full min-w-0 max-w-[9.5rem] cursor-pointer truncate bg-transparent text-base font-semibold text-foreground outline-none sm:max-w-44 sm:text-xs"
                             >
                                 {source.viewers.map((member) => (
                                     <option key={member.userId} value={member.userId}>

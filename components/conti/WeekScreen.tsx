@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Bell, ChevronRight, ListMusic, MapPin, MessageCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import {
     SETLIST_STATUS,
     commentsOf,
@@ -164,7 +165,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                     title="팀 소식"
                     badge={sample}
                     meta={unread > 0 ? `새 소식 ${unread}` : undefined}
-                    action={<button type="button" onClick={() => go('alerts')} className={cn('text-xs font-medium underline-offset-2 hover:underline', body)}>모두 보기</button>}
+                    action={<SectionAction onClick={() => go('alerts')} label="팀 소식 모두 보기">모두 보기</SectionAction>}
                 />
                 <ul>
                     {planning.notices.slice(0, 3).map((notice) => (
@@ -189,7 +190,7 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                     title={`${dayName(day)} 일정`}
                     badge={sample}
                     meta={`${monthOf(day)}/${dayOf(day)}`}
-                    action={<button type="button" onClick={() => go('team')} className={cn('text-xs font-medium underline-offset-2 hover:underline', body)}>팀 배치</button>}
+                    action={<SectionAction onClick={() => go('team')} label="이 날 팀 배치 보기">팀 배치</SectionAction>}
                 />
                 <ul className={divide}>
                     {events.map((event) => {
@@ -239,5 +240,15 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                 <ChevronRight size={16} className={sub} aria-hidden="true" />
             </button>
         </div>
+    );
+}
+
+/** 섹션 제목 오른쪽 이동 버튼. 글자만 있는 16px 링크 대신 32px 높이 터치 영역(WCAG 2.5.8)을 줍니다. */
+function SectionAction({ onClick, label, children }: { onClick: () => void; label: string; children: ReactNode }) {
+    return (
+        <button type="button" onClick={onClick} aria-label={label} className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), '-mr-2 shrink-0 gap-0.5 font-medium text-foreground/75 hover:bg-foreground/5 hover:text-foreground')}>
+            {children}
+            <ChevronRight size={14} aria-hidden="true" />
+        </button>
     );
 }

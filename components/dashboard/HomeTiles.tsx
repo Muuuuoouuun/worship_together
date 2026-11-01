@@ -98,6 +98,8 @@ const quietAction = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mt-4
 const SLOT = {
     todo: 'order-2 col-span-12 @2xl:order-none',
     conti: 'order-1 col-span-12 @2xl:order-none @2xl:col-span-6 @2xl:row-span-2',
+    /** 이번 주 콘티가 없을 때: 휴대폰에서 '지금 할 일'(같은 동작 포함) 뒤로 내려 빈 타일이 첫 화면을 차지하지 않게 합니다. */
+    contiEmpty: 'order-2 col-span-12 @2xl:order-none @2xl:col-span-6 @2xl:row-span-2',
     schedule: 'order-3 col-span-12 @2xl:order-none @2xl:col-span-6',
     request: 'order-4 col-span-12 @2xl:order-none @2xl:col-span-6 @4xl:col-span-3',
     team: 'order-6 col-span-12 @2xl:order-none @2xl:col-span-6 @4xl:col-span-3',
@@ -333,7 +335,7 @@ export default function HomeTiles({ sessionHref, team, titleAs: Title = 'h1', li
             <div className="@container">
                 <div className="grid grid-cols-12 gap-4">
                     <TodoStrip todos={todos} viewer={hasTeam ? planning.viewer : null} ready={planning.ready} href={scheduleHref} className={SLOT.todo} />
-                    <ContiTile setlist={setlist} anchor={anchor} createHref={createHref} className={SLOT.conti} />
+                    <ContiTile setlist={setlist} anchor={anchor} createHref={createHref} className={setlist ? SLOT.conti : SLOT.contiEmpty} />
                     <ScheduleTile anchor={anchor} href={scheduleHref} sample={sample} className={SLOT.schedule} />
                     <RequestTile summary={summary} ready={planning.ready} href={requestsHref} sample={sample} className={SLOT.request} />
                     <TeamTile service={service} anchor={anchor} hasTeam={hasTeam} ready={planning.ready} rosterCount={roster.length} href={scheduleHref} className={SLOT.team} />
@@ -585,7 +587,7 @@ function ContiTile({ setlist, anchor, createHref, className }: { setlist: ContiS
     if (!setlist) {
         return (
             <Tile tone="mint" icon={ListMusic} title="이번 주 콘티" className={className}>
-                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+                <div className="flex flex-1 flex-col items-center justify-center py-6 text-center @2xl:py-10">
                     <span className={cn('flex size-12 items-center justify-center rounded-2xl', TONE_TILE_ICON.mint)}>
                         <ListMusic size={22} aria-hidden="true" />
                     </span>
