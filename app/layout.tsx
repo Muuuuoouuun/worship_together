@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import PwaProvider from "./PwaProvider";
+import NativeBridge from "@/components/app/NativeBridge";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -79,6 +80,7 @@ export default function RootLayout({
       >
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <PwaProvider />
+        <NativeBridge />
         {children}
       </body>
     </html>
