@@ -55,7 +55,7 @@ interface QuickCue {
 }
 
 /** 엄지 자리에 둘 빠른 큐 (모바일은 앞의 3개) */
-export const QUICK_CUES: QuickCue[] = [
+const QUICK_CUES: QuickCue[] = [
     { label: '한 번 더', target: '전체' },
     { label: '엔딩 컷', target: '전체' },
     { label: '보컬 UP', target: '음향' },
@@ -439,6 +439,7 @@ export function MobileScreen({
     header,
     footer,
     tallMin = 700,
+    bpm,
 }: {
     live: MockLive;
     actions: DeviceActions;
@@ -451,6 +452,8 @@ export function MobileScreen({
     footer?: ReactNode;
     /** 이 높이 이상이면 송폼 알약 줄을 둡니다 */
     tallMin?: number;
+    /** 템포 줄의 BPM 숫자를 바꿔 끼웁니다 (예: 박자에 맞춰 움직이는 숫자). 주지 않으면 숫자만 */
+    bpm?: ReactNode;
 }) {
     const rootRef = useRef<HTMLDivElement>(null);
     const middleRef = useRef<HTMLDivElement>(null);
@@ -523,7 +526,7 @@ export function MobileScreen({
                     className={cn('grid shrink-0 grid-cols-2 items-center px-4 pb-3 pt-1 transition-opacity duration-200 motion-reduce:transition-none', !keepRow && 'opacity-0')}
                 >
                     <p className="flex min-w-0 items-baseline gap-1.5">
-                        <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums">{live.bpm}</span>
+                        {bpm ?? <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums">{live.bpm}</span>}
                         <span className="text-xs font-medium text-muted-foreground">BPM</span>
                         <KeyChip className="ml-1 self-center">{live.song.meter}</KeyChip>
                     </p>

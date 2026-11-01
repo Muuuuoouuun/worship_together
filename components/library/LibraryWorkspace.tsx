@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo, useDeferredValue } from 'react';
 import Link from 'next/link';
 import { createClientId } from '@/lib/clientId';
 import { DEMO_SESSION_ID } from '@/lib/constants';
+import { liveStartHref } from '@/components/live/links';
+import { FileMusic } from 'lucide-react';
 import type { SetlistWithSongs } from '@/lib/data';
 import {
     normalizeSetlistSongOrder,
@@ -56,11 +58,17 @@ export default function LibraryWorkspace({
     initialSetlists,
     teamId,
     hasBackend,
+    online = false,
+    canEdit = true,
 }: {
     initialSongs: LibrarySong[];
     initialSetlists: SetlistWithSongs[];
     teamId: string;
     hasBackend: boolean;
+    /** 로그인한 온라인 팀 — 팀원 모두와 함께 저장되고, 예배는 서버 예배(/live)로 엽니다 */
+    online?: boolean;
+    /** 팀 권한의 '콘티 · 곡 편집' (false 면 보기만) */
+    canEdit?: boolean;
 }) {
     const [library, setLibrary] = useState<PrototypeLibrary>(() => ({
         version: 1,
@@ -297,7 +305,8 @@ export default function LibraryWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span className={cn('size-1.5 rounded-full', hasBackend ? STATUS.ok.dot : STATUS.idle.dot)} aria-hidden="true" />
-                    {hasBackend ? '서버 연결됨' : '브라우저 로컬 저장'}
+                    {online ? '팀원 모두와 함께 저장' : hasBackend ? '서버 연결됨' : '브라우저 로컬 저장'}
+                    {online && !canEdit ? <><span aria-hidden="true">·</span>보기 전용</> : null}
                     <span aria-hidden="true">·</span>
                     찬양 {songs.length}곡 · 콘티 {setlists.length}개
                 </p>
@@ -314,7 +323,7 @@ export default function LibraryWorkspace({
 
             {activeTab === 'insights' && <SongUsageInsights setlists={setlistsWithSongs} songs={songs} />}
 
-            {activeTab === 'bpm' && <SongBpmPresetManager songs={songs} disabled={!ready} saveAction={hasBackend ? undefined : updateBpm} />}
+            {activeTab === 'bpm' && <SongBpmPresetManager songs={songs} disabled={!ready || !canEdit} saveAction={hasBackend ? undefined : updateBpm} />}
 
             {activeTab === 'catalog' && (
                 <div className="grid items-start gap-10 xl:grid-cols-2 xl:gap-12">
@@ -360,7 +369,7 @@ export default function LibraryWorkspace({
                                             </span>
                                         </button>
 
-                                        {hasBackend ? (
+                                        {!canEdit ? null : hasBackend ? (
                                             <form
                                                 action={deleteSong}
                                                 onSubmit={(e) => {
@@ -381,8 +390,18 @@ export default function LibraryWorkspace({
                                     </div>
 
                                     {expanded === song.id && ready && (
-                                        <div className="mt-2 rounded-2xl bg-muted/60 p-4">
-                                            <SongFormEditor key={song.id} songId={song.id} teamId={teamId} initialForm={readSongForm(song.id, teamId)} />
+                                        <div className="mt-2 space-y-3 rounded-2xl bg-muted/60 p-4">
+                                            <Link href={`/dashboard/songs/sheet?song=${encodeURIComponent(song.id)}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                                                <FileMusic aria-hidden="true" />
+                                                악보 준비 · 표시
+                                            </Link>
+                                            {canEdit ? (
+                                                <SongFormEditor key={song.id} songId={song.id} teamId={teamId} initialForm={readSongForm(song.id, teamId)} />
+                                            ) : (
+                                                <p className="text-sm text-muted-foreground">
+                                                    {readSongForm(song.id, teamId)?.sections.map((section) => section.label).join(' → ') || '송폼이 아직 없어요.'}
+                                                </p>
+                                            )}
                                         </div>
                                     )}
                                 </li>
@@ -390,7 +409,7 @@ export default function LibraryWorkspace({
                             {!filtered.length && <li className="py-10 text-center text-sm text-muted-foreground">표시할 곡이 없습니다.</li>}
                         </ul>
 
-                        <details className="group border-t border-border/70 pt-4">
+                        <details hidden={!canEdit} className="group border-t border-border/70 pt-4">
                             <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
                                 <span className="flex size-9 items-center justify-center rounded-xl bg-brand text-brand-foreground" aria-hidden="true">
                                     <Plus size={18} strokeWidth={2.25} />
@@ -440,12 +459,12 @@ export default function LibraryWorkspace({
 
                                     <div className="mt-4 flex flex-wrap items-center gap-1.5">
                                         {ordered.length > 0 && (
-                                            <Link className={buttonVariants({ size: 'xs' })} href={`/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(setlist.id)}&team=${encodeURIComponent(teamId)}`}>
+                                            <Link className={buttonVariants({ size: 'xs' })} href={online ? liveStartHref(teamId, setlist.id) : `/session/${DEMO_SESSION_ID}?setlist=${encodeURIComponent(setlist.id)}&team=${encodeURIComponent(teamId)}`}>
                                                 <Radio size={13} aria-hidden="true" />
-                                                예배 열기
+                                                {online ? '예배 시작 · 입장' : '예배 열기'}
                                             </Link>
                                         )}
-                                        {ordered.length > 0 && (
+                                        {ordered.length > 0 && !online && (
                                             <Link className={buttonVariants({ variant: 'outline', size: 'xs' })} href={`/session/${DEMO_SESSION_ID}/team?setlist=${encodeURIComponent(setlist.id)}&team=${encodeURIComponent(teamId)}`}>
                                                 <UsersRound size={13} aria-hidden="true" />
                                                 팀원 화면
@@ -467,7 +486,7 @@ export default function LibraryWorkspace({
                                             질문·요청
                                         </Link>
                                         <SetlistShareButton shareText={shareText} />
-                                        {hasBackend ? (
+                                        {!canEdit ? null : hasBackend ? (
                                             <form action={duplicateSetlistFromTemplate}>
                                                 <input type="hidden" name="setlistId" value={setlist.id} />
                                                 <input type="hidden" name="teamId" value={teamId} />
@@ -482,7 +501,7 @@ export default function LibraryWorkspace({
                                                 다음 주 복제
                                             </button>
                                         )}
-                                        {hasBackend ? (
+                                        {!canEdit ? null : hasBackend ? (
                                             <form
                                                 action={deleteSetlist}
                                                 onSubmit={(e) => {
@@ -508,7 +527,7 @@ export default function LibraryWorkspace({
                             {!setlists.length && <li className="py-10 text-center text-sm text-muted-foreground">아직 저장된 콘티가 없습니다.</li>}
                         </ul>
 
-                        <details className="group border-t border-border/70 pt-4">
+                        <details hidden={!canEdit} className="group border-t border-border/70 pt-4">
                             <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
                                 <span className="flex size-9 items-center justify-center rounded-xl bg-brand text-brand-foreground" aria-hidden="true">
                                     <Plus size={18} strokeWidth={2.25} />

@@ -22,7 +22,7 @@ export default function ThemeToggle() {
     return (
         <button
             type="button"
-            aria-label="테마 전환"
+            aria-label="테마 전환 · 어둡게 / 밝게"
             onClick={() => {
                 const nextTheme: ThemePreference = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
 

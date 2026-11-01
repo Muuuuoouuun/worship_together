@@ -29,7 +29,7 @@ export default function MonthlySundaysModal({
     const [location, setLocation] = useState('본당 2층');
     const [pending, setPending] = useState(false);
     const [error, setError] = useState('');
-    useSheetDismiss(onClose);
+    const dialogRef = useSheetDismiss(onClose);
 
     // Calculate sundays in selected month
     const sundays = useMemo(() => {
@@ -84,6 +84,7 @@ export default function MonthlySundaysModal({
 
     return (
         <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={modalId}

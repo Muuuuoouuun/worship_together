@@ -1,4 +1,5 @@
 import { isValidSongFormSections, layoutSectionMarker, layoutSongFormMarkup, SONG_FORM_MAX_ANCHOR_X } from './songFormMarkup';
+import { markTeamDocDirty, sheetDocKey } from './teamDocSync';
 import { isLeadSheetKey, LEAD_SHEETS, SAMPLE_LEAD_SHEET, transposeLeadSheet, type LeadSheetKey } from './leadSheet';
 import { renderLeadSheetPages } from './leadSheetRender';
 import { isChartSettings, type ChartSettings } from './chordChart';
@@ -167,7 +168,37 @@ export async function readSheet(key: string): Promise<SheetDocument | null> {
     } finally { db.close(); }
 }
 
-export async function saveSheet(key: string, document: SheetDocument): Promise<void> {
+/**
+ * fromSync: 팀 동기화가 다른 팀원의 공유본을 받아 쓸 때 — 다시 서버로 올리지 않습니다.
+ * 그 밖에 팀 공유본(…:published)을 저장하면 온라인 팀이면 팀원 모두에게 올립니다 (lib/teamDocSync).
+ */
+export async function saveSheet(key: string, document: SheetDocument, options: { fromSync?: boolean } = {}): Promise<void> {
+    await writeSheet(key, document);
+    if (!options.fromSync && key.endsWith(':published')) {
+        const parts = key.split(':');
+        parts.pop();
+        const songId = parts.pop();
+        const teamId = parts.join(':');
+        if (teamId && songId) markTeamDocDirty(teamId, sheetDocKey(teamId, songId));
+    }
+}
+
+/** 이 기기에 저장된 팀 공유본 악보의 곡 id (처음 동기화할 때 서버로 올릴 것을 찾습니다) */
+export async function listPublishedSheetSongIds(teamId: string): Promise<string[]> {
+    const db = await openSheetDatabase();
+    try {
+        const keys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+            const request = db.transaction('sheets').objectStore('sheets').getAllKeys();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        const prefix = `${teamId}:`;
+        return keys.filter((key): key is string => typeof key === 'string' && key.startsWith(prefix) && key.endsWith(':published'))
+            .map((key) => key.slice(prefix.length, -':published'.length));
+    } finally { db.close(); }
+}
+
+async function writeSheet(key: string, document: SheetDocument): Promise<void> {
     const db = await openSheetDatabase();
     try {
         await new Promise<void>((resolve, reject) => {

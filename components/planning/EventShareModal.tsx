@@ -28,7 +28,7 @@ export default function EventShareModal({
     const [highlightVacant, setHighlightVacant] = useState(true);
     const [includeGreeting, setIncludeGreeting] = useState(true);
     const [copied, setCopied] = useState(false);
-    useSheetDismiss(onClose);
+    const dialogRef = useSheetDismiss(onClose);
 
     const shareText = useMemo(() => {
         const dateStr = planningDate(event.startsAt);
@@ -117,6 +117,7 @@ export default function EventShareModal({
 
     return (
         <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={modalId}

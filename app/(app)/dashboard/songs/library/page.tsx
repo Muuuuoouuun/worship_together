@@ -5,8 +5,8 @@ import { DEMO_TEAM_ID } from '@/lib/constants';
 import { getSetlistsByTeam, getSongsByTeam } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 import LibraryTeamWorkspace from '@/components/library/LibraryTeamWorkspace';
-import { getCurrentUser } from '@/lib/auth';
-import { getTeamRepository } from '@/lib/server/teams';
+import { getViewer } from '@/lib/server/viewer';
+import { can } from '@/lib/permissions';
 
 export const metadata: Metadata = {
     title: '곡 보관함',
@@ -42,9 +42,9 @@ const errorMessages: Record<string, string> = {
 
 export default async function SongArchivePage({ searchParams }: LibraryPageProps) {
     const params = await searchParams;
-    const [songs, setlists, user] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID, { withSongs: false }), getCurrentUser()]);
+    const [songs, setlists, viewer] = await Promise.all([getSongsByTeam(DEMO_TEAM_ID), getSetlistsByTeam(DEMO_TEAM_ID, { withSongs: false }), getViewer(getParam(params.team))]);
     const hasSupabase = Boolean(supabase);
-    const onlineTeams = user ? getTeamRepository().list(user.id).map(team => ({ id: team.id, name: team.name })) : [];
+    const onlineTeams = viewer ? viewer.teams.map(team => ({ id: team.id, name: team.name })) : [];
     const createdKey = getParam(params.created);
     const errorKey = getParam(params.error);
 
@@ -56,7 +56,7 @@ export default async function SongArchivePage({ searchParams }: LibraryPageProps
                 {createdKey && successMessages[createdKey] && <Notice tone="success">{successMessages[createdKey]}</Notice>}
                 {errorKey && errorMessages[errorKey] && <Notice tone="error">{errorMessages[errorKey]}</Notice>}
 
-                <LibraryTeamWorkspace initialSongs={withoutMusicXml(songs)} initialSetlists={setlists} teamId={DEMO_TEAM_ID} hasBackend={hasSupabase} onlineTeams={onlineTeams} onlineTeamId={getParam(params.team) ?? undefined} />
+                <LibraryTeamWorkspace initialSongs={withoutMusicXml(songs)} initialSetlists={setlists} teamId={DEMO_TEAM_ID} hasBackend={hasSupabase} onlineTeams={onlineTeams} onlineTeamId={viewer?.team?.id} canEditConti={viewer?.member ? can(viewer.member, viewer.policy, 'contiEdit') : true} />
             </div>
         </>
     );

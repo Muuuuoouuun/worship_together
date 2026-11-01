@@ -1,4 +1,5 @@
 import type { Database } from '@/types/schema';
+import { markTeamDocDirty } from './teamDocSync';
 export type LibrarySong = Database['public']['Tables']['songs']['Row'];
 export type LibrarySetlist = Omit<Database['public']['Tables']['setlists']['Row'], 'song_order'> & { song_order: string[] };
 export interface PrototypeLibrary { version: 1; songs: LibrarySong[]; setlists: LibrarySetlist[] }
@@ -29,5 +30,6 @@ export function readPrototypeLibrary(teamId: string): PrototypeLibrary | null {
 export function savePrototypeLibrary(teamId: string, data: PrototypeLibrary): void {
     try { localStorage.setItem(libraryStorageKey(teamId), JSON.stringify(data)); }
     catch { throw new Error('저장 공간이 부족하거나 브라우저 저장이 차단되었습니다. 입력 내용은 저장되지 않았습니다.'); }
+    markTeamDocDirty(teamId, libraryStorageKey(teamId));
     window.dispatchEvent(new Event(LIBRARY_CHANGED_EVENT));
 }

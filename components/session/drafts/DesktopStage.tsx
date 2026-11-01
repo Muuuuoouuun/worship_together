@@ -67,7 +67,10 @@ export interface DesktopStageProps extends DraftScreenProps {
     headerActions?: ReactNode;
     /** '인도자 따라가는 중 · 경과 시간'을 숨깁니다 (다른 곳에서 보여 줄 때) */
     hideStatus?: boolean;
-    /** 악보 열(위 막대와 아래 막대 사이, 오른쪽 레일 왼쪽) 위에 겹쳐 그릴 층. 화면을 잠가도 눌립니다 */
+    /**
+     * 악보 열(위 막대와 아래 막대 사이, 오른쪽 레일 왼쪽) 위에 겹쳐 그릴 층. 화면을 잠가도 눌립니다.
+     * 층 자체는 누름 · 스크롤을 아래 악보로 흘려보내므로, 눌려야 하는 부분에만 pointer-events-auto 를 주세요.
+     */
     stageOverlay?: ReactNode;
     /** 악보를 숨깁니다 — 자리와 스크롤 위치는 그대로 지키고, 보이지도 눌리지도 않습니다 */
     chartHidden?: boolean;
@@ -76,9 +79,27 @@ export interface DesktopStageProps extends DraftScreenProps {
      * 주면 보낸 큐·받은 큐 표시는 바깥 알림이 맡으므로, 이 화면의 보냄 표시(초록 버튼·보냄 알약)와 받은 큐 알약을 그리지 않습니다.
      */
     onSendCue?: (label: string, target: string) => void;
+    /** 아래 막대 가운데의 '큐 보내기' 묶음(흐름 큐 · 큐 더보기)을 통째로 바꿉니다 (예: 바로 보내는 빠른 큐) */
+    footerCues?: ReactNode;
+    /** 아래 막대 오른쪽 끝(보냄 알약 · 받은 큐 · 큐 기록)을 통째로 바꿉니다 (예: 최근 큐 한 줄) */
+    footerEnd?: ReactNode;
+    /** false 면 더보기의 '큐 받을 대상' 고르기를 숨깁니다 (큐 기록을 footerEnd 로 바꿔 이 설정이 쓰이지 않을 때). 기본은 보여 줌 */
+    cueScopeSetting?: boolean;
 }
 
-export default function DesktopStage({ framed = false, live: sharedLive, headerBeat, headerActions, hideStatus = false, stageOverlay, chartHidden = false, onSendCue }: DesktopStageProps) {
+export default function DesktopStage({
+    framed = false,
+    live: sharedLive,
+    headerBeat,
+    headerActions,
+    hideStatus = false,
+    stageOverlay,
+    chartHidden = false,
+    onSendCue,
+    footerCues,
+    footerEnd,
+    cueScopeSetting = true,
+}: DesktopStageProps) {
     const ownLive = useMockLive();
     const live = sharedLive ?? ownLive;
     const { song, songs, songIndex, sectionIndex, section, nextSection, nextSong, log, goSection, goSong, nextSectionStep, prevSectionStep, sendCue } = live;
@@ -352,6 +373,7 @@ export default function DesktopStage({ framed = false, live: sharedLive, headerB
                                 onRole={setRole}
                                 cueScope={cueScope}
                                 onCueScope={setCueScope}
+                                showCueScope={cueScopeSetting}
                                 onLock={() => {
                                     setLocked(true);
                                     setPanel(null);
@@ -597,7 +619,7 @@ export default function DesktopStage({ framed = false, live: sharedLive, headerB
 
                         <span aria-hidden="true" className="mx-1.5 h-8 w-px shrink-0 bg-border" />
 
-                        <div ref={cuesRef} className="relative flex shrink-0 items-center gap-2">
+                        {footerCues ?? <div ref={cuesRef} className="relative flex shrink-0 items-center gap-2">
                             <span className="mr-1 flex shrink-0 flex-col text-xs leading-tight">
                                 <span className="font-semibold">큐 보내기</span>
                                 <span className="text-muted-foreground">전체에게</span>
@@ -628,11 +650,11 @@ export default function DesktopStage({ framed = false, live: sharedLive, headerB
                                 큐 더보기
                             </button>
                             {panel === 'cues' ? <CuePanel flash={flash} onSend={send} onClose={() => setPanel(null)} /> : null}
-                        </div>
+                        </div>}
                     </>
                 )}
 
-                <div ref={logRef} className="relative ml-auto flex min-w-0 justify-end">
+                {footerEnd !== undefined ? <div className="ml-auto flex min-w-0 items-center justify-end">{footerEnd}</div> : <div ref={logRef} className="relative ml-auto flex min-w-0 justify-end">
                     <p className="sr-only" aria-live="polite">
                         {flash ? `보냄: ${flash.label}, ${targetLabel(flash.target)}에게` : ''}
                     </p>
@@ -677,10 +699,10 @@ export default function DesktopStage({ framed = false, live: sharedLive, headerB
                         </button>
                     ) : null}
                     {panel === 'log' ? <LogPanel entries={visibleLog} freshId={freshId} /> : null}
-                </div>
+                </div>}
             </footer>
 
-            {stageOverlay ? <div className="absolute bottom-[76px] left-0 right-[300px] top-16 z-20 @min-[1200px]:right-80">{stageOverlay}</div> : null}
+            {stageOverlay ? <div className="pointer-events-none absolute bottom-[76px] left-0 right-[300px] top-16 z-20 @min-[1200px]:right-80">{stageOverlay}</div> : null}
         </div>
     );
 }
@@ -814,23 +836,43 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
 
 const popover = 'absolute z-40 rounded-3xl bg-card text-left text-card-foreground shadow-xl ring-1 ring-border';
 
-function MorePanel({ role, onRole, cueScope, onCueScope, onLock }: { role: DraftRole; onRole: (role: DraftRole) => void; cueScope: CueScope; onCueScope: (scope: CueScope) => void; onLock: () => void }) {
+function MorePanel({
+    role,
+    onRole,
+    cueScope,
+    onCueScope,
+    showCueScope = true,
+    onLock,
+}: {
+    role: DraftRole;
+    onRole: (role: DraftRole) => void;
+    cueScope: CueScope;
+    onCueScope: (scope: CueScope) => void;
+    showCueScope?: boolean;
+    onLock: () => void;
+}) {
     return (
         <div role="dialog" aria-label="더보기" className={cn(popover, 'right-0 top-full mt-2.5 w-80 p-5')}>
             <p className="text-xs font-medium text-muted-foreground">내 역할</p>
             <Segmented label="내 역할" value={role} options={ROLES.map((item) => ({ value: item, label: ROLE_LABEL[item] }))} onChange={onRole} />
 
-            <p className="mt-5 text-xs font-medium text-muted-foreground">큐 받을 대상</p>
-            <Segmented
-                label="큐 받을 대상"
-                value={cueScope}
-                options={[
-                    { value: 'all', label: '모든 큐' },
-                    { value: 'mine', label: '내 역할 큐만' },
-                ]}
-                onChange={onCueScope}
-            />
-            <p className="mt-2 text-xs text-muted-foreground">{cueScope === 'all' ? '모든 역할에게 간 큐를 함께 봐요' : `${ROLE_LABEL[role]} 큐와 전체 큐만 알려요`}</p>
+            {showCueScope ? (
+                <>
+                    <p className="mt-5 text-xs font-medium text-muted-foreground">큐 받을 대상</p>
+                    <Segmented
+                        label="큐 받을 대상"
+                        value={cueScope}
+                        options={[
+                            { value: 'all', label: '모든 큐' },
+                            { value: 'mine', label: '내 역할 큐만' },
+                        ]}
+                        onChange={onCueScope}
+                    />
+                    <p className="mt-2 text-xs text-muted-foreground">{cueScope === 'all' ? '모든 역할에게 간 큐를 함께 봐요' : `${ROLE_LABEL[role]} 큐와 전체 큐만 알려요`}</p>
+                </>
+            ) : (
+                <p className="mt-2 text-xs text-muted-foreground">{ROLE_LABEL[role]} 큐와 전체 큐를 받아요</p>
+            )}
 
             <div className="mt-5 border-t border-border pt-4">
                 <div className="flex items-center justify-between gap-3">

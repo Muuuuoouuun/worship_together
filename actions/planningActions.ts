@@ -1,7 +1,7 @@
 'use server';
 
 import { getCurrentUser } from '@/lib/auth';
-import { getTeamRepository } from '@/lib/server/teams';
+import { deliverTeamNotices, getTeamEvents, getTeamRepository } from '@/lib/server/teams';
 import type { PlanningCommand, PlanningState } from '@/types/planning';
 import type { TeamActionResult, TeamMember } from '@/types/team';
 
@@ -11,7 +11,13 @@ async function run(teamId: string, command?: PlanningCommand): Promise<TeamActio
         if (!user) throw new Error('로그인 후 다시 시도해주세요.');
         if (typeof teamId !== 'string' || !teamId || teamId.length > 200) throw new Error('팀을 확인해주세요.');
         const repository = getTeamRepository();
-        return { ok: true, value: command === undefined ? repository.planning(teamId, user.id) : repository.updatePlanning(teamId, user.id, command) };
+        if (command === undefined) return { ok: true, value: repository.planning(teamId, user.id) };
+        const { state: value, created } = repository.applyPlanning(teamId, user.id, command);
+        // 일정 · 요청 · 소식을 보고 있는 다른 팀원 화면이 바로 다시 읽습니다.
+        getTeamEvents().publish(teamId, 'planning.changed', { by: user.id });
+        // 새 알림은 받는 사람에게만, 어느 화면에 있든 바로 띄웁니다.
+        deliverTeamNotices(teamId, created, user.id);
+        return { ok: true, value };
     } catch (error) {
         const message = error instanceof Error ? error.message : '';
         return { ok: false, error: /[가-힣]/.test(message) ? message : '저장하지 못했습니다. 연결을 확인하고 다시 시도해주세요.' };

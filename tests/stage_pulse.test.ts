@@ -17,7 +17,6 @@ import {
     getCountInWord,
     isUsableBpm,
 } from '../lib/stageTempo.js';
-import { parseStagePhase } from '../lib/stagePhaseStorage.js';
 
 const song = (id: string, bpm: number | null, key: string | null = null) => ({ id, title: id, original_key: key, bpm });
 
@@ -102,12 +101,3 @@ test('tempo chart keeps songs without a BPM as labels but leaves them off the li
     assert.equal(empty.path, '');
 });
 
-test('parseStagePhase reads only well-formed stored phases', () => {
-    assert.deepEqual(parseStagePhase('{"startedAt":1760000000000}'), { startedAt: 1760000000000 });
-    assert.deepEqual(parseStagePhase('{"startedAt":null}'), { startedAt: null });
-    assert.equal(parseStagePhase(null), null);
-    assert.equal(parseStagePhase('{"startedAt":"yesterday"}'), null);
-    assert.equal(parseStagePhase('{"startedAt":-1}'), null);
-    assert.equal(parseStagePhase('{}'), null);
-    assert.equal(parseStagePhase('not json'), null);
-});

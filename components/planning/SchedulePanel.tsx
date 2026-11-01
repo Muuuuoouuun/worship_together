@@ -2,6 +2,7 @@
 
 import { cloneElement, isValidElement, memo, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { canManagePlanning, planningDate, scheduleTemplates, type PlanningCommand, type PlanningPanelProps, type ScheduleSlot, type ScheduleTemplateKey, type TeamSchedule, type UrgentAlert } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
@@ -9,6 +10,7 @@ import { Bell, CalendarDays, CalendarPlus, CalendarX2, Check, ChevronDown, Clipb
 import { downloadIcsFile, getMyGoogleCalendarUrl, generateMyScheduleShareText } from '@/lib/calendarExport';
 import { cn } from '@/lib/utils';
 import { DUTY_STATE_LABEL, pickNextDuty, summarizeMyDuties } from '@/lib/planningView';
+import { useTeamPolicy } from '@/components/app/TeamConnection';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { STATUS, type StatusTone } from '@/components/ui/status';
 import { Avatar, TONE_BLOCK } from '@/components/conti/ui';
@@ -559,6 +561,16 @@ function ReasonChips({ disabled, onPick, titleSuffix = '사유로 1클릭 불참
     </div>;
 }
 
+/** 연결된 콘티의 곡 순서 · 악보 화면으로 (일정에서 고른 콘티, 없으면 같은 날 콘티) */
+function ContiLink({ setlistId, className }: { setlistId: string; className?: string }) {
+    return (
+        <Link href={`/dashboard/songs?${new URLSearchParams({ tab: 'order', setlist: setlistId })}`} className={cn(outlineXs, className)}>
+            <ExternalLink className="text-muted-foreground" />
+            <span>콘티 · 악보 보기</span>
+        </Link>
+    );
+}
+
 /** 구글 캘린더 · .ics 버튼 한 쌍 */
 function CalendarLinks({ event, role, names, long = false }: { event: TeamSchedule; role: WorshipRole; names: Map<string, string>; long?: boolean }) {
     return <>
@@ -1047,6 +1059,12 @@ function EventItem({ event, defaultOpen, now, alerts, manager, members, names, u
 
         <SlotSummary slots={event.slots} className="mt-4" />
 
+        {manager && live ? (
+            <Disclosure className="mt-3 rounded-2xl border border-border px-4" summaryClassName="min-h-12 text-sm font-medium" summary={<span>역할·담당자 추가</span>}>
+                <div className="pb-4"><SlotForm {...actions} eventId={event.id} members={members} /></div>
+            </Disclosure>
+        ) : null}
+
         <div className="mt-4 flex flex-wrap gap-1.5">
             {manager && live && hasVacant ? (
                 <Button
@@ -1131,6 +1149,7 @@ function EventItem({ event, defaultOpen, now, alerts, manager, members, names, u
                             <p className="truncate text-[15px] font-medium text-foreground">{event.setlistTitle}</p>
                         </div>
                     </div>
+                    {event.setlistId ? <ContiLink setlistId={event.setlistId} /> : null}
                     {manager && live ? (
                         <Button
                             type="button"
@@ -1215,7 +1234,6 @@ function EventItem({ event, defaultOpen, now, alerts, manager, members, names, u
                                 {([
                                     ['콘티 정보 수정 및 당번 알림', <SetlistForm key="setlist" {...actions} event={event} />],
                                     ['일정 수정', <EventForm key={JSON.stringify([event.title, event.kind, event.startsAt, event.endsAt, event.location, event.notes])} {...actions} event={event} />],
-                                    ['역할·담당자 1명 추가', <SlotForm key="slot" {...actions} eventId={event.id} members={members} />],
                                     ['역할 템플릿 일괄 추가 (표준 밴드, 풀 세션 등)', <TemplateForm key="template" {...actions} eventId={event.id} />],
                                     ['이전 일정에서 배정 복사해오기', <CopyRosterForm key="copy" {...actions} eventId={event.id} otherEvents={allEvents} />],
                                     ['일정 전체 긴급 공지', <AlertForm key="notice" {...actions} eventId={event.id} slotId={null} />],
@@ -1300,7 +1318,8 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);
     }, []);
-    const manager = canManagePlanning(members, userId);
+    const policy = useTeamPolicy();
+    const manager = canManagePlanning(members, userId, policy);
     const names = useMemo(() => new Map(members.map(member => [member.userId, member.name])), [members]);
     const eventMap = useMemo(() => new Map(state.events.map(event => [event.id, event])), [state.events]);
     const { alertsByEvent, openAlerts } = useMemo(() => {
@@ -1681,6 +1700,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                                 <span>콘티: {event.setlistTitle} {event.setlistSongs?.length ? `(${event.setlistSongs.length}곡)` : ''}</span>
                                                 <ChevronDown size={13} aria-hidden="true" className={cn('text-muted-foreground transition-transform', isSetlistPreviewOpen && 'rotate-180')} />
                                             </button>
+                                            {event.setlistId ? <ContiLink setlistId={event.setlistId} className="ml-1" /> : null}
                                             {isSetlistPreviewOpen && event.setlistSongs?.length ? (
                                                 <ol className="mt-1 space-y-1 rounded-2xl bg-card/80 px-4 py-3 text-[13px] text-foreground/80">
                                                     {event.setlistSongs.map((song, idx) => (
@@ -1751,6 +1771,7 @@ export default function SchedulePanel({ state, members, userId, busy, onCommand 
                                     <ChevronDown className={cn('text-muted-foreground transition-transform', previewSetlistEventId === nextDuty.event.id && 'rotate-180')} />
                                 </Button>
                             ) : null}
+                            {nextDuty.event.setlistId ? <ContiLink setlistId={nextDuty.event.setlistId} /> : null}
                             <Button type="button" variant="ghost" size="xs" className="text-muted-foreground hover:text-destructive" onClick={() => setActiveDeclineSlotId(prev => prev === nextDuty.slot.id ? null : nextDuty.slot.id)}>
                                 참석 상태 변경
                             </Button>

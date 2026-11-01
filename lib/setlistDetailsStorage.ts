@@ -3,6 +3,8 @@
  * 곡 보관함의 콘티(곡 순서)와 별도로 이 브라우저에 저장됩니다.
  */
 
+import { markTeamDocDirty } from './teamDocSync';
+
 export interface SongSetlistOverride {
     songId: string;
     targetKey?: string | null;
@@ -189,6 +191,7 @@ function write(meta: SetlistDetailMetadata): void {
     } catch {
         throw new Error('콘티 정보를 저장하지 못했어요. 브라우저 저장 공간과 설정을 확인해주세요.');
     }
+    markTeamDocDirty(meta.teamId, getSetlistDetailsKey(meta.teamId, meta.setlistId));
     window.dispatchEvent(new CustomEvent(SETLIST_DETAILS_CHANGED_EVENT, { detail: { teamId: meta.teamId, setlistId: meta.setlistId } }));
 }
 

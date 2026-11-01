@@ -325,8 +325,25 @@ export function barsOf(live: MockLive) {
 
 /* ───────────── 펄스: 큰 박 숫자 · 박 막대 · 마디 ───────────── */
 
-/** 박마다 두 번 다시 그려지는 유일한 부분 — 숫자·막대·마디만 여기서 그립니다 */
-export function BeatHero({ bpm, meter, resetKey, bars, desktop = false }: { bpm: number; meter: string; resetKey: string; bars: number; desktop?: boolean }) {
+/**
+ * 박마다 두 번 다시 그려지는 유일한 부분 — 숫자·막대·마디만 여기서 그립니다
+ * @param tempo false 면 아래 줄에서 BPM · 박자표를 빼고 마디만 보여 줍니다 (BPM 을 같은 화면의 다른 곳에서 보여 줄 때). 기본은 함께 보여 줌
+ */
+export function BeatHero({
+    bpm,
+    meter,
+    resetKey,
+    bars,
+    desktop = false,
+    tempo = true,
+}: {
+    bpm: number;
+    meter: string;
+    resetKey: string;
+    bars: number;
+    desktop?: boolean;
+    tempo?: boolean;
+}) {
     const pulse = useMockPulse({ bpm, meter, resetKey });
     const count = pulse.count || 1;
     const started = pulse.count > 0;
@@ -356,13 +373,15 @@ export function BeatHero({ bpm, meter, resetKey, bars, desktop = false }: { bpm:
             <BeatSegments count={started ? count : 0} beatsPerBar={pulse.beatsPerBar} blink={pulse.blink} desktop={desktop} />
 
             <div className={cn('flex items-baseline justify-between gap-4 text-muted-foreground', desktop ? 'mt-6 text-lg' : 'mt-4 text-sm')}>
-                <p>
-                    <span className="font-semibold tabular-nums text-foreground">{bpm}</span> BPM
-                    <span className="mx-2 text-border" aria-hidden="true">
-                        |
-                    </span>
-                    <span className="font-medium text-foreground">{meter}</span>
-                </p>
+                {tempo ? (
+                    <p>
+                        <span className="font-semibold tabular-nums text-foreground">{bpm}</span> BPM
+                        <span className="mx-2 text-border" aria-hidden="true">
+                            |
+                        </span>
+                        <span className="font-medium text-foreground">{meter}</span>
+                    </p>
+                ) : null}
                 <p aria-hidden="true">
                     마디 <span className="font-semibold tabular-nums text-foreground">{bar}</span>
                     <span className="tabular-nums"> / {bars}</span>
@@ -626,7 +645,10 @@ function ScreenMenu({ screen }: { screen: ScreenToggles }) {
 
 export type IslandMode = 'idle' | 'compact' | 'medium' | 'large' | 'list';
 
-/** @param modeClassName 모드별 자리·너비를 바꿀 때 (예: 위 막대가 아닌 좁은 열 위에 둘 때). 없으면 이 시안의 자리 그대로 */
+/**
+ * @param modeClassName 모드별 자리·너비를 바꿀 때 (예: 위 막대가 아닌 좁은 열 위에 둘 때). 없으면 이 시안의 자리 그대로
+ * @param continuousElapsed 큐를 보였다가 쉬는 자리로 돌아와도 '진행 중' 경과 시간이 이어지게 (없으면 이 시안처럼 다시 그릴 때 처음부터 셈)
+ */
 export function CueIsland({
     cues,
     desktop,
@@ -634,6 +656,7 @@ export function CueIsland({
     onAck,
     onDismiss,
     modeClassName,
+    continuousElapsed = false,
 }: {
     cues: DraftToast[];
     desktop: boolean;
@@ -641,6 +664,7 @@ export function CueIsland({
     onAck: (id: string) => void;
     onDismiss: (id: string) => void;
     modeClassName?: Partial<Record<IslandMode, string>>;
+    continuousElapsed?: boolean;
 }) {
     const [known, setKnown] = useState('');
     const [focusId, setFocusId] = useState<string | null>(null);
@@ -731,7 +755,7 @@ export function CueIsland({
                 modeClassName?.[mode],
             )}
         >
-            {mode === 'idle' ? <IdleStatus offline={offline} /> : null}
+            {mode === 'idle' ? <IdleStatus offline={offline} continuous={continuousElapsed} /> : null}
 
             {mode === 'compact' && face ? (
                 <div
@@ -926,13 +950,27 @@ function IslandClose({ cue, onDismiss, className }: { cue: DraftToast; onDismiss
     );
 }
 
+/** 예배 시작 시각 — 브라우저에서 처음 물을 때 'ELAPSED_START 초 전' 으로 정합니다 (continuousElapsed 에서만 씀) */
+let serviceStartedAt: number | null = null;
+
+function elapsedSinceStart() {
+    if (serviceStartedAt === null) serviceStartedAt = Date.now() - ELAPSED_START * 1000;
+    return Math.floor((Date.now() - serviceStartedAt) / 1000);
+}
+
 /** 알림이 없을 때 아일랜드 자리: 조용한 '진행 중' 표시 (연결이 끊기면 '다시 연결 중') */
-function IdleStatus({ offline }: { offline: boolean }) {
+function IdleStatus({ offline, continuous = false }: { offline: boolean; continuous?: boolean }) {
     const [seconds, setSeconds] = useState(ELAPSED_START);
     useEffect(() => {
-        const timer = setInterval(() => setSeconds((value) => value + 1), 1000);
-        return () => clearInterval(timer);
-    }, []);
+        // continuous: 예배 시작 시각에서 바로 계산 — 아일랜드가 큐를 보였다 돌아와도 시간이 뒤로 가지 않습니다
+        const tick = continuous ? () => setSeconds(elapsedSinceStart()) : () => setSeconds((value) => value + 1);
+        const first = continuous ? setTimeout(tick, 0) : null;
+        const timer = setInterval(tick, 1000);
+        return () => {
+            clearInterval(timer);
+            if (first) clearTimeout(first);
+        };
+    }, [continuous]);
     const text = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
     return (
         <p className="flex h-9 items-center gap-1.5 whitespace-nowrap px-3 text-xs text-muted-foreground animate-in fade-in duration-300 motion-reduce:animate-none">

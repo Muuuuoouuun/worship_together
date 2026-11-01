@@ -7,6 +7,8 @@ import { requestKinds, requestStatuses, type PlanningCommand, type PlanningNotif
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { canHandleSlot, canManagePlanning, leadParts, type LeadPart } from '@/types/planning';
 import { slotKeepers, substituteOptions, type SlotKeeper, type SubstituteOption } from '@/lib/planning';
+import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
+import { linkedSetlistId } from '@/lib/serviceLink';
 import { diffDays, relativeTime, seoulDateTime, type ContiSetlist } from './model';
 
 export const ROLE_ORDER: WorshipRole[] = ['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member'];
@@ -141,7 +143,7 @@ export interface RequestItem {
     volunteered?: boolean;
 }
 
-export type NoticeKind = 'request' | 'reply' | 'invite' | 'accept' | 'decline' | 'substitute' | 'volunteer' | 'conti' | 'schedule' | 'rotation' | 'comment' | 'other';
+export type NoticeKind = 'request' | 'reply' | 'invite' | 'accept' | 'decline' | 'substitute' | 'volunteer' | 'conti' | 'schedule' | 'rotation' | 'announcement' | 'comment' | 'other';
 export type NoticeCategory = 'conti' | 'team' | 'request';
 export type NoticeGroup = '오늘' | '어제' | '이번 주' | '이전';
 
@@ -194,6 +196,8 @@ export interface PlanningView {
     notices: Notice[];
     unreadCount: number;
     openRequestCount: number;
+    /** 마감하지 않은 팀 공지 (내가 받은 것 · 내가 쓴 것) */
+    announcements: AnnouncementItem[];
     actions: PlanningActions | null;
     /** 일정·요청 화면 주소 (관리 기능은 그곳에서) */
     planningHref: string;
@@ -213,6 +217,7 @@ export const EMPTY_PLANNING_VIEW: PlanningView = {
     notices: [],
     unreadCount: 0,
     openRequestCount: 0,
+    announcements: [],
     actions: null,
     planningHref: '/dashboard/planning',
 };
@@ -223,13 +228,30 @@ export interface BuildInput {
     userId: string;
     today: string;
     now: Date;
+    /** 팀 권한 설정 (없으면 기본값: 일정 관리는 관리자 · 인도자) */
+    policy?: TeamPolicy;
     /** 콘티 코멘트를 팀 소식에 섞을 때 */
     setlists?: ContiSetlist[];
     /** 코멘트 소식을 읽은 시각 (ISO). 이보다 늦은 코멘트만 새 소식 */
     feedSeenAt?: string | null;
 }
 
-export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'partLeads' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount'>;
+export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'partLeads' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount' | 'announcements'>;
+
+export interface AnnouncementItem {
+    id: string;
+    title: string;
+    body: string;
+    authorName: string;
+    ago: string;
+    createdAt: string;
+    requireAck: boolean;
+    /** 나에게 온 공지인데 아직 확인하지 않음 */
+    needsMyAck: boolean;
+    mine: boolean;
+    ackCount: number;
+    total: number;
+}
 
 /** 일정·요청 화면(SchedulePanel)과 같은 이름을 씁니다. */
 const ALERT_KIND_LABEL: Record<UrgentAlert['kind'], string> = { absence: '불참 알림', substitute: '대체 인원 요청', notice: '긴급 공지' };
@@ -238,14 +260,16 @@ const ALERT_KIND_LABEL: Record<UrgentAlert['kind'], string> = { absence: '불참
 const byStart = (a: TeamSchedule, b: TeamSchedule) => Date.parse(a.startsAt) - Date.parse(b.startsAt);
 
 export function buildPlanningView(input: BuildInput): BuiltPlanning {
-    const { state, members, userId, today, now } = input;
+    const { state, members, userId, today, now, policy = DEFAULT_POLICY } = input;
     const me = members.find((member) => member.userId === userId) ?? null;
     const nameOf = (id: string | null | undefined): string | null => members.find((member) => member.userId === id)?.name ?? null;
-    const canManage = me ? canManagePlanning(members, userId) : false;
+    const canManage = me ? canManagePlanning(members, userId, policy) : false;
     const owner = me?.permission === 'owner';
     const ago = (iso: string) => relativeTime(iso, now);
 
     const live = state.events.filter((event) => !event.cancelled);
+    const linkable = (input.setlists ?? []).map((setlist) => ({ id: setlist.id, day: setlist.date, time: setlist.time }));
+    const setlistTitleOf = (id: string | null) => (id ? (input.setlists ?? []).find((setlist) => setlist.id === id)?.service ?? null : null);
     const openAlert = (eventId: string, slotId: string) => state.alerts.some((alert) => alert.eventId === eventId && alert.slotId === slotId && !alert.resolvedAt);
     /** 겹치는 시간의 다른 일정(또는 같은 일정의 다른 자리)에 이미 배치된 사람은 지원할 수 없습니다 (lib/planning 의 available 과 같은 규칙). */
     const overlaps = (a: TeamSchedule, b: TeamSchedule) => Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
@@ -259,7 +283,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
         const needs = !slot.memberId || slot.attendance === 'absent' || openAlert(event.id, slot.id);
         if (!needs) return { keepers: [], asks: { asked: 0, passedNames: [] }, options: [] };
         return {
-            keepers: slotKeepers(state, members, event, slot).map((keeper) => ({ id: keeper.memberId, name: nameOf(keeper.memberId) ?? '팀원', label: KEEPER_LABEL[keeper.as] })),
+            keepers: slotKeepers(state, members, event, slot, policy).map((keeper) => ({ id: keeper.memberId, name: nameOf(keeper.memberId) ?? '팀원', label: KEEPER_LABEL[keeper.as] })),
             asks: { asked: (slot.asked ?? []).length, passedNames: (slot.passed ?? []).map((id) => nameOf(id)).filter((name): name is string => name !== null) },
             options: substituteOptions(state, members, event, slot).map((option) => ({ id: option.memberId, name: nameOf(option.memberId) ?? '팀원', load: option.load, blocker: option.blocker ? BLOCKER_LABEL[option.blocker] : null })),
         };
@@ -286,7 +310,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                     invitedAt: slot.invitedAt,
                     canVolunteer: canVolunteerFor(event, slot),
                     volunteered: slot.volunteers.includes(userId),
-                    canHandle: Boolean(me) && canHandleSlot(state, members, userId, slot.role),
+                    canHandle: Boolean(me) && canHandleSlot(state, members, userId, slot.role, policy),
                     ...substituteView(event, slot),
                 }));
             return {
@@ -296,8 +320,9 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                 endTime: seoulDateTime(event.endsAt).time,
                 title: event.title,
                 place: event.location,
-                setlistId: event.setlistId ?? null,
-                setlistTitle: event.setlistTitle ?? null,
+                // 일정에서 고른 콘티가 없으면 같은 날 콘티로 잇습니다 (lib/serviceLink).
+                setlistId: linkedSetlistId(event, linkable) ?? event.setlistId ?? null,
+                setlistTitle: event.setlistTitle ?? setlistTitleOf(linkedSetlistId(event, linkable)),
                 assignments,
                 counts: {
                     total: assignments.length,
@@ -482,12 +507,32 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
         notices: allNotices,
         unreadCount: allNotices.filter((item) => item.unread).length,
         openRequestCount: allRequests.filter((item) => !item.done).length,
+        announcements: (state.announcements ?? [])
+            .filter((item) => !item.closedAt && (item.recipientIds.includes(userId) || item.authorId === userId))
+            .map((item): AnnouncementItem => {
+                const pending = item.recipientIds.filter((id) => members.some((member) => member.userId === id) && !item.acks.some((ack) => ack.userId === id)).length;
+                return {
+                    id: item.id,
+                    title: item.title,
+                    body: item.body,
+                    authorName: nameOf(item.authorId) ?? '이전 팀원',
+                    ago: ago(item.createdAt),
+                    createdAt: item.createdAt,
+                    requireAck: item.requireAck,
+                    needsMyAck: item.recipientIds.includes(userId) && !item.acks.some((ack) => ack.userId === userId),
+                    mine: item.authorId === userId,
+                    ackCount: item.acks.length,
+                    total: item.acks.length + pending,
+                };
+            })
+            .sort((a, b) => Number(b.needsMyAck) - Number(a.needsMyAck) || b.createdAt.localeCompare(a.createdAt)),
     };
 }
 
 /** 알림 제목(lib/planning.ts 의 notify 호출)에서 종류를 알아냅니다. */
 export function classifyNotice(item: Pick<PlanningNotification, 'title' | 'target'>): NoticeKind {
     const title = item.title;
+    if (item.target === 'announcements') return 'announcement';
     if (title.includes('답변')) return 'reply';
     if (title.startsWith('콘티 ') && (title.includes('요청') || title.includes('질문'))) return 'request';
     if (title.includes('초대') || title.includes('참석 여부를 확정')) return 'invite';

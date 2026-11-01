@@ -12,7 +12,7 @@ import { emptyPlanningState, planningDate, type PlanningCommand, type PlanningSt
 import type { OnlineTeam, TeamMember } from '@/types/team';
 import { demoMembers, readLocalActor, writeLocalActor } from '@/lib/planningDemo';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Select } from '@/components/ui/input';
 import Notice from '@/components/ui/Notice';
 import PageTabs from '@/components/ui/PageTabs';
@@ -20,11 +20,19 @@ import { TONE_BLOCK } from '@/components/conti/ui';
 import RequestsPanel from './RequestsPanel';
 import SchedulePanel from './SchedulePanel';
 import RotationPanel from './RotationPanel';
+import AnnouncementsPanel from './AnnouncementsPanel';
+import { useLibrarySetlists } from './useLibrarySetlists';
+import { withLinkedSetlists } from '@/lib/serviceLink';
 
-type Props = { teams: OnlineTeam[]; userId?: string; initialTeamId?: string; initialTab?: string; initialSetlist?: { id: string; title: string } };
-type TabId = 'schedule' | 'rotation' | 'requests';
+type Props = {
+    teams: OnlineTeam[]; userId?: string; initialTeamId?: string; initialTab?: string; initialSetlist?: { id: string; title: string };
+    /** 주소의 ?team= 원래 값. 내 팀이 아니면 안내를 띄웁니다. */
+    requestedTeamId?: string;
+};
+type TabId = 'schedule' | 'announcements' | 'rotation' | 'requests';
 const TABS: { id: TabId; title: string; shortTitle: string }[] = [
     { id: 'schedule', title: '일정 · 인원 배치', shortTitle: '일정·배치' },
+    { id: 'announcements', title: '팀 공지', shortTitle: '공지' },
     { id: 'rotation', title: '담당 & 로테이션', shortTitle: '로테이션' },
     { id: 'requests', title: '인도자에게 요청', shortTitle: '요청함' },
 ];
@@ -36,16 +44,16 @@ const fieldLabel = 'mb-1 block text-[11px] font-medium text-muted-foreground';
 export default function PlanningWorkspace(props: Props) {
     return props.teams.length && props.userId ? <OnlinePlanning {...props} /> : <LocalPlanning {...props} />;
 }
+/** 로그인한 온라인 팀: 지금 팀(위의 팀 바꾸기)의 일정 · 요청 */
 function OnlinePlanning(props: Props) {
+    // ?team= 이 내 팀이 아니면(없는 팀 · 비소속 팀) 지금 팀을 보여주되, 안내하고 주소의 낡은 id를 지웁니다.
+    const requestedMissing = Boolean(props.requestedTeamId) && !props.teams.some(item => item.id === props.requestedTeamId);
+    const team = props.teams.find(item => item.id === props.initialTeamId) ?? props.teams[0];
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
-    // ?team= 이 내 팀이 아니면(없는 팀·비소속 팀) 첫 팀을 보여주되, 안내하고 주소의 낡은 id를 지웁니다.
-    const requestedMissing = Boolean(props.initialTeamId) && !props.teams.some(item => item.id === props.initialTeamId);
-    const [selected, setSelected] = useState(requestedMissing ? props.teams[0].id : props.initialTeamId ?? props.teams[0].id);
     const [fallbackNotice, setFallbackNotice] = useState(requestedMissing);
     const replacedUrl = useRef(false);
-    const team = props.teams.find(item => item.id === selected) ?? props.teams[0];
     useEffect(() => {
         if (!requestedMissing || replacedUrl.current) return;
         replacedUrl.current = true; // 한 번만 바꿉니다 (바뀐 주소로 다시 그려져도 반복하지 않음)
@@ -53,20 +61,12 @@ function OnlinePlanning(props: Props) {
         params.set('team', team.id);
         router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }, [requestedMissing, searchParams, team.id, pathname, router]);
-    const picker = (
-        <label className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">함께 준비할 팀</span>
-            <Select className={cn(pillSelect, 'h-9 w-auto max-w-56')} value={team.id} onChange={event => setSelected(event.target.value)}>
-                {props.teams.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </Select>
-        </label>
-    );
-    const board = <Board key={team.id} teamId={team.id} members={team.members} userId={props.userId!} online toolbar={picker} initialTab={props.initialTab} initialSetlist={team.id === props.initialTeamId ? props.initialSetlist : undefined} />;
+    const board = <Board key={team.id} teamId={team.id} members={team.members} userId={props.userId!} online initialTab={props.initialTab} initialSetlist={props.initialSetlist} />;
     // 안내를 닫아도 Board가 다시 마운트되지 않도록 같은 트리 모양을 유지합니다.
     return <div className="space-y-4">
         {fallbackNotice ? <Notice tone="warn" className="flex items-start justify-between gap-3">
-            <span className="min-w-0 pt-0.5" data-testid="team-fallback-notice">요청한 팀을 찾을 수 없거나 접근 권한이 없어 내 팀을 대신 보여줍니다.</span>
-            <button type="button" aria-label="안내 닫기" title="안내 닫기" onClick={() => setFallbackNotice(false)} className="-my-1 -mr-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:hover:bg-white/10">
+            <span className="min-w-0 pt-0.5" data-testid="team-fallback-notice">요청한 팀을 찾을 수 없거나 접근 권한이 없어 지금 팀을 대신 보여줍니다.</span>
+            <button type="button" aria-label="안내 닫기" title="안내 닫기" onClick={() => setFallbackNotice(false)} className="-my-2 -mr-2 inline-flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:bg-white/10">
                 <X size={16} aria-hidden="true" />
             </button>
         </Notice> : null}
@@ -107,7 +107,7 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
     const searchParams = useSearchParams();
     const [inboxOpen, setInboxOpen] = useState(searchParams.get('inbox') === '1');
     const [state, setState] = useState<PlanningState>(emptyPlanningState);
-    const [tab, setTab] = useState<TabId>(initialTab === 'requests' ? 'requests' : initialTab === 'rotation' ? 'rotation' : 'schedule');
+    const [tab, setTab] = useState<TabId>(TABS.some(item => item.id === initialTab) ? initialTab as TabId : 'schedule');
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -170,13 +170,16 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
     }, [key, loaded, online, receive, roster, teamId, userId]);
 
     const unread = useMemo(() => state.notifications.filter(item => !item.readBy.includes(userId)), [state.notifications, userId]);
-    const panelProps = useMemo(() => ({ state, members: roster, userId, busy: busy || !loaded, onCommand }), [state, roster, userId, busy, loaded, onCommand]);
+    // 일정에 콘티를 따로 고르지 않았으면 같은 날 콘티를 보여 줍니다 (lib/serviceLink · 저장하지 않음).
+    const library = useLibrarySetlists(teamId);
+    const linkedState = useMemo(() => (library.length ? { ...state, events: withLinkedSetlists(state.events, library) } : state), [state, library]);
+    const panelProps = useMemo(() => ({ state: linkedState, members: roster, userId, busy: busy || !loaded, onCommand }), [linkedState, roster, userId, busy, loaded, onCommand]);
     const sorted = useMemo(() => [...state.notifications].sort((a, b) => Number(a.readBy.includes(userId)) - Number(b.readBy.includes(userId))), [state.notifications, userId]);
     const urgentUnread = unread.some(item => item.urgent);
     return <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             {toolbar}
-            <p className="min-w-0 flex-1 basis-56 text-xs leading-5 text-muted-foreground">{online ? '팀에 함께 저장 · 새 알림 자동 확인' : '기기 저장 · 체험 중'}<br />앱을 닫은 상태의 푸시 알림은 지원하지 않습니다.</p>
+            <p className="min-w-0 flex-1 basis-56 text-xs leading-5 text-muted-foreground">{online ? '팀에 함께 저장 · 다른 팀원이 바꾸면 바로 보여요' : '기기 저장 · 체험 중'}<br />{online ? '팀·초대 화면에서 ‘이 기기 알림’을 켜면 앱을 보지 않을 때도 알려 드려요.' : '체험 중에는 다른 기기로 알림이 가지 않아요.'}</p>
             <Button type="button" variant="outline" size="icon-sm" aria-label="새로고침" title="새로고침" className="ml-auto" onClick={() => void refresh()} disabled={busy}><RefreshCw size={16} aria-hidden="true" /></Button>
         </div>
         {toast && <div role="alert" className={cn('flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-3xl px-4 py-3.5', TONE_BLOCK.peach)}>
@@ -220,7 +223,9 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
                             <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground/75">{item.body}</p>
                             <p className="mt-1.5 text-[11px] text-muted-foreground">{planningDate(item.createdAt)} · {read ? '확인함' : '미확인'}</p>
                             <div className="mt-2.5 flex flex-wrap gap-1.5">
-                                <Button type="button" variant="outline" size="xs" onClick={() => setTab(item.target)}>내용 보기</Button>
+                                {item.target === 'conti'
+                                    ? <Link href={`/dashboard/songs?${new URLSearchParams({ tab: 'order', setlist: item.entityId })}`} className={buttonVariants({ variant: 'outline', size: 'xs' })}>콘티 보기</Link>
+                                    : <Button type="button" variant="outline" size="xs" onClick={() => setTab(item.target as TabId)}>내용 보기</Button>}
                                 {!read && <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" disabled={busy} onClick={() => void onCommand({ type: 'notification.read', notificationId: item.id })}><CircleCheck size={13} aria-hidden="true" />확인</Button>}
                             </div>
                         </div>
@@ -241,6 +246,8 @@ function Board({ teamId, members, userId, online, toolbar, initialTab, initialSe
             <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="mt-3">
                 {tab === 'schedule' ? (
                     <SchedulePanel {...panelProps} />
+                ) : tab === 'announcements' ? (
+                    <AnnouncementsPanel {...panelProps} />
                 ) : tab === 'rotation' ? (
                     <RotationPanel {...panelProps} />
                 ) : (

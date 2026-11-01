@@ -21,6 +21,7 @@
 /.next/
 /.next-qa/
 /.next-prod/
+/.next-e2e/
 /out/
 
 # production

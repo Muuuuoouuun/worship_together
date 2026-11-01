@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Bell, BellRing, CheckCheck, CircleCheck, ExternalLink, Hand, Inbox, ListMusic, MessageCircle, Repeat, UserCheck, UserX, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bell, BellRing, CheckCheck, CircleCheck, ExternalLink, Hand, Inbox, ListMusic, Megaphone, MessageCircle, Repeat, UserCheck, UserX, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ScreenId } from './model';
 import { useConti } from './context';
@@ -23,6 +23,7 @@ const NOTICE_META: Record<NoticeKind, { icon: LucideIcon; tone: Tone }> = {
     conti: { icon: ListMusic, tone: 'mint' },
     schedule: { icon: Bell, tone: 'sky' },
     rotation: { icon: Repeat, tone: 'lilac' },
+    announcement: { icon: Megaphone, tone: 'sand' },
     comment: { icon: MessageCircle, tone: 'sky' },
     other: { icon: Bell, tone: 'sky' },
 };
@@ -67,7 +68,7 @@ export default function AlertsScreen({ onBack, openOrder, go }: { onBack?: () =>
         else if (notice.target === 'schedule') go('team');
     }
 
-    const rotationHref = planning.planningHref.includes('?') ? `${planning.planningHref}&tab=rotation` : `${planning.planningHref}?tab=rotation`;
+    const tabHref = (tab: string) => (planning.planningHref.includes('?') ? `${planning.planningHref}&tab=${tab}` : `${planning.planningHref}?tab=${tab}`);
 
     return (
         <div className="space-y-5">
@@ -127,7 +128,7 @@ export default function AlertsScreen({ onBack, openOrder, go }: { onBack?: () =>
                                 <Eyebrow>{group}</Eyebrow>
                                 <ul className="mt-1">
                                     {items.map((notice) => (
-                                        <NoticeRow key={notice.id} notice={notice} onOpen={() => open(notice)} onRead={() => read(notice)} rotationHref={rotationHref} />
+                                        <NoticeRow key={notice.id} notice={notice} onOpen={() => open(notice)} onRead={() => read(notice)} tabHref={tabHref} />
                                     ))}
                                 </ul>
                             </section>
@@ -167,7 +168,7 @@ export function NoticeAvatar({ notice, size = 'md' }: { notice: Notice; size?: '
     );
 }
 
-function NoticeRow({ notice, onOpen, onRead, rotationHref }: { notice: Notice; onOpen: () => void; onRead: () => void; rotationHref: string }) {
+function NoticeRow({ notice, onOpen, onRead, tabHref }: { notice: Notice; onOpen: () => void; onRead: () => void; tabHref: (tab: string) => string }) {
     const action =
         notice.target === 'conti' ? '콘티 보기' : notice.target === 'requests' ? '요청 보기' : notice.target === 'schedule' ? '팀 배치 보기' : null;
     return (
@@ -193,10 +194,10 @@ function NoticeRow({ notice, onOpen, onRead, rotationHref }: { notice: Notice; o
                             {action}
                         </button>
                     )}
-                    {notice.target === 'rotation' && (
-                        <Link href={rotationHref} className={cn('inline-flex h-8 items-center gap-1 rounded-full border px-3.5 text-xs font-semibold', line, ink)}>
+                    {(notice.target === 'rotation' || notice.target === 'announcements') && (
+                        <Link href={tabHref(notice.target)} className={cn('inline-flex h-8 items-center gap-1 rounded-full border px-3.5 text-xs font-semibold', line, ink)}>
                             <ExternalLink size={12} aria-hidden="true" />
-                            로테이션 보기
+                            {notice.target === 'rotation' ? '로테이션 보기' : '공지 보기'}
                         </Link>
                     )}
                     {notice.unread && notice.kind !== 'comment' && (

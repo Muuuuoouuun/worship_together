@@ -2,11 +2,14 @@ import { createHash } from "node:crypto";
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import NaverProvider from "next-auth/providers/naver";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { safeLocalCallbackUrl } from "./authRedirect";
+import { DEV_PROVIDER_ID } from "./authIds";
 
+export { DEV_PROVIDER_ID };
 export type AuthProviderId = "google" | "naver";
 type AuthEnvironment = Partial<Record<
-  "NEXTAUTH_SECRET" | "NEXTAUTH_URL" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "NAVER_CLIENT_ID" | "NAVER_CLIENT_SECRET" | "NODE_ENV", string
+  "NEXTAUTH_SECRET" | "NEXTAUTH_URL" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "NAVER_CLIENT_ID" | "NAVER_CLIENT_SECRET" | "NODE_ENV" | "DEV_LOGIN", string
 >>;
 
 export function getAuthConfiguration(env: AuthEnvironment = process.env) {
@@ -23,6 +26,8 @@ export function getAuthConfiguration(env: AuthEnvironment = process.env) {
   return {
     ready,
     origin,
+    /** DEV_LOGIN=1 이고 운영(production)이 아닐 때만 */
+    devLogin: ready && env.DEV_LOGIN === "1" && env.NODE_ENV !== "production",
     providers: ([
       { id: "google", name: "Google", enabled: ready && Boolean(env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim()) },
       { id: "naver", name: "네이버", enabled: ready && Boolean(env.NAVER_CLIENT_ID?.trim() && env.NAVER_CLIENT_SECRET?.trim()) },
@@ -32,13 +37,14 @@ export function getAuthConfiguration(env: AuthEnvironment = process.env) {
 
 /** Stable identity contract for team ownership. Email is deliberately excluded. */
 export function providerUserId(provider: string, providerAccountId: string): string {
-  if (!["google", "naver"].includes(provider) || !providerAccountId?.trim()) throw new Error("Invalid OAuth account");
+  if (![...["google", "naver"], DEV_PROVIDER_ID].includes(provider) || !providerAccountId?.trim()) throw new Error("Invalid OAuth account");
   return createHash("sha256").update(`${provider}:${providerAccountId}`, "utf8").digest("hex");
 }
 
 export function createAuthOptions(env: AuthEnvironment = process.env): NextAuthOptions {
   const config = getAuthConfiguration(env);
-  const enabled = new Set(config.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+  const enabled = new Set<string>(config.providers.filter((provider) => provider.enabled).map((provider) => provider.id));
+  if (config.devLogin) enabled.add(DEV_PROVIDER_ID);
   return {
     secret: env.NEXTAUTH_SECRET,
     session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
@@ -51,11 +57,20 @@ export function createAuthOptions(env: AuthEnvironment = process.env): NextAuthO
         clientId: env.NAVER_CLIENT_ID!, clientSecret: env.NAVER_CLIENT_SECRET!,
         allowDangerousEmailAccountLinking: false,
       })] : []),
+      ...(config.devLogin ? [CredentialsProvider({
+        id: DEV_PROVIDER_ID,
+        name: "개발용 로그인",
+        credentials: { name: { label: "이름", type: "text" } },
+        async authorize(credentials) {
+          const name = String(credentials?.name ?? "").trim().slice(0, 40);
+          return name ? { id: name, name, email: null, image: null } : null;
+        },
+      })] : []),
     ],
     pages: { signIn: "/login", error: "/login" },
     callbacks: {
       async signIn({ account }) {
-        return Boolean(account && enabled.has(account.provider as AuthProviderId) && account.providerAccountId?.trim());
+        return Boolean(account && enabled.has(account.provider) && account.providerAccountId?.trim());
       },
       async jwt({ token, account, user, trigger }) {
         // Never merge the untrusted `session` supplied to useSession().update().

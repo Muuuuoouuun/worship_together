@@ -10,20 +10,19 @@ import { getTeamServerSnapshot, getTeamSnapshot, parseTeamSnapshot, selectProtot
 const teamLabel = 'block text-sm font-semibold text-foreground';
 const teamSelect = 'mt-1.5 sm:max-w-sm';
 
-type Props = ComponentProps<typeof LibraryWorkspace> & { onlineTeams?: { id: string; name: string }[]; onlineTeamId?: string };
+type Props = ComponentProps<typeof LibraryWorkspace> & { onlineTeams?: { id: string; name: string }[]; onlineTeamId?: string; canEditConti?: boolean };
 export default function LibraryTeamWorkspace(props: Props) {
     if (props.onlineTeams?.length) return <OnlineTeamLibrary {...props} />;
     return props.hasBackend ? <LibraryWorkspace {...props} /> : <PrototypeTeamLibrary {...props} />;
 }
 
+/** 로그인한 온라인 팀: 지금 팀(위의 팀 바꾸기)의 곡 보관함 — 팀원 모두와 함께 저장됩니다. */
 function OnlineTeamLibrary(props: Props) {
     const teams = props.onlineTeams!;
-    const [selected, setSelected] = useState(props.onlineTeamId ?? teams[0].id);
-    const team = teams.find(item => item.id === selected) ?? teams[0];
-    return <div className="space-y-6">
-        <label className={teamLabel}>준비할 온라인 팀<Select className={teamSelect} value={team.id} onChange={event => setSelected(event.target.value)}>{teams.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></label>
-        <LibraryWorkspace key={team.id} {...props} teamId={team.id} hasBackend={false} initialSongs={[]} initialSetlists={[]} />
-    </div>;
+    const team = teams.find(item => item.id === props.onlineTeamId) ?? teams[0];
+    const { onlineTeams: _teams, onlineTeamId: _id, canEditConti, ...rest } = props;
+    void _teams; void _id;
+    return <LibraryWorkspace key={team.id} {...rest} teamId={team.id} hasBackend={false} online canEdit={canEditConti !== false} initialSongs={[]} initialSetlists={[]} />;
 }
 
 function PrototypeTeamLibrary(props: Props) {

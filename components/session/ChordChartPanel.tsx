@@ -132,7 +132,7 @@ export default function ChordChartPanel({ initial, busy, onCreate, onClose }: Pr
                 {initial && ' · 이미 있는 코드 악보 페이지는 새로 그려지고 필기는 그대로 남습니다'}
             </p>
             <div className="flex flex-wrap gap-2">
-                <button type="button" className={`${choice} border-amber-400/40 bg-amber-400/10`} disabled={busy} onClick={loadExample}>
+                <button type="button" className={`${choice} border-brand/40 bg-brand/10`} disabled={busy} onClick={loadExample}>
                     예시 불러오기 (나 같은 죄인 살리신)
                 </button>
                 <button

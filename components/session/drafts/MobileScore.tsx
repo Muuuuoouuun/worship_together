@@ -67,13 +67,17 @@ const focusRing = 'outline-none focus-visible:ring-2 focus-visible:ring-ring';
 /** 흰 알약·스위치처럼 링과 같은 색인 요소는 틈을 두고 (시트 바탕색) */
 const focusRingOffset = cn(focusRing, 'focus-visible:ring-offset-2 focus-visible:ring-offset-card');
 
-/** 이 화면을 다른 화면의 틀로 쓸 때 위 막대 · 본문에 넘겨 주는 상태 */
+/** 이 화면을 다른 화면의 틀로 쓸 때 위 막대 · 본문 · 아래 막대에 넘겨 주는 상태 */
 export interface MobileScoreChrome {
     live: MockLive;
     locked: boolean;
     beatOn: boolean;
     /** 더보기 시트 열기 */
     onMore: () => void;
+    /** 송폼 · 순서 시트 열기 */
+    onOrder: () => void;
+    /** 화면 잠금 풀기 */
+    onUnlock: () => void;
 }
 
 /** 모두 선택 사항 — 주지 않으면 시안 그대로 그립니다 */
@@ -86,9 +90,11 @@ export interface MobileScoreSlots {
     renderTopBar?: (chrome: MobileScoreChrome) => ReactNode;
     /** 위 막대와 아래 막대 사이(코드 악보 자리)를 바꿔 그립니다 */
     renderBody?: (chrome: MobileScoreChrome) => ReactNode;
+    /** 아래 막대를 바꿔 그립니다 (큐 시트 버튼이 없는 아래 막대를 그리면 큐 시트도 열리지 않습니다) */
+    renderBottomBar?: (chrome: MobileScoreChrome) => ReactNode;
 }
 
-export default function MobileScore({ framed = false, alt = false, live: liveProp, hideOwnCues = false, renderTopBar, renderBody }: DraftScreenProps & MobileScoreSlots) {
+export default function MobileScore({ framed = false, alt = false, live: liveProp, hideOwnCues = false, renderTopBar, renderBody, renderBottomBar }: DraftScreenProps & MobileScoreSlots) {
     const ownLive = useMockLive();
     const live = liveProp ?? ownLive;
     const rootRef = useRef<HTMLDivElement>(null);
@@ -176,7 +182,7 @@ export default function MobileScore({ framed = false, alt = false, live: livePro
 
     const latest = live.log[0] ?? null;
     const incoming = latest && latest.from !== '나' && latest.id !== dismissedCue ? latest : null;
-    const chrome: MobileScoreChrome = { live, locked, beatOn, onMore: () => openSheet('more') };
+    const chrome: MobileScoreChrome = { live, locked, beatOn, onMore: () => openSheet('more'), onOrder: () => openSheet('order'), onUnlock: () => setLocked(false) };
 
     return (
         <div ref={rootRef} className="dark relative flex h-full w-full flex-col overflow-hidden bg-background text-foreground [color-scheme:dark]">
@@ -188,7 +194,11 @@ export default function MobileScore({ framed = false, alt = false, live: livePro
 
                 {renderBody ? <ChromeSlot render={renderBody} chrome={chrome} /> : <ScoreChart live={live} locked={locked} />}
 
-                <BottomBar live={live} locked={locked} onOrder={() => openSheet('order')} onCue={() => openSheet('cue')} onUnlock={() => setLocked(false)} />
+                {renderBottomBar ? (
+                    <ChromeSlot render={renderBottomBar} chrome={chrome} />
+                ) : (
+                    <BottomBar live={live} locked={locked} onOrder={() => openSheet('order')} onCue={() => openSheet('cue')} onUnlock={() => setLocked(false)} />
+                )}
             </div>
 
             {hideOwnCues ? null : <SentFlash flash={live.flash} />}
@@ -240,7 +250,7 @@ export default function MobileScore({ framed = false, alt = false, live: livePro
     );
 }
 
-/** 바꿔 끼운 위 막대 · 본문 — onMore 는 누를 때만 부르므로 자식 컴포넌트에서 그립니다 */
+/** 바꿔 끼운 위 막대 · 본문 · 아래 막대 — 시트 열기는 누를 때만 부르므로 자식 컴포넌트에서 그립니다 */
 function ChromeSlot({ render, chrome }: { render: (chrome: MobileScoreChrome) => ReactNode; chrome: MobileScoreChrome }) {
     return render(chrome);
 }

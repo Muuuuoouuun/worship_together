@@ -64,7 +64,7 @@ export default function ScheduleRsvpModal({
     const [respondingSlotId, setRespondingSlotId] = useState<string | null>(null);
     const [declineReasonText, setDeclineReasonText] = useState('');
     const [showDeclineInputSlotId, setShowDeclineInputSlotId] = useState<string | null>(null);
-    useSheetDismiss(onClose);
+    const dialogRef = useSheetDismiss(onClose);
 
     const memberMap = useMemo(() => new Map(members.map(m => [m.userId, m])), [members]);
 
@@ -215,6 +215,7 @@ export default function ScheduleRsvpModal({
 
     return (
         <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${modalId}-title`}

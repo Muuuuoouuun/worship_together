@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
-import { getAuthConfiguration } from "@/lib/authConfig";
+import { DEV_PROVIDER_ID, getAuthConfiguration } from "@/lib/authConfig";
 import { safeLocalCallbackUrl } from "@/lib/authRedirect";
 
 export const runtime = "nodejs";
@@ -15,7 +15,8 @@ async function handler(request: NextRequest, context: Context) {
   const { nextauth } = await context.params;
   const [action, provider] = nextauth;
   const config = getAuthConfiguration();
-  const unavailableProvider = (action === "signin" || action === "callback") && provider &&
+  const devProvider = config.devLogin && provider === DEV_PROVIDER_ID;
+  const unavailableProvider = (action === "signin" || action === "callback") && provider && !devProvider &&
     !config.providers.some((item) => item.id === provider && item.enabled);
 
   if (!config.ready || unavailableProvider) {

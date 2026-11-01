@@ -14,11 +14,19 @@ Google·네이버 OAuth 로그인, 서버 팀 명단·역할, 7일 초대 링크
 | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | 네이버 로그인 애플리케이션 |
 | `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY` | Kakao JavaScript 키. Admin 키나 REST API 키를 넣지 않음 |
 | `TEAM_DATABASE_PATH` | 선택 사항. 영속 볼륨의 SQLite 절대 경로. 기본 `.data/teams.sqlite` |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | 선택 사항. 앱을 닫아도 오는 알림(웹 푸시) 키 쌍. 없으면 앱이 열려 있을 때의 알림만 동작 |
+| `VAPID_SUBJECT` | 선택 사항. 푸시 서비스가 연락할 주소(`mailto:…` 또는 `https://…`). 기본은 `NEXTAUTH_URL` |
 
 키는 저장소에 커밋하지 않습니다. 비밀키 생성 예시:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+웹 푸시 키 생성 예시 (한 번 만들어 계속 같은 값을 씁니다. 바꾸면 기기들이 다음 접속 때 새 키로 다시 구독합니다):
+
+```bash
+npx web-push generate-vapid-keys
 ```
 
 Node.js 22.13 이상에서 실행합니다. 환경변수 변경 후 서버를 재시작하고, `NEXT_PUBLIC_` 값 변경 후에는 다시 빌드합니다. 로그인 설정이 불완전하면 해당 제공자 버튼은 비활성 상태와 안내 문구를 표시합니다.

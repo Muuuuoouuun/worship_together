@@ -12,5 +12,5 @@ export default async function SessionPage({ params, searchParams }: PageProps) {
     const [{ id }, query] = await Promise.all([params, searchParams]);
     const detail = await getSessionDetail(id);
     if (!detail?.session.team_id) notFound();
-    return <ClientSessionLoader onlineTeamName={await getOnlineTeamName(query.team)} detail={detail} setlistId={typeof query.setlist === 'string' ? query.setlist : undefined} requestedTeamId={typeof query.team === 'string' ? query.team : undefined} mode="workspace" />;
+    return <ClientSessionLoader onlineTeamName={await getOnlineTeamName(query.team)} detail={detail} setlistId={typeof query.setlist === 'string' ? query.setlist : undefined} requestedTeamId={typeof query.team === 'string' ? query.team : undefined} />;
 }
