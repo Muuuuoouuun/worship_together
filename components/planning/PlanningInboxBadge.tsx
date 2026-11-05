@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { loadPlanningInbox } from '@/actions/planningActions';
 import { cn } from '@/lib/utils';
@@ -9,6 +10,7 @@ import { cn } from '@/lib/utils';
 export default function PlanningInboxBadge() {
     const [inbox, setInbox] = useState<{ count: number; urgent: number; teamId?: string; target?: string; title?: string } | null>(null);
     const [failed, setFailed] = useState(false);
+    const pathname = usePathname();
     useEffect(() => {
         let active = true, pending = false;
         async function refresh() {
@@ -28,6 +30,8 @@ export default function PlanningInboxBadge() {
         return () => { active = false; clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('worship-planning-changed', refresh); };
     }, []);
     if (!inbox?.count && !failed) return null;
+    // 일정·요청 화면에는 같은 알림함('내 알림')이 본문에 있어, 떠 있는 알림이 응답 버튼 · 입력칸만 가립니다.
+    if (!failed && pathname?.startsWith('/dashboard/planning')) return null;
     const href = `/dashboard/planning?team=${encodeURIComponent(inbox?.teamId ?? '')}&tab=${inbox?.target ?? 'schedule'}&inbox=1`;
     const label = failed ? '알림 연결 확인 필요' : inbox?.urgent ? `긴급 미확인 ${inbox.urgent}건` : `새 알림 ${inbox?.count}건`;
     const detail = failed ? '눌러서 다시 확인해주세요' : inbox?.title;

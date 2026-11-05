@@ -58,10 +58,13 @@ test('new leader and first-time teammate: invite, shared setlist, permission bou
         await teammate.getByRole('link', { name: '일정·요청', exact: true }).filter({ visible: true }).click();
         const memberEvent = teammate.getByRole('article', { name: '함께 준비할 예배', exact: true });
         await expect(memberEvent).toBeVisible();
+        // The assigned teammate sees their response request at the top of the card, before any details.
+        await expect(memberEvent.getByRole('region', { name: '내 참석 응답' })).toBeVisible();
         const details = memberEvent.locator('details').filter({ has: teammate.locator('summary').filter({ hasText: '일정 상세·참석·배정 보기' }) }).first();
         if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
         await memberEvent.getByRole('button', { name: '참석 확정', exact: true }).click();
         await expect(memberEvent.getByText('참석 확정됨', { exact: true })).toBeVisible();
+        await expect(memberEvent.getByRole('region', { name: '내 참석 응답' })).toHaveCount(0);
         await expect(event.getByText('1/1').first()).toBeVisible();
         await info.attach('member-rsvp', { body: await teammate.screenshot(), contentType: 'image/png' });
 
