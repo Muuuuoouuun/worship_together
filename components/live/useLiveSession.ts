@@ -218,6 +218,9 @@ export function useLiveSession(sessionId: string, { exitHref = '/dashboard' }: {
     useEffect(() => {
         if (!teamId || !myId) return;
         let wasOffline = false;
+        // 처음 받은 상세(fetch)와 소식 구독 사이에 일어난 입장 · 곡 이동 · 큐는 흐름으로 오지 않습니다.
+        // 구독이 처음 연결되면 한 번 다시 읽어 그 틈을 메웁니다(예: 늦게 들어온 사람에게 '0/4 접속'으로 보이던 문제).
+        let synced = false;
         const unsubscribe = subscribeTeamStream(teamId, (event) => {
             const payload = event.payload as Record<string, unknown> | null;
             if (event.type === 'team.changed' || event.type === 'stream.reset') { void refetch(); return; }
@@ -285,7 +288,12 @@ export function useLiveSession(sessionId: string, { exitHref = '/dashboard' }: {
                 wasOffline = true;
                 pushToast({ id: 'connection', kind: 'offline', tone: 'warning', urgency: 'normal', group: 'connection', title: '연결이 끊겼어요', body: '다시 연결하는 중 · 화면은 계속 볼 수 있어요', ttl: null });
             }
+            if (status === 'online' && !synced && !wasOffline) {
+                synced = true;
+                void refetch();
+            }
             if (status === 'online' && wasOffline) {
+                synced = true;
                 wasOffline = false;
                 pushToast({ id: 'connection', kind: 'online', tone: 'success', urgency: 'low', group: 'connection', title: '다시 연결됐어요', body: '놓친 진행 · 큐를 맞췄어요', ttl: 3000 });
                 void refetch();

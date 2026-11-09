@@ -50,6 +50,9 @@ export type WorkspaceMode = 'embedded' | 'app' | 'framed';
 /** 페이지 안에서는 탭을 바꿀 때 URL 만 바꾸므로, 다시 마운트될 때는 서버가 준 값 대신 지금 URL 을 따릅니다. */
 function fromLocation(fallback: { screen: ScreenId; setlistId?: string }): { screen: ScreenId; setlistId?: string } {
     if (typeof window === 'undefined') return fallback;
+    // 다른 화면(일정 카드의 '콘티 · 악보 보기' 등)에서 앱 안 이동으로 들어오면, 첫 그림 때 주소창은 아직 이전 화면입니다.
+    // 그때는 서버가 새 주소로 정한 화면(fallback)을 씁니다. 이 화면 안에서 바꾼 탭(replaceState)만 주소에서 다시 읽습니다.
+    if (!window.location.pathname.startsWith('/dashboard/songs')) return fallback;
     const params = new URLSearchParams(window.location.search);
     const one = (name: string) => {
         const all = params.getAll(name);
