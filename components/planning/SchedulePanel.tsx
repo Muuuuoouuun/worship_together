@@ -550,6 +550,36 @@ function AlertCard({ alert, event, names, manager, className, ...actions }: Acti
     </li>;
 }
 
+/**
+ * 내가 배치됐는데 아직 응답하지 않은 자리가 있으면 일정 카드 맨 위에서 바로 응답합니다.
+ * 팀원에게 이 일정에서 가장 중요한 동작이 상세 · 안내 · 알림 아래에 묻히지 않게 합니다.
+ */
+function MyRsvpPrompt({ event, userId, now, disabled, send, className }: { event: TeamSchedule; userId: string; now: number; disabled: boolean; send: Actions['send']; className?: string }) {
+    const [declining, setDeclining] = useState(false);
+    const mine = event.slots.filter(slot => slot.memberId === userId && slot.attendance === 'pending');
+    if (event.cancelled || !mine.length || Date.parse(event.endsAt) < now) return null;
+    const roles = mine.map(slot => worshipRoles[slot.role]).join(' · ');
+    const respond = (attendance: 'confirmed' | 'absent', reason = '') => {
+        for (const slot of mine) void send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance, reason, ...(attendance === 'absent' ? { autoRequestSubstitute: true } : {}) });
+    };
+    return <section aria-label="내 참석 응답" className={cn('rounded-2xl border border-brand/25 bg-brand/5 px-4 py-3.5', className)}>
+        <p className="text-sm font-semibold text-foreground">{roles} 자리에 배치됐어요</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">참석 여부를 알려 주면 인도자에게 바로 전달돼요.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" disabled={disabled} aria-label={`${roles} 참석 확정`} onClick={() => respond('confirmed')}>
+                <Check /> 참석 확정
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={disabled} aria-expanded={declining} onClick={() => setDeclining(open => !open)}>
+                {declining ? '닫기' : '못 가요'}
+            </Button>
+        </div>
+        {declining ? <div className="mt-3 space-y-2">
+            <p className={eyebrow}>사유를 고르면 불참으로 응답하고 대체 인원 요청이 가요</p>
+            <ReasonChips disabled={disabled} onPick={reason => respond('absent', reason)} />
+        </div> : null}
+    </section>;
+}
+
 /** 1클릭 불참 사유 칩 */
 function ReasonChips({ disabled, onPick, titleSuffix = '사유로 1클릭 불참 응답' }: { disabled: boolean; onPick: (reason: string) => void; titleSuffix?: string }) {
     return <div className="flex flex-wrap gap-1.5">
@@ -1057,6 +1087,8 @@ function EventItem({ event, defaultOpen, now, alerts, manager, members, names, u
             <p className="break-words text-xs text-muted-foreground">장소: {event.location || '미정'}</p>
         </header>
 
+        <MyRsvpPrompt event={event} userId={userId} now={now} disabled={actions.disabled} send={actions.send} className="mt-4" />
+
         <SlotSummary slots={event.slots} className="mt-4" />
 
         {manager && live ? (
@@ -1214,11 +1246,12 @@ function EventItem({ event, defaultOpen, now, alerts, manager, members, names, u
                     </Disclosure>
                 ) : null}
 
-                <section aria-label="일정 안내" className="space-y-1.5"><h4 className={subTitle}>안내 사항</h4><p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground/75">{event.notes || '등록된 안내 사항이 없습니다.'}</p></section>
-                <section aria-label="일정별 긴급 알림">
+                {/* 비어 있는 안내 · 알림은 관리자에게만 (팀원에게는 내용 없는 제목만 늘어나 배정·참석이 밀려납니다) */}
+                {event.notes || manager ? <section aria-label="일정 안내" className="space-y-1.5"><h4 className={subTitle}>안내 사항</h4><p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground/75">{event.notes || '등록된 안내 사항이 없습니다.'}</p></section> : null}
+                {alerts.length || manager ? <section aria-label="일정별 긴급 알림">
                     <h4 className={subTitle}>이 일정의 알림 · 해결 기록</h4>
                     {alerts.length ? <ul>{alerts.map(alert => <AlertCard key={alert.id} {...actions} alert={alert} event={event} names={names} manager={manager} />)}</ul> : <p className="mt-1.5 text-sm text-muted-foreground">등록된 알림이 없습니다.</p>}
-                </section>
+                </section> : null}
                 <section aria-label="역할 배정과 참석">
                     <h4 className={subTitle}>역할 배정·참석</h4>
                     {event.slots.length ? <ul className="mt-1">{event.slots.map(slot => <SlotCard key={slot.id} {...actions} slot={slot} event={event} alerts={alerts} members={members} names={names} userId={userId} manager={manager} allEvents={allEvents} workloadMap={workloadMap} />)}</ul> : <p className="mt-1.5 text-sm text-muted-foreground">아직 등록된 역할이 없습니다.</p>}
