@@ -41,13 +41,16 @@ type Send = PlanningPanelProps['onCommand'];
 type Actions = { send: Send; disabled: boolean };
 
 /** 날짜까지 남은 시간. 배경 없는 글자색만 돌려줍니다 (오늘 = 강조색, 진행 중 = 주황). */
+/** 한국 날짜(YYYY-MM-DD) — D-day는 시간 차이가 아니라 달력 날짜로 셉니다(홈 · 콘티의 D-day와 같은 기준). */
+const kstDay = (ms: number) => new Date(ms + 9 * 3_600_000).toISOString().slice(0, 10);
+
 function getRelativeDateLabel(iso: string, nowMs: number) {
     const targetMs = Date.parse(iso);
     const diffHours = (targetMs - nowMs) / (1000 * 60 * 60);
-    const diffDays = Math.round((targetMs - nowMs) / (1000 * 60 * 60 * 24));
     if (diffHours < -24) return { text: '종료', cls: 'text-muted-foreground/70' };
-    if (diffHours >= -24 && diffHours < 0) return { text: '진행 중', cls: 'font-semibold text-secondary' };
-    if (diffHours >= 0 && diffHours <= 18) return { text: '오늘', cls: 'font-semibold text-brand' };
+    if (diffHours < 0) return { text: '진행 중', cls: 'font-semibold text-secondary' };
+    const diffDays = Math.round((Date.parse(kstDay(targetMs)) - Date.parse(kstDay(nowMs))) / 86_400_000);
+    if (diffDays === 0) return { text: '오늘', cls: 'font-semibold text-brand' };
     if (diffDays === 1) return { text: '내일', cls: 'font-semibold text-foreground' };
     return { text: `D-${diffDays}`, cls: 'tabular-nums text-muted-foreground' };
 }

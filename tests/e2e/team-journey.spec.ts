@@ -105,6 +105,15 @@ test('new leader and first-time teammate: invite, shared setlist, permission bou
         await expect(page.getByRole('heading', { name: '처음 함께 예배', exact: true })).toBeVisible();
         await expect(teammate.getByRole('heading', { name: '처음 함께 예배', exact: true })).toBeVisible();
         await info.attach('member-shared-setlist', { body: await teammate.screenshot(), contentType: 'image/png' });
+        // The teammate's schedule card links to the same-day setlist, and in-app navigation lands on that setlist (not '이번 주').
+        const linkCheck = await other.newPage();
+        try {
+            await linkCheck.goto('/dashboard/planning');
+            await linkCheck.getByRole('article', { name: '함께 준비할 예배', exact: true }).getByRole('link', { name: /콘티 · 악보 보기/ }).click();
+            await linkCheck.waitForURL(/\/dashboard\/songs\?tab=order/);
+            await expect(linkCheck.getByRole('tab', { name: '콘티', exact: true })).toHaveAttribute('aria-selected', 'true');
+            await expect(linkCheck.getByRole('heading', { name: '처음 함께 예배', exact: true })).toBeVisible();
+        } finally { await linkCheck.close(); }
 
         const teamId = await page.evaluate(() => (JSON.parse(localStorage.getItem('worship:online-teams:v1') ?? '[]') as string[])[0]);
         expect(teamId).toBeTruthy();
