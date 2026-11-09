@@ -29,6 +29,21 @@ function appLinkOrigins(): string[] {
     return configured ? [window.location.origin, configured] : [window.location.origin];
 }
 
+/**
+ * 연결 코드(@capacitor/app · core)를 동적으로 불러옵니다. 모바일 네트워크가 잠깐 끊겨 코드 조각을 못 받으면
+ * (ChunkLoadError) 뒤로가기 · 앱 링크 · 로그인 복귀가 그 실행 내내 동작하지 않으므로, 잠시 뒤 두 번까지 다시 시도합니다.
+ */
+async function loadNativeModules(attempts = 3) {
+    for (let attempt = 1; ; attempt += 1) {
+        try {
+            return await Promise.all([import('@capacitor/app'), import('@capacitor/core')]);
+        } catch (error) {
+            if (attempt >= attempts) throw error;
+            await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+        }
+    }
+}
+
 type ListenerHandle = { remove: () => Promise<void> };
 
 /** sessionStorage 를 못 쓰는 환경(사생활 보호 설정 등)에서는 verifier 가 없는 것으로 봅니다. */
@@ -107,7 +122,7 @@ export default function NativeBridge() {
         };
 
         (async () => {
-            const [{ App }, { Capacitor }] = await Promise.all([import('@capacitor/app'), import('@capacitor/core')]);
+            const [{ App }, { Capacitor }] = await loadNativeModules();
             if (disposed) return;
 
             // iOS 에는 뒤로가기 키가 없어 backButton 이벤트가 오지 않습니다. Android 에서만 붙입니다.
@@ -155,7 +170,8 @@ export default function NativeBridge() {
                 routerRef.current.push(path);
             }));
         })().catch((error) => {
-            console.warn('Native bridge setup failed:', error);
+            // 앱 WebView 콘솔은 오류 객체를 이름만 남기므로 메시지(실패한 조각 주소 등)를 함께 적습니다.
+            console.warn('Native bridge setup failed:', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
         });
 
         return () => {

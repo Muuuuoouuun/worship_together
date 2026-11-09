@@ -253,15 +253,24 @@ jobs:
             kill "$console_pid" 2>/dev/null || true
             exit 1
           fi
-          sleep 20
-          xcrun simctl io "$SIM_UDID" screenshot "$ARTIFACTS_DIR/ios-start-20s.png"
-          sleep 10
+          # 첫 화면은 기기 부하에 따라 20초 넘게 걸리기도 해(실행 #5: 20초 흰 화면, 30초 로딩 중) 30 · 60초에 찍습니다.
+          sleep 30
           xcrun simctl io "$SIM_UDID" screenshot "$ARTIFACTS_DIR/ios-start-30s.png"
+          sleep 30
+          xcrun simctl io "$SIM_UDID" screenshot "$ARTIFACTS_DIR/ios-start-60s.png"
+          # 프로세스 확인은 콘솔 연결을 끊기 전에 합니다. --console-pty 로 띄운 실행 명령을 끝내면 앱도 SIGTERM 으로
+          # 함께 종료됩니다(실행 #5 에서 앱은 정상 실행됐는데 이 순서 때문에 '실행 안 됨'으로 실패).
+          app_running=""
+          if xcrun simctl spawn "$SIM_UDID" launchctl list | grep -F "$APP_BUNDLE_ID"; then app_running=yes; fi
           kill "$log_pid" 2>/dev/null || true
           kill "$console_pid" 2>/dev/null || true
-          if ! xcrun simctl spawn "$SIM_UDID" launchctl list | grep -F "$APP_BUNDLE_ID"; then
-            echo "::error::$APP_BUNDLE_ID is not running 30 s after launch (crashed or failed to start)."
+          echo "--- app console (tail) ---"; tail -n 40 "$ARTIFACTS_DIR/app-console.log" || true
+          if [ -z "$app_running" ]; then
+            echo "::error::$APP_BUNDLE_ID is not running 60 s after launch (crashed or failed to start)."
             exit 1
+          fi
+          if grep -F "Native bridge setup failed" "$ARTIFACTS_DIR/app-console.log"; then
+            echo "::warning::The native bridge (back button · app links · login return) failed to set up; see app-console.log."
           fi
           if grep -F "App Transport Security" "$ARTIFACTS_DIR/simulator.log"; then
             echo "::warning::The simulator log mentions App Transport Security; check that $SERVER_URL loaded (screenshots)."
