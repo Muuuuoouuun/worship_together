@@ -145,7 +145,9 @@ bash gradlew :app:assembleDebug
 
 결과는 `android/app/build/outputs/apk/debug/app-debug.apk`입니다. 에뮬레이터용 패키지는 호스트의 `http://10.0.2.2:4000` 서버가 필요합니다. 실제 기기는 연결 가능한 HTTPS 주소를 `CAPACITOR_SERVER_URL`로 지정하고 다시 동기화하세요. 평문 통신·혼합 콘텐츠는 `http://` 서버일 때만 허용됩니다.
 
-앱 셸은 `@capacitor/app`으로 Android 뒤로가기 키(열린 창 닫기 → 이전 화면 → 시작 화면에서 두 번 눌러 종료)와 App Links(초대·세션·라이브·대시보드 링크를 앱에서 열기)를 처리합니다. 링크 호스트는 빌드 때 `APP_LINK_HOST`(Gradle 속성 `-PAPP_LINK_HOST=…` 또는 환경 변수, `NEXTAUTH_URL`의 호스트)로 지정하고, 서버에 `/.well-known/assetlinks.json`을 올려야 검증됩니다. 셸이 부르는 서버 원점과 링크 호스트가 다르면 웹 서버에 `NEXT_PUBLIC_APP_LINK_HOST`를 설정합니다. 지문·검증 절차와 앱 셸 OAuth 설계는 [Android 앱 링크 문서](docs/android-app-links.md)를 따릅니다.
+앱 셸은 `@capacitor/app`으로 Android 뒤로가기 키(열린 창 닫기 → 이전 화면 → 시작 화면에서 두 번 눌러 종료)와 App Links(초대·세션·라이브·대시보드 링크를 앱에서 열기)를 처리합니다. 링크 호스트는 빌드 때 `APP_LINK_HOST`(Gradle 속성 `-PAPP_LINK_HOST=…` 또는 환경 변수, `NEXTAUTH_URL`의 호스트)로 지정하고, 서버에 `/.well-known/assetlinks.json`을 올려야 검증됩니다. 셸이 부르는 서버 원점과 링크 호스트가 다르면 웹 서버에 `NEXT_PUBLIC_APP_LINK_HOST`를 설정합니다. 지문·검증 절차와 앱 셸 OAuth 흐름은 [Android 앱 링크 문서](docs/android-app-links.md)를 따릅니다.
+
+앱 셸(Android·iOS)의 Google·네이버 로그인은 WebView 대신 `@capacitor/browser`의 시스템 브라우저(Custom Tabs·SFSafariViewController)에서 하고, 앱 링크 `/auth/app-return`으로 돌아온 60초짜리 일회용 코드를 앱만 가진 verifier와 함께 교환해 앱 세션을 받습니다(브라우저에는 로그인이 남지 않음, [흐름·위협 모델](docs/android-app-links.md#oauth-in-the-android-shell)).
 
 ```bash
 cd android

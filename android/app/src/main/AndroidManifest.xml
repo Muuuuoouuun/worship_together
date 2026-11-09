@@ -22,7 +22,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Android App Links: 초대 · 세션 · 라이브 · 대시보드 링크를 앱에서 엽니다.
+            <!-- Android App Links: 초대 · 세션 · 라이브 · 대시보드 링크와 앱 로그인 복귀(/auth/app-return)를 앱에서 엽니다.
                  호스트는 app/build.gradle 의 appLinkHost (APP_LINK_HOST). 검증 절차: docs/android-app-links.md
                  경로는 lib/nativeNav.ts 의 APP_LINK_PATH_PREFIXES 와 맞춥니다. -->
             <intent-filter android:autoVerify="true">
@@ -35,6 +35,7 @@
                 <data android:pathPrefix="/session/" />
                 <data android:pathPrefix="/live/" />
                 <data android:pathPrefix="/dashboard" />
+                <data android:pathPrefix="/auth/app-return" />
             </intent-filter>
 
         </activity>

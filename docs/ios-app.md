@@ -1,11 +1,11 @@
 # iOS 앱 셸: 빌드 · 유니버설 링크
 
-Capacitor 8 iOS 셸(`ios/`)은 Android 셸과 같이 `CAPACITOR_SERVER_URL`의 Next.js 서버를 WKWebView로 불러옵니다. 앱 링크 처리 코드(`components/app/NativeBridge.tsx`, `lib/nativeNav.ts`)도 같이 씁니다. 뒤로가기 키 · App Links · 앱 셸 OAuth 설계는 [Android 앱 셸 문서](android-app-links.md)를 봅니다.
+Capacitor 8 iOS 셸(`ios/`)은 Android 셸과 같이 `CAPACITOR_SERVER_URL`의 Next.js 서버를 WKWebView로 불러옵니다. 앱 링크 처리 코드(`components/app/NativeBridge.tsx`, `lib/nativeNav.ts`)도 같이 씁니다. 뒤로가기 키 · App Links · 앱 셸 로그인(OAuth) 흐름은 [Android 앱 셸 문서](android-app-links.md)를 봅니다. iOS에서 다른 점은 아래 "로그인"에 있습니다.
 
 | 파일 | 역할 |
 | --- | --- |
 | `ios/App/App.xcodeproj` | Xcode 프로젝트. CocoaPods 없이 Swift Package Manager(SPM)를 씁니다(Capacitor 8 기본값). |
-| `ios/App/CapApp-SPM/Package.swift` | `npx cap sync ios`가 다시 씁니다. 손으로 고치지 않습니다. 플러그인은 `node_modules`를 가리키므로 `npm ci` 뒤에 빌드합니다. |
+| `ios/App/CapApp-SPM/Package.swift` | `npx cap sync ios`가 다시 씁니다. 손으로 고치지 않습니다. 플러그인(`@capacitor/app`, `@capacitor/browser`)은 `node_modules`를 가리키므로 `npm ci` 뒤에 빌드합니다. |
 | `ios/App/App/Info.plist` | 표시 이름, 개발 지역 `ko`, 암호화 신고, ATS, 회전 방향 |
 | `ios/App/App/App.entitlements` | 유니버설 링크 `applinks:$(APP_LINK_HOST)` |
 | `.github/workflows/ios-build.yml` | macOS에서 서명 없이 시뮬레이터 빌드 · 실행 · 스크린샷 |
@@ -50,7 +50,7 @@ npm run mobile:open:ios   # Xcode: Signing & Capabilities 에서 Team 을 고른
 
 ## 유니버설 링크
 
-Android App Links와 같은 경로(`lib/nativeNav.ts`의 `APP_LINK_PATH_PREFIXES`)를 앱에서 엽니다. 링크가 오면 `AppDelegate`가 `@capacitor/app`의 `appUrlOpen`으로 넘기고, `NativeBridge`가 Android와 같은 원점 · 경로 확인을 거쳐 `router.push`로 엽니다.
+Android App Links와 같은 경로(`lib/nativeNav.ts`의 `APP_LINK_PATH_PREFIXES`)를 앱에서 엽니다. 앱 로그인 복귀 `/auth/app-return`도 여기에 들어 있습니다. 링크가 오면 `AppDelegate`가 `@capacitor/app`의 `appUrlOpen`으로 넘기고, `NativeBridge`가 Android와 같은 원점 · 경로 확인을 거쳐 `router.push`로 엽니다.
 
 ### 설정
 
@@ -78,7 +78,9 @@ Android App Links와 같은 경로(`lib/nativeNav.ts`의 `APP_LINK_PATH_PREFIXES
           { "/": "/session/?*" },
           { "/": "/live/?*" },
           { "/": "/dashboard" },
-          { "/": "/dashboard/*" }
+          { "/": "/dashboard/*" },
+          { "/": "/auth/app-return" },
+          { "/": "/auth/app-return/*" }
         ]
       }
     ]
@@ -94,9 +96,23 @@ Android App Links와 같은 경로(`lib/nativeNav.ts`의 `APP_LINK_PATH_PREFIXES
   - `curl -sSI https://worship.example.org/.well-known/apple-app-site-association`
   - Apple CDN이 받아 간 내용: `curl -sS https://app-site-association.cdn-apple.com/a/v1/worship.example.org`
 
+## 로그인
+
+Android와 같은 흐름입니다. 공급자 로그인은 `@capacitor/browser`가 띄운 `SFSafariViewController`에서 하고, 앱은 일회용 코드와 `verifier`로 WKWebView 세션을 받습니다. 흐름 · 위협 모델 · 테스트는 [Android 앱 셸 문서의 "OAuth in the Android shell"](android-app-links.md#oauth-in-the-android-shell)에 있습니다. `npx cap sync ios`가 `CAPBrowserPlugin`을 `capacitor.config.json`의 `packageClassList`에, `CapacitorBrowser`를 `CapApp-SPM/Package.swift`에 넣습니다.
+
+iOS에서 다른 점은 다음과 같습니다.
+
+- **쿠키:** iOS 11부터 `SFSafariViewController`는 Safari와 쿠키를 같이 쓰지 않습니다. 그래서 `app-complete`의 브라우저 로그아웃은 그 창 안의 세션만 지우고, Safari에서 웹으로 로그인한 상태에는 영향이 없습니다.
+- **복귀 위험(기기 미확인):** Apple은 사용자가 다른 도메인의 링크를 직접 눌렀을 때만 유니버설 링크로 앱을 엽니다. 같은 도메인 안의 이동과 서버 리다이렉트로는 열지 않습니다.
+  - 그래서 `app-complete`의 303 리다이렉트는 앱 대신 `/auth/app-return` 화면을 그 창에 열 가능성이 큽니다.
+  - 그 화면의 "앱으로 돌아가기"(같은 도메인 링크)도 앱을 열지 못할 수 있습니다.
+  - 기기에서 막히면 다음 중 하나로 바꿉니다.
+    1. 복귀 링크만 다른 호스트(예: `app.worship.example.org`)로 보내고, 그 호스트를 Associated Domains와 AASA에 넣습니다.
+    2. `ASWebAuthenticationSession`(iOS 17.4+의 https 콜백, 또는 커스텀 스킴)으로 띄우는 플러그인을 씁니다. 코드 · `verifier` 교환 API는 그대로 씁니다.
+
 **미확인:**
 - 실제 기기 · 서명 빌드 · 유니버설 링크 검증은 해 보지 않았습니다. CI는 서명 없는 시뮬레이터 빌드와 실행만 확인합니다.
-- 앱 셸 OAuth는 Android와 같은 이유(Google의 WebView 로그인 차단)로 막힙니다. iOS에서는 `ASWebAuthenticationSession`이나 `@capacitor/browser`로 같은 흐름을 만들어야 합니다.
+- 위의 로그인 복귀(`SFSafariViewController` → 앱)는 실제 기기와 실제 Google · 네이버 계정으로 확인해야 합니다.
 - 앱 셸(WKWebView)은 웹 푸시를 받지 못합니다. iPhone 웹 푸시는 홈 화면에 추가한 웹 앱에서만 옵니다.
 
 ## CI 결과

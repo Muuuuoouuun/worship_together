@@ -4,9 +4,14 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { isNativeApp } from '@/lib/platform';
 import { backAction, EXIT_CONFIRM_WINDOW_MS, resolveDeepLink } from '@/lib/nativeNav';
+import { APP_EXCHANGE_PATH, appCallbackUrl, parseAppReturn, takePendingLogin } from '@/lib/nativeAuth';
 
 const emptySubscribe = () => () => {};
 const EXIT_NOTICE = '한 번 더 누르면 앱을 닫아요';
+/** 로그인 실패 안내는 읽을 시간을 더 줍니다 */
+const LOGIN_NOTICE_MS = 6000;
+const LOGIN_EXPIRED = '로그인 요청이 만료되었어요. 다시 로그인해 주세요.';
+const LOGIN_FAILED = '로그인을 마치지 못했어요. 다시 로그인해 주세요.';
 
 /** 지금 열린 모달 · 시트가 있는지. 공통 Modal · useSheetDismiss · 라이브 시트 모두 aria-modal 을 씁니다. */
 function overlayOpen(): boolean {
@@ -26,10 +31,48 @@ function appLinkOrigins(): string[] {
 
 type ListenerHandle = { remove: () => Promise<void> };
 
+/** sessionStorage 를 못 쓰는 환경(사생활 보호 설정 등)에서는 verifier 가 없는 것으로 봅니다. */
+function takeVerifier(): string | null {
+    try {
+        return takePendingLogin(window.sessionStorage);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * 앱 로그인 복귀(/auth/app-return?code=…): 시스템 브라우저를 닫고, 이 WebView 가 보관한 verifier 와 코드를 같은 origin 으로 교환합니다.
+ * 성공하면 서버가 이 WebView 에 세션 쿠키를 설정하므로, 새로 불러와(router.push 가 아니라) 서버 화면이 로그인 상태로 그려지게 합니다.
+ * 실패 메시지(한국어)를 돌려줍니다.
+ */
+async function completeNativeLogin(code: string | null): Promise<string | null> {
+    const verifier = takeVerifier();
+    void import('@capacitor/browser').then(({ Browser }) => Browser.close()).catch(() => { /* 이미 닫혔거나 지원하지 않음 */ });
+    if (!code || !verifier) return LOGIN_EXPIRED;
+    try {
+        const response = await fetch(APP_EXCHANGE_PATH, {
+            method: 'POST',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, verifier }),
+        });
+        const body = await response.json().catch(() => null) as { ok?: boolean; callbackUrl?: unknown; error?: unknown } | null;
+        if (response.ok && body?.ok) {
+            window.location.replace(appCallbackUrl(body.callbackUrl));
+            return null;
+        }
+        return typeof body?.error === 'string' && /[가-힣]/.test(body.error) ? body.error : LOGIN_FAILED;
+    } catch {
+        return LOGIN_FAILED;
+    }
+}
+
 /**
  * 앱 셸(Capacitor Android · iOS) 전용 연결. 웹 · 서버 렌더링에서는 아무것도 하지 않습니다.
  * - 뒤로가기 키(Android 만): 열린 창 닫기 → 이전 화면 → (시작 화면) 두 번 눌러 종료
  * - 앱 링크(Android App Links · iOS 유니버설 링크): 초대 · 세션 · 라이브 · 대시보드 링크를 앱 안에서 엽니다
+ * - 앱 로그인 복귀(/auth/app-return): 시스템 브라우저에서 받은 일회용 코드를 세션으로 바꿉니다(lib/nativeAuth.ts)
  * @capacitor/app 은 네이티브일 때만 동적으로 불러와 웹 번들과 서버 렌더링에 들어가지 않게 합니다.
  */
 export default function NativeBridge() {
@@ -53,10 +96,10 @@ export default function NativeBridge() {
             else handles.push(handle);
         };
 
-        const showNotice = (text: string) => {
+        const showNotice = (text: string, duration = EXIT_CONFIRM_WINDOW_MS) => {
             setNotice(text);
             clearTimeout(noticeTimer);
-            noticeTimer = setTimeout(() => setNotice(null), EXIT_CONFIRM_WINDOW_MS);
+            noticeTimer = setTimeout(() => setNotice(null), duration);
         };
         const hideNotice = () => {
             clearTimeout(noticeTimer);
@@ -101,6 +144,14 @@ export default function NativeBridge() {
                 if (!path) return;
                 lastPressAt = null;
                 hideNotice();
+                // 로그인 복귀는 화면 이동이 아니라 코드 교환입니다. (브라우저에서 열린 /auth/app-return 화면은 교환하지 않습니다.)
+                const appReturn = parseAppReturn(path);
+                if (appReturn) {
+                    void completeNativeLogin(appReturn.code).then((failure) => {
+                        if (failure && !disposed) showNotice(failure, LOGIN_NOTICE_MS);
+                    });
+                    return;
+                }
                 routerRef.current.push(path);
             }));
         })().catch((error) => {

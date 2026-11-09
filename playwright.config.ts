@@ -10,6 +10,8 @@ const browserEnv = process.platform === 'linux' && !process.env.LC_ALL && !proce
 const launchOptions = { executablePath, env: browserEnv };
 // 여러 사람이 한 팀을 함께 쓰는 긴 흐름은 데스크톱 · 폰에서만 돌립니다 (태블릿은 화면 폭 점검이 목적).
 const multiUserFlows = ['**/team-journey.spec.ts', '**/planning-notices.spec.ts'];
+// 화면 폭과 상관없는 서버 · 쿠키 흐름(앱 셸 로그인 교환)은 데스크톱에서 한 번만 돌립니다.
+const desktopOnly = ['**/native-login.spec.ts'];
 export default defineConfig({
     testDir: './tests/e2e',
     timeout: 90_000,
@@ -30,9 +32,9 @@ export default defineConfig({
     },
     projects: [
         { name: 'desktop', use: { viewport: { width: 1440, height: 1000 }, launchOptions } },
-        { name: 'phone', use: { ...devices['Pixel 7'], launchOptions } },
-        { name: 'tablet', use: { viewport: { width: 768, height: 1024 }, launchOptions }, testIgnore: multiUserFlows },
-        ...(process.env.E2E_WEBKIT === '1' ? [{ name: 'webkit-phone', use: { ...devices['iPhone 13'], launchOptions: { env: browserEnv } }, testIgnore: multiUserFlows }] : []),
+        { name: 'phone', use: { ...devices['Pixel 7'], launchOptions }, testIgnore: desktopOnly },
+        { name: 'tablet', use: { viewport: { width: 768, height: 1024 }, launchOptions }, testIgnore: [...multiUserFlows, ...desktopOnly] },
+        ...(process.env.E2E_WEBKIT === '1' ? [{ name: 'webkit-phone', use: { ...devices['iPhone 13'], launchOptions: { env: browserEnv } }, testIgnore: [...multiUserFlows, ...desktopOnly] }] : []),
     ],
     webServer: external ? undefined : {
         command: 'node scripts/e2e-server.mjs',

@@ -46,6 +46,10 @@ test('resolveDeepLink opens same-origin app links in the app', () => {
     assert.equal(resolveDeepLink('https://worship.example.org/dashboard', origins), '/dashboard');
     assert.equal(resolveDeepLink('https://worship.example.org/dashboard/planning?team=t1&inbox=1', origins), '/dashboard/planning?team=t1&inbox=1');
     assert.equal(resolveDeepLink('https://WORSHIP.example.org:443/live/s-1', origins), '/live/s-1', '대소문자 · 기본 포트');
+    // 앱 로그인 복귀: NativeBridge 가 화면 이동 대신 코드 교환으로 처리합니다(tests/nativeAuth.test.ts).
+    assert.equal(resolveDeepLink('https://worship.example.org/auth/app-return?code=abc', origins), '/auth/app-return?code=abc');
+    assert.equal(resolveDeepLink('https://worship.example.org/auth/app-start?provider=google', origins), null, '로그인 시작은 앱에서 열지 않음');
+    assert.equal(resolveDeepLink('https://worship.example.org/auth/app-returnx?code=abc', origins), null);
 });
 
 test('resolveDeepLink ignores other hosts, schemes and paths outside the intent-filter', () => {

@@ -35,6 +35,21 @@ export function getAuthConfiguration(env: AuthEnvironment = process.env) {
   };
 }
 
+/** NextAuth 세션(JWT) 수명. 앱 셸 로그인 교환(app/api/auth/app-exchange)이 같은 값으로 쿠키를 만듭니다. */
+export const SESSION_MAX_AGE = 30 * 24 * 60 * 60;
+
+/** NextAuth v4 기본 세션 쿠키 이름: NEXTAUTH_URL 이 https 면 __Secure- 접두사 + Secure 속성 (core/lib/cookie.js defaultCookies) */
+export function sessionCookieName(secure: boolean): string {
+  return `${secure ? "__Secure-" : ""}next-auth.session-token`;
+}
+
+export type SessionIdentity = { id: string; name?: string | null; email?: string | null; image?: string | null };
+
+/** 세션 JWT 에 넣는 클레임. jwt 콜백과 앱 셸 로그인 교환이 함께 써서 토큰 모양이 어긋나지 않게 합니다. */
+export function sessionTokenClaims(user: SessionIdentity) {
+  return { sub: user.id, userId: user.id, name: user.name || "예배팀원", email: user.email ?? null, picture: user.image ?? null };
+}
+
 /** Stable identity contract for team ownership. Email is deliberately excluded. */
 export function providerUserId(provider: string, providerAccountId: string): string {
   if (![...["google", "naver"], DEV_PROVIDER_ID].includes(provider) || !providerAccountId?.trim()) throw new Error("Invalid OAuth account");
@@ -47,7 +62,7 @@ export function createAuthOptions(env: AuthEnvironment = process.env): NextAuthO
   if (config.devLogin) enabled.add(DEV_PROVIDER_ID);
   return {
     secret: env.NEXTAUTH_SECRET,
-    session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
+    session: { strategy: "jwt", maxAge: SESSION_MAX_AGE },
     providers: [
       ...(enabled.has("google") ? [GoogleProvider({
         clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET!,
@@ -76,8 +91,7 @@ export function createAuthOptions(env: AuthEnvironment = process.env): NextAuthO
         // Never merge the untrusted `session` supplied to useSession().update().
         if (trigger === "update") return token;
         if (account && user) {
-          const id = providerUserId(account.provider, account.providerAccountId);
-          return { sub: id, userId: id, name: user.name || "예배팀원", email: user.email ?? null, picture: user.image ?? null };
+          return sessionTokenClaims({ id: providerUserId(account.provider, account.providerAccountId), name: user.name, email: user.email, image: user.image });
         }
         return token;
       },

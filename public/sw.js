@@ -107,10 +107,10 @@ async function networkFirstNavigation(request, event) {
   }
 }
 
-/** 로그인·초대·인증 콜백처럼 보관하면 안 되는 화면은 제외하고, 검색어는 유지합니다 (?tab= 등이 화면을 바꿈). */
+/** 로그인·초대·인증 콜백·앱 로그인(/auth/, 주소에 일회용 코드)처럼 보관하면 안 되는 화면은 제외하고, 검색어는 유지합니다 (?tab= 등이 화면을 바꿈). */
 function pageCacheKey(request) {
   const url = new URL(request.url);
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/invite/") || url.pathname === "/login") {
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/invite/") || url.pathname.startsWith("/auth/") || url.pathname === "/login") {
     return null;
   }
   url.hash = "";

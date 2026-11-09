@@ -13,8 +13,9 @@ export const EXIT_CONFIRM_WINDOW_MS = 2000;
  * 앱 링크로 앱 안에서 열 수 있는 경로. android/app/src/main/AndroidManifest.xml 의 pathPrefix,
  * docs/android-app-links.md 의 apple-app-site-association components 와 맞춥니다.
  * '/' 로 끝나지 않는 항목은 그 경로 자체와 그 아래 경로만 허용합니다(/dashboard, /dashboard/... — /dashboardx 는 아님).
+ * '/auth/app-return' 은 앱 셸 로그인 복귀입니다. NativeBridge 가 화면 이동 대신 코드 교환으로 처리합니다(lib/nativeAuth.ts).
  */
-export const APP_LINK_PATH_PREFIXES: readonly string[] = ['/invite/', '/session/', '/live/', '/dashboard'];
+export const APP_LINK_PATH_PREFIXES: readonly string[] = ['/invite/', '/session/', '/live/', '/dashboard', '/auth/app-return'];
 
 export type BackAction =
     | { type: 'close-overlay' }

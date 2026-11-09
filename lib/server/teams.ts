@@ -4,6 +4,7 @@ import { TeamRepository } from './teamRepository';
 import { TeamEvents } from './teamEvents';
 import { TeamDocs } from './teamDocs';
 import { LiveRepository } from './liveRepository';
+import { AppLoginCodes } from './appLoginCodes';
 import { contiSaveHook, deliverNotices, type NoticePush } from './notices';
 import { PushStore, pushConfigFromEnv } from './push';
 import webpush from 'web-push';
@@ -16,8 +17,8 @@ import { getCurrentUser } from '@/lib/auth';
  * 저장소 코드가 바뀌면 올립니다 — 개발 서버가 예전 객체를 계속 쓰지 않게.
  * (Next 는 라우트 핸들러와 서버 컴포넌트에서 이 모듈을 따로 읽으므로, 모듈마다 다른 표식이 아니라 같은 숫자여야 같은 객체를 나눠 씁니다.)
  */
-const STORE_VERSION = 6;
-type Stores = { teams: TeamRepository; events: TeamEvents; docs: TeamDocs; live: LiveRepository; push: PushStore; sweeper: ReturnType<typeof setInterval> };
+const STORE_VERSION = 7;
+type Stores = { teams: TeamRepository; events: TeamEvents; docs: TeamDocs; live: LiveRepository; push: PushStore; appLogin: AppLoginCodes; sweeper: ReturnType<typeof setInterval> };
 const globalStores = globalThis as unknown as { worshipStores?: Stores; worshipStoresVersion?: number; worshipTeamRepository?: TeamRepository };
 
 /** 한 서버 프로세스가 같은 SQLite 파일을 한 번만 엽니다 (개발 중 새로고침에도 유지). */
@@ -45,7 +46,8 @@ function stores(): Stores {
         // 화면을 닫은 기기(소식이 끊긴 기기)를 예배 세션에서 내보냅니다.
         const sweeper = setInterval(() => { try { live.sweep(); } catch (error) { console.error('[live] sweep', error); } }, 15_000);
         sweeper.unref?.();
-        globalStores.worshipStores = { teams, events, docs, live, push, sweeper };
+        const appLogin = new AppLoginCodes(teams.database);
+        globalStores.worshipStores = { teams, events, docs, live, push, appLogin, sweeper };
         globalStores.worshipStoresVersion = STORE_VERSION;
     }
     return globalStores.worshipStores;
@@ -56,6 +58,8 @@ export function getTeamEvents() { return stores().events; }
 export function getTeamDocs() { return stores().docs; }
 export function getLiveRepository() { return stores().live; }
 export function getPushStore() { return stores().push; }
+/** 앱 셸 로그인의 일회용 코드 (app/auth/app-complete · app/api/auth/app-exchange) */
+export function getAppLoginCodes() { return stores().appLogin; }
 /** 새 알림을 받는 사람에게 보냅니다 (팀 소식 · 앱을 닫은 기기에는 푸시) */
 export function deliverTeamNotices(teamId: string, created: PlanningNotification[], byId: string) {
     const { events, teams, push } = stores();
