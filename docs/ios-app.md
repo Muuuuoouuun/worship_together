@@ -98,3 +98,11 @@ Android App Links와 같은 경로(`lib/nativeNav.ts`의 `APP_LINK_PATH_PREFIXES
 - 실제 기기 · 서명 빌드 · 유니버설 링크 검증은 해 보지 않았습니다. CI는 서명 없는 시뮬레이터 빌드와 실행만 확인합니다.
 - 앱 셸 OAuth는 Android와 같은 이유(Google의 WebView 로그인 차단)로 막힙니다. iOS에서는 `ASWebAuthenticationSession`이나 `@capacitor/browser`로 같은 흐름을 만들어야 합니다.
 - 앱 셸(WKWebView)은 웹 푸시를 받지 못합니다. iPhone 웹 푸시는 홈 화면에 추가한 웹 앱에서만 옵니다.
+
+## CI 결과
+
+| 실행 | 날짜 | 결과 |
+| --- | --- | --- |
+| [iOS build #1](https://github.com/Muuuuoouuun/worship_together/actions/runs/42635872758) | 2026-11-09 | 전 단계 통과. Xcode 26 확인, SPM resolve, 서명 없는 시뮬레이터 빌드 약 50초, 시뮬레이터 설치 · 실행, 30초 뒤 스크린샷에서 오늘 화면 렌더 확인 |
+
+남은 일: 브랜드 앱 아이콘(1024px, 불투명) · 스플래시 교체, 서명 · TestFlight, 실제 도메인의 유니버설 링크 검증, 셸 푸시(APNs).

@@ -65,6 +65,8 @@
 | OAuth (WebView) | 설계만 | Custom Tabs + 일회용 코드 교환 (`docs/android-app-links.md`) |
 | 셸 푸시 (FCM) | 미구현 | 웹 푸시는 동작, Android 셸은 앱이 닫히면 알림 없음 |
 | 오프라인 보관본 개인정보 | 구현 | 로그아웃 · 세션 만료 · 계정 전환 때 `-pages` 캐시 삭제, 오류 · 이동 화면은 보관하지 않음 |
+| iOS 셸 | 구현 · CI 통과 (2026-11-09) | Capacitor iOS(SPM), `.github/workflows/ios-build.yml`이 macos-15 · Xcode 26에서 서명 없는 시뮬레이터 빌드 → 설치 · 실행 → 스크린샷. 첫 실행에서 전 단계 통과, 앱이 로컬 Next 서버의 오늘 화면을 그림(safe-area 정상, 설치 배너 없음). [실행 #1](https://github.com/Muuuuoouuun/worship_together/actions/runs/42635872758) |
+| iOS 서명 · TestFlight | 미구현 | Apple 개발자 팀 · 인증서 필요. 유니버설 링크 실제 검증도 이후 |
 | 실기기 확인 | 미확인 | 이 환경에 KVM이 없어 에뮬레이터 불가. APK 빌드 · 매니페스트 · 플러그인 등록과 가짜 브리지 Playwright 16/16만 확인 |
 
 ## 4. 통과한 항목
