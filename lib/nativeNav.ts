@@ -1,5 +1,5 @@
 /*
- * Android 앱 셸(Capacitor)의 뒤로가기 키 · 앱 링크를 어떻게 처리할지 정하는 순수 함수.
+ * 앱 셸(Capacitor)의 뒤로가기 키(Android) · 앱 링크(Android App Links · iOS 유니버설 링크)를 어떻게 처리할지 정하는 순수 함수.
  * 플러그인 연결과 화면 처리는 components/app/NativeBridge.tsx 가 맡습니다.
  */
 
@@ -10,7 +10,8 @@ export const NATIVE_HOME_PATH = '/dashboard';
 /** 첫 누름 뒤 이 시간 안에 한 번 더 누르면 앱을 닫습니다 */
 export const EXIT_CONFIRM_WINDOW_MS = 2000;
 /**
- * 앱 링크로 앱 안에서 열 수 있는 경로. android/app/src/main/AndroidManifest.xml 의 pathPrefix 와 맞춥니다.
+ * 앱 링크로 앱 안에서 열 수 있는 경로. android/app/src/main/AndroidManifest.xml 의 pathPrefix,
+ * docs/android-app-links.md 의 apple-app-site-association components 와 맞춥니다.
  * '/' 로 끝나지 않는 항목은 그 경로 자체와 그 아래 경로만 허용합니다(/dashboard, /dashboard/... — /dashboardx 는 아님).
  */
 export const APP_LINK_PATH_PREFIXES: readonly string[] = ['/invite/', '/session/', '/live/', '/dashboard'];

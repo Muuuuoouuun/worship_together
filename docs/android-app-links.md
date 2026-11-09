@@ -6,6 +6,8 @@ Capacitor 8 Android 셸(`android/`)은 `CAPACITOR_SERVER_URL`의 Next.js 서버�
 - 초대 · 세션 · 라이브 · 대시보드 링크를 앱에서 여는 Android App Links
 - OAuth 로그인 설계(아직 구현하지 않음)
 
+iOS 셸의 빌드 · 설정 · 유니버설 링크(`apple-app-site-association`)는 [iOS 앱 셸 문서](ios-app.md)에 있습니다. 앱 링크 처리 코드와 허용 경로는 두 플랫폼이 같이 씁니다.
+
 관련 코드는 다음과 같습니다.
 
 | 파일 | 역할 |

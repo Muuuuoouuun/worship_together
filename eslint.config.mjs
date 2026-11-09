@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     ".next-e2e/**",
     "android/**/build/**",
     "android/app/src/main/assets/**",
+    // iOS 네이티브 프로젝트 안의 JS 는 cap sync 가 복사한 웹 자료(App/App/public)와 빌드 산출물뿐입니다.
+    "ios/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

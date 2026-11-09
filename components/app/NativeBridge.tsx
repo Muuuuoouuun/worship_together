@@ -27,9 +27,9 @@ function appLinkOrigins(): string[] {
 type ListenerHandle = { remove: () => Promise<void> };
 
 /**
- * Android 앱 셸(Capacitor) 전용 연결. 웹 · 서버 렌더링에서는 아무것도 하지 않습니다.
- * - 뒤로가기 키: 열린 창 닫기 → 이전 화면 → (시작 화면) 두 번 눌러 종료
- * - 앱 링크: 초대 · 세션 · 라이브 · 대시보드 링크를 앱 안에서 엽니다
+ * 앱 셸(Capacitor Android · iOS) 전용 연결. 웹 · 서버 렌더링에서는 아무것도 하지 않습니다.
+ * - 뒤로가기 키(Android 만): 열린 창 닫기 → 이전 화면 → (시작 화면) 두 번 눌러 종료
+ * - 앱 링크(Android App Links · iOS 유니버설 링크): 초대 · 세션 · 라이브 · 대시보드 링크를 앱 안에서 엽니다
  * @capacitor/app 은 네이티브일 때만 동적으로 불러와 웹 번들과 서버 렌더링에 들어가지 않게 합니다.
  */
 export default function NativeBridge() {
@@ -64,33 +64,36 @@ export default function NativeBridge() {
         };
 
         (async () => {
-            const { App } = await import('@capacitor/app');
+            const [{ App }, { Capacitor }] = await Promise.all([import('@capacitor/app'), import('@capacitor/core')]);
             if (disposed) return;
 
-            keep(await App.addListener('backButton', ({ canGoBack }) => {
-                const now = Date.now();
-                const action = backAction({ overlayOpen: overlayOpen(), canGoBack, pathname: window.location.pathname, lastPressAt, now });
-                lastPressAt = action.type === 'confirm-exit' ? now : null;
-                // '한 번 더' 안내는 바로 다음 누름에만 해당합니다. 다른 동작을 하면 지웁니다.
-                if (action.type !== 'confirm-exit') hideNotice();
-                switch (action.type) {
-                    case 'close-overlay':
-                        closeTopOverlay();
-                        break;
-                    case 'history-back':
-                        window.history.back();
-                        break;
-                    case 'go-home':
-                        routerRef.current.replace(action.href);
-                        break;
-                    case 'confirm-exit':
-                        showNotice(EXIT_NOTICE);
-                        break;
-                    case 'exit':
-                        void App.exitApp();
-                        break;
-                }
-            }));
+            // iOS 에는 뒤로가기 키가 없어 backButton 이벤트가 오지 않습니다. Android 에서만 붙입니다.
+            if (Capacitor.getPlatform() === 'android') {
+                keep(await App.addListener('backButton', ({ canGoBack }) => {
+                    const now = Date.now();
+                    const action = backAction({ overlayOpen: overlayOpen(), canGoBack, pathname: window.location.pathname, lastPressAt, now });
+                    lastPressAt = action.type === 'confirm-exit' ? now : null;
+                    // '한 번 더' 안내는 바로 다음 누름에만 해당합니다. 다른 동작을 하면 지웁니다.
+                    if (action.type !== 'confirm-exit') hideNotice();
+                    switch (action.type) {
+                        case 'close-overlay':
+                            closeTopOverlay();
+                            break;
+                        case 'history-back':
+                            window.history.back();
+                            break;
+                        case 'go-home':
+                            routerRef.current.replace(action.href);
+                            break;
+                        case 'confirm-exit':
+                            showNotice(EXIT_NOTICE);
+                            break;
+                        case 'exit':
+                            void App.exitApp();
+                            break;
+                    }
+                }));
+            }
 
             // 앱이 꺼져 있을 때 링크로 열렸으면 Capacitor 가 이 이벤트를 첫 리스너가 붙을 때까지 보관했다가 넘겨 줍니다.
             keep(await App.addListener('appUrlOpen', ({ url }) => {

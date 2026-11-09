@@ -71,3 +71,21 @@ test('the app-link path list matches the AndroidManifest intent-filter', () => {
     assert.match(manifest, /<intent-filter android:autoVerify="true">/);
     assert.match(manifest, /android:host="\$\{appLinkHost\}"/);
 });
+
+test('the app-link path list matches the iOS universal-link setup', () => {
+    // docs/ios-app.md 의 apple-app-site-association 예시: '/' 로 끝나는 항목은 한 글자 이상(?*), 아니면 그 경로와 하위 경로
+    const doc = readFileSync(new URL('../docs/ios-app.md', import.meta.url), 'utf8');
+    const block = [...doc.matchAll(/```json\n([\s\S]*?)```/g)].map((match) => match[1]).find((json) => json.includes('"applinks"'));
+    assert.ok(block, 'apple-app-site-association 예시');
+    const association = JSON.parse(block) as { applinks: { details: { appIDs: string[]; components: { '/': string }[] }[] } };
+    const [detail] = association.applinks.details;
+    assert.match(detail.appIDs[0], /^[A-Z0-9]{10}\.com\.worshiptogether\.app$/);
+    const expected = APP_LINK_PATH_PREFIXES.flatMap((prefix) => (prefix.endsWith('/') ? [`${prefix}?*`] : [prefix, `${prefix}/*`]));
+    assert.deepEqual(detail.components.map((component) => component['/']), expected);
+
+    const entitlements = readFileSync(new URL('../ios/App/App/App.entitlements', import.meta.url), 'utf8');
+    assert.match(entitlements, /<key>com\.apple\.developer\.associated-domains<\/key>\s*<array>\s*<string>applinks:\$\(APP_LINK_HOST\)<\/string>/);
+    const project = readFileSync(new URL('../ios/App/App.xcodeproj/project.pbxproj', import.meta.url), 'utf8');
+    assert.equal(project.match(/CODE_SIGN_ENTITLEMENTS = App\/App\.entitlements;/g)?.length, 2, 'Debug · Release');
+    assert.equal(project.match(/APP_LINK_HOST = worship-together\.example;/g)?.length, 2, 'Debug · Release 기본값');
+});

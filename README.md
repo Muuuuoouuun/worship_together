@@ -41,7 +41,7 @@ Google·네이버 로그인과 서버에 저장되는 팀·초대·역할 관리
 - **받는 사람에게만:** 일정 변경·배치·결석·대체 부탁·콘티 요청·공지·콘티 확정 알림은 받는 사람에게만 가고, 어느 화면에 있든 앱 알림으로 뜹니다. 내가 속한 다른 팀의 알림·공지·예배 시작도 함께 옵니다.
 - **팀 공지:** ‘일정·요청 → 팀 공지’에서 팀 전체·파트·일정 배치 인원에게 올립니다. ‘확인 받기’를 켜면 확인 n/m와 아직인 사람을 보고 다시 알릴 수 있습니다(10분 간격). 홈 맨 위에 확인할 공지가 보입니다.
 - **콘티 알림:** 콘티를 ‘확정’하면 그 콘티를 준비하는 예배·연습에 배치된 사람에게, 확정 뒤 곡 순서·Key·BPM·메모가 바뀌면 다시 알립니다(콘티마다 10분에 한 번). 일정과 콘티는 같은 날짜로 자동 연결되고(연습은 7일 안의 다가오는 예배), 일정에서 직접 고른 콘티가 먼저입니다.
-- **이 기기 알림:** 팀·초대 화면 또는 예배 시작 대기 화면에서 켭니다. 앱을 보고 있지 않을 때 기기 알림으로, 서버에 VAPID 키가 설정되어 있으면 앱을 닫아도 푸시로 옵니다(앱이 열려 있는 기기에는 푸시 대신 앱이 띄움). 아이폰은 홈 화면에 추가한 앱에서만 푸시를 받을 수 있고, Android 앱 셸(Capacitor WebView)은 웹 푸시를 받지 못합니다.
+- **이 기기 알림:** 팀·초대 화면 또는 예배 시작 대기 화면에서 켭니다. 앱을 보고 있지 않을 때 기기 알림으로, 서버에 VAPID 키가 설정되어 있으면 앱을 닫아도 푸시로 옵니다(앱이 열려 있는 기기에는 푸시 대신 앱이 띄움). 아이폰은 홈 화면에 추가한 앱에서만 푸시를 받을 수 있고, Android·iOS 앱 셸(Capacitor WebView)은 웹 푸시를 받지 못합니다.
 - **미가입 명단 자리:** 관리자가 이름만 올린 자리는 결석 알림·대체 부탁·요청 수신·공지 확인 대상에서 빠집니다. 초대로 그 자리를 이으면 배정과 지난 알림이 그 사람 것이 됩니다.
 - **권한:** 팀·초대의 ‘권한’에서 콘티 · 곡 편집, 예배 진행, 전체 큐, 일정 · 배치 관리, 팀 공지 쓰기를 관리자만 / 관리자 · 인도자 / 모든 팀원으로 정합니다. 일정을 모든 팀원이 고칠 수 있어도 참석 응답·결석 소식은 관리자·인도자에게만 갑니다.
 
@@ -143,7 +143,7 @@ bash gradlew :app:assembleDebug
 # Windows: gradlew.bat :app:assembleDebug
 ```
 
-결과는 `android/app/build/outputs/apk/debug/app-debug.apk`입니다. 에뮬레이터용 패키지는 호스트의 `http://10.0.2.2:4000` 서버가 필요합니다. 실제 기기는 연결 가능한 HTTPS 주소를 `CAPACITOR_SERVER_URL`로 지정하고 다시 동기화하세요. 평문 통신·혼합 콘텐츠는 `http://` 서버일 때만 허용됩니다. iPhone·iPad는 현재 반응형 웹/PWA로 제공하며 iOS 네이티브 프로젝트는 포함하지 않습니다.
+결과는 `android/app/build/outputs/apk/debug/app-debug.apk`입니다. 에뮬레이터용 패키지는 호스트의 `http://10.0.2.2:4000` 서버가 필요합니다. 실제 기기는 연결 가능한 HTTPS 주소를 `CAPACITOR_SERVER_URL`로 지정하고 다시 동기화하세요. 평문 통신·혼합 콘텐츠는 `http://` 서버일 때만 허용됩니다.
 
 앱 셸은 `@capacitor/app`으로 Android 뒤로가기 키(열린 창 닫기 → 이전 화면 → 시작 화면에서 두 번 눌러 종료)와 App Links(초대·세션·라이브·대시보드 링크를 앱에서 열기)를 처리합니다. 링크 호스트는 빌드 때 `APP_LINK_HOST`(Gradle 속성 `-PAPP_LINK_HOST=…` 또는 환경 변수, `NEXTAUTH_URL`의 호스트)로 지정하고, 서버에 `/.well-known/assetlinks.json`을 올려야 검증됩니다. 셸이 부르는 서버 원점과 링크 호스트가 다르면 웹 서버에 `NEXT_PUBLIC_APP_LINK_HOST`를 설정합니다. 지문·검증 절차와 앱 셸 OAuth 설계는 [Android 앱 링크 문서](docs/android-app-links.md)를 따릅니다.
 
@@ -151,3 +151,14 @@ bash gradlew :app:assembleDebug
 cd android
 bash gradlew :app:assembleRelease -PAPP_LINK_HOST=worship.example.org
 ```
+
+### iOS 셸
+
+Capacitor iOS 셸(`ios/`, Swift Package Manager 사용)도 포함되어 있습니다. 빌드에는 macOS와 Xcode 26 이상이 필요합니다(Capacitor 8 요구 사항). iPhone·iPad 사용자는 지금처럼 반응형 웹/PWA도 쓸 수 있습니다.
+
+```bash
+CAPACITOR_SERVER_URL=https://your-deployed-site.com npm run mobile:sync:ios
+npm run mobile:open:ios   # Xcode에서 Team을 고른 뒤 실행
+```
+
+시뮬레이터는 `CAPACITOR_SERVER_URL=http://localhost:4000`으로 로컬 개발 서버를 불러올 수 있습니다. iOS는 ATS의 `NSAllowsLocalNetworking`만 켜 두어 `localhost`·LAN 주소의 `http://` 개발 서버만 허용합니다. 유니버설 링크 호스트는 Xcode 빌드 설정 `APP_LINK_HOST`로 정하고, 서버에 `/.well-known/apple-app-site-association`을 올려야 검증됩니다. GitHub Actions의 `iOS build` 워크플로(`.github/workflows/ios-build.yml`)가 macOS에서 서명 없이 시뮬레이터 빌드·실행·스크린샷을 확인합니다. 서명·TestFlight 배포는 아직 설정하지 않았습니다. 자세한 설정은 [iOS 앱 셸 문서](docs/ios-app.md)를 따릅니다.

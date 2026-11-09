@@ -13,6 +13,8 @@
     "mobile:sync": "cap sync android",
     "mobile:sync:emulator": "node scripts/mobile-emulator.mjs sync",
     "mobile:open:android": "cap open android",
+    "mobile:sync:ios": "cap sync ios",
+    "mobile:open:ios": "cap open ios",
     "mobile:run:android": "cap run android",
     "mobile:run:emulator": "node scripts/mobile-emulator.mjs run",
     "test:e2e": "node scripts/prepare-pdf-worker.mjs && playwright test"
@@ -21,6 +23,7 @@
     "@capacitor/android": "^8.3.1",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.3.1",
+    "@capacitor/ios": "^8.3.1",
     "@radix-ui/react-slot": "^1.2.4",
     "@supabase/supabase-js": "^2.93.3",
     "better-sqlite3": "^13.0.3",
