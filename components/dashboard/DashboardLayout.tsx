@@ -72,7 +72,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
             {/* 데스크톱 사이드바 */}
             <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border/70 bg-card lg:flex">
-                <div className="space-y-3 px-4 pb-4 pt-6">
+                <div className="space-y-3 px-4 pb-4 pt-[max(1.5rem,env(safe-area-inset-top))]">
                     <div className="px-2">
                         <Brand />
                     </div>

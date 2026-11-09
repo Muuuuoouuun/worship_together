@@ -42,12 +42,15 @@ export async function loadPlanningContext(teamId: string): Promise<TeamActionRes
     } catch (error) { return { ok: false, error: error instanceof Error && /[가-힣]/.test(error.message) ? error.message : '팀 자료를 읽지 못했습니다.' }; }
 }
 export async function updateTeamPlanning(teamId: string, command: PlanningCommand) { return run(teamId, command); }
-export async function loadPlanningInbox(): Promise<TeamActionResult<{ count: number; urgent: number; teamId?: string; target?: string; title?: string }>> {
+/** viewingPlanningTeamId: 일정·요청 화면에서는 그 팀의 알림이 본문 '내 알림'에 있으므로 제외하고 다른 팀 알림만 셉니다('' 는 화면 팀을 모를 때: 첫 팀). */
+export async function loadPlanningInbox(viewingPlanningTeamId?: string): Promise<TeamActionResult<{ count: number; urgent: number; teamId?: string; target?: string; title?: string }>> {
     const user = await getCurrentUser();
     if (!user) return { ok: false, error: '로그인 후 알림을 확인해주세요.' };
     try {
         const repository = getTeamRepository();
-        const unread = repository.list(user.id).flatMap(team => repository.planning(team.id, user.id).notifications.filter(item => !item.readBy.includes(user.id)).map(item => ({ ...item, teamId: team.id })));
+        const teams = repository.list(user.id);
+        const shown = viewingPlanningTeamId === undefined ? undefined : (teams.find(team => team.id === viewingPlanningTeamId) ?? teams[0])?.id;
+        const unread = teams.filter(team => team.id !== shown).flatMap(team => repository.planning(team.id, user.id).notifications.filter(item => !item.readBy.includes(user.id)).map(item => ({ ...item, teamId: team.id })));
         unread.sort((a, b) => Number(b.urgent) - Number(a.urgent) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
         const first = unread[0];
         return { ok: true, value: { count: unread.length, urgent: unread.filter(item => item.urgent).length, teamId: first?.teamId, target: first?.target, title: first?.title } };

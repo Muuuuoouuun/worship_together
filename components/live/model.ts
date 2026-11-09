@@ -1,4 +1,5 @@
 import type { WorshipRole } from '@/types/team';
+import type { LiveSessionDetail } from '@/lib/server/liveRepository';
 
 /*
  * 예배 중 화면(실시간 세션)이 그리는 데이터. 서버 세션(useLiveSession)이 이 모양을 만들고,
@@ -197,4 +198,12 @@ export interface LiveScreenHandlers {
     leave: () => void;
     /** 예배 마치기 — canControl 일 때만 */
     end: () => void;
+}
+
+/**
+ * 다시 받은 세션 정보를 지금 화면에 합칩니다. 스트림으로 이미 더 새로운 진행(state.version)을 받았다면
+ * 늦게 도착한 응답이 그것을 되돌리지 못하게 진행 상태만 지금 것을 두고, 접속자 · 큐 등 나머지는 응답을 따릅니다.
+ */
+export function mergeLiveDetail(current: LiveSessionDetail, incoming: LiveSessionDetail): LiveSessionDetail {
+    return current.state.version > incoming.state.version ? { ...incoming, state: current.state } : incoming;
 }

@@ -14,6 +14,7 @@ import {
     QUICK_CUES_TO_LEADER,
     cueById,
     cueGroupOf,
+    mergeLiveDetail,
     type CueDefinition,
     type LiveCueEntry,
     type LiveMember,
@@ -168,7 +169,7 @@ export function useLiveSession(sessionId: string, { exitHref = '/dashboard' }: {
             router.replace(`/login?callbackUrl=${encodeURIComponent(`/live/${sessionId}`)}`);
             return;
         }
-        if (result.kind === 'ok') setLoad({ status: 'ready', detail: result.detail });
+        if (result.kind === 'ok') setLoad((current) => ({ status: 'ready', detail: current.status === 'ready' ? mergeLiveDetail(current.detail, result.detail) : result.detail }));
         // 이미 보고 있던 세션은 잠깐의 연결 문제로 지우지 않습니다.
         else setLoad((current) => (current.status === 'ready' && result.code === 0 ? current : { status: 'error', message: result.message, code: result.code }));
     }, [router, sessionId]);

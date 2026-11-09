@@ -562,14 +562,15 @@ function MyRsvpPrompt({ event, userId, now, disabled, send, className }: { event
     const mine = event.slots.filter(slot => slot.memberId === userId && slot.attendance === 'pending');
     if (event.cancelled || !mine.length || Date.parse(event.endsAt) < now) return null;
     const roles = mine.map(slot => worshipRoles[slot.role]).join(' · ');
-    const respond = (attendance: 'confirmed' | 'absent', reason = '') => {
-        for (const slot of mine) void send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance, reason, ...(attendance === 'absent' ? { autoRequestSubstitute: true } : {}) });
+    // 한 사람이 같은 일정에 두 자리면 한 자리씩 차례로 보냅니다(동시에 저장하면 서로 덮어쓰거나 비활성 상태가 엇갈립니다).
+    const respond = async (attendance: 'confirmed' | 'absent', reason = '') => {
+        for (const slot of mine) if (!await send({ type: 'attendance.set', eventId: event.id, slotId: slot.id, attendance, reason, ...(attendance === 'absent' ? { autoRequestSubstitute: true } : {}) })) break;
     };
     return <section aria-label="내 참석 응답" className={cn('rounded-2xl border border-brand/25 bg-brand/5 px-4 py-3.5', className)}>
         <p className="text-sm font-semibold text-foreground">{roles} 자리에 배치됐어요</p>
         <p className="mt-0.5 text-xs text-muted-foreground">참석 여부를 알려 주면 인도자에게 바로 전달돼요.</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" disabled={disabled} aria-label={`${roles} 참석 확정`} onClick={() => respond('confirmed')}>
+            <Button type="button" size="sm" disabled={disabled} aria-label={`${roles} 참석 확정`} onClick={() => void respond('confirmed')}>
                 <Check /> 참석 확정
             </Button>
             <Button type="button" variant="outline" size="sm" disabled={disabled} aria-expanded={declining} onClick={() => setDeclining(open => !open)}>
@@ -578,16 +579,16 @@ function MyRsvpPrompt({ event, userId, now, disabled, send, className }: { event
         </div>
         {declining ? <div className="mt-3 space-y-2">
             <p className={eyebrow}>사유를 고르면 불참으로 응답하고 대체 인원 요청이 가요</p>
-            <ReasonChips disabled={disabled} onPick={reason => respond('absent', reason)} />
+            <ReasonChips disabled={disabled} onPick={reason => void respond('absent', reason)} />
         </div> : null}
     </section>;
 }
 
 /** 1클릭 불참 사유 칩 */
 function ReasonChips({ disabled, onPick, titleSuffix = '사유로 1클릭 불참 응답' }: { disabled: boolean; onPick: (reason: string) => void; titleSuffix?: string }) {
-    return <div className="flex flex-wrap gap-1.5">
+    return <div className="flex flex-wrap gap-1.5 max-lg:gap-3">
         {ABSENCE_REASONS.map(reason => (
-            <button key={reason} type="button" disabled={disabled} className={outlineXs} title={`‘${reason}’ ${titleSuffix}`} onClick={() => onPick(reason)}>
+            <button key={reason} type="button" disabled={disabled} className={cn(outlineXs, 'max-lg:hit-44')} title={`‘${reason}’ ${titleSuffix}`} onClick={() => onPick(reason)}>
                 {reason}
             </button>
         ))}

@@ -1,23 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { loadPlanningInbox } from '@/actions/planningActions';
 import { cn } from '@/lib/utils';
+
+function readTeamCookie() {
+    if (typeof document === 'undefined') return '';
+    const match = document.cookie.match(/(?:^|; )wt_team=([^;]*)/);
+    try { return match ? decodeURIComponent(match[1]) : ''; } catch { return ''; }
+}
 
 export default function PlanningInboxBadge() {
     const [inbox, setInbox] = useState<{ count: number; urgent: number; teamId?: string; target?: string; title?: string } | null>(null);
     const [failed, setFailed] = useState(false);
     const pathname = usePathname();
+    const searchTeam = useSearchParams().get('team');
+    // 일정·요청 화면에서는 지금 보는 팀의 알림이 본문 '내 알림'에 있으므로, 다른 팀 알림만 배지로 알립니다.
+    const onPlanning = Boolean(pathname?.startsWith('/dashboard/planning'));
+    const viewing = onPlanning ? (searchTeam || readTeamCookie()) : undefined;
+    const viewingRef = useRef(viewing);
+    useEffect(() => { viewingRef.current = viewing; window.dispatchEvent(new Event('worship-planning-changed')); }, [viewing]);
     useEffect(() => {
         let active = true, pending = false;
         async function refresh() {
             if (pending || document.visibilityState !== 'visible') return;
             pending = true;
             try {
-                const result = await loadPlanningInbox();
+                const result = await loadPlanningInbox(viewingRef.current);
                 if (active) { if (result.ok) { setInbox(result.value); setFailed(false); } else setFailed(true); }
             } catch { if (active) setFailed(true); }
             finally { pending = false; }
@@ -30,8 +42,6 @@ export default function PlanningInboxBadge() {
         return () => { active = false; clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('worship-planning-changed', refresh); };
     }, []);
     if (!inbox?.count && !failed) return null;
-    // 일정·요청 화면에는 같은 알림함('내 알림')이 본문에 있어, 떠 있는 알림이 응답 버튼 · 입력칸만 가립니다.
-    if (!failed && pathname?.startsWith('/dashboard/planning')) return null;
     const href = `/dashboard/planning?team=${encodeURIComponent(inbox?.teamId ?? '')}&tab=${inbox?.target ?? 'schedule'}&inbox=1`;
     const label = failed ? '알림 연결 확인 필요' : inbox?.urgent ? `긴급 미확인 ${inbox.urgent}건` : `새 알림 ${inbox?.count}건`;
     const detail = failed ? '눌러서 다시 확인해주세요' : inbox?.title;

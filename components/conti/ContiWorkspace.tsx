@@ -52,7 +52,7 @@ function fromLocation(fallback: { screen: ScreenId; setlistId?: string }): { scr
     if (typeof window === 'undefined') return fallback;
     // 다른 화면(일정 카드의 '콘티 · 악보 보기' 등)에서 앱 안 이동으로 들어오면, 첫 그림 때 주소창은 아직 이전 화면입니다.
     // 그때는 서버가 새 주소로 정한 화면(fallback)을 씁니다. 이 화면 안에서 바꾼 탭(replaceState)만 주소에서 다시 읽습니다.
-    if (!window.location.pathname.startsWith('/dashboard/songs')) return fallback;
+    if (window.location.pathname.replace(/\/+$/, '') !== '/dashboard/songs') return fallback;
     const params = new URLSearchParams(window.location.search);
     const one = (name: string) => {
         const all = params.getAll(name);
@@ -78,6 +78,14 @@ export default function ContiWorkspace({
     const [screen, setScreen] = useState<ScreenId>(initial.screen);
     const [setlistId, setSetlistId] = useState(initial.setlistId ?? data.thisWeekId ?? data.setlists[0]?.id ?? '');
     const [sheetOpen, setSheetOpen] = useState(false);
+    // 이미 이 페이지에 있을 때 같은 경로의 다른 ?tab=·?setlist= 링크로 이동하면 컴포넌트는 다시 마운트되지 않고 props 만 바뀝니다.
+    // 서버가 새 주소로 정한 값이 바뀐 때에만 화면을 따라가고, 이 화면 안에서 바꾼 탭(replaceState)은 props 가 같아 건드리지 않습니다.
+    const [seen, setSeen] = useState({ screen: initialScreen, setlistId: initialSetlistId });
+    if (embedded && (seen.screen !== initialScreen || seen.setlistId !== initialSetlistId)) {
+        setSeen({ screen: initialScreen, setlistId: initialSetlistId });
+        setScreen(initialScreen);
+        if (initialSetlistId) setSetlistId(initialSetlistId);
+    }
     const scrollRef = useRef<HTMLDivElement>(null);
     const activeNav = screen === 'order' ? 'conti' : screen === 'alerts' ? 'week' : screen;
     const openCount = data.planning.openRequestCount;

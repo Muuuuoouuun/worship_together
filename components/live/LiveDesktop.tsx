@@ -87,7 +87,7 @@ export default function LiveDesktop({
     return (
         <div className="@container relative flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
             {/* ── 위: 한 줄 상태 ── */}
-            <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border pl-3 pr-4 @min-[1200px]:gap-4 @min-[1200px]:pr-5">
+            <header className="flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center gap-3 border-b border-border pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] @min-[1200px]:gap-4 @min-[1200px]:pr-[max(1.25rem,env(safe-area-inset-right))]">
                 <button
                     type="button"
                     inert={locked}

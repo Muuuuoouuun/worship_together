@@ -60,11 +60,13 @@ test('new leader and first-time teammate: invite, shared setlist, permission bou
         await expect(memberEvent).toBeVisible();
         // The assigned teammate sees their response request at the top of the card, before any details.
         await expect(memberEvent.getByRole('region', { name: '내 참석 응답' })).toBeVisible();
+        // Confirm through the prompt itself (its button is labelled with the roles), then the prompt goes away and the slot reads confirmed.
+        const prompt = memberEvent.getByRole('region', { name: '내 참석 응답' });
+        await prompt.getByRole('button', { name: '보컬 참석 확정', exact: true }).click();
+        await expect(prompt).toHaveCount(0);
         const details = memberEvent.locator('details').filter({ has: teammate.locator('summary').filter({ hasText: '일정 상세·참석·배정 보기' }) }).first();
         if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
-        await memberEvent.getByRole('button', { name: '참석 확정', exact: true }).click();
         await expect(memberEvent.getByText('참석 확정됨', { exact: true })).toBeVisible();
-        await expect(memberEvent.getByRole('region', { name: '내 참석 응답' })).toHaveCount(0);
         await expect(event.getByText('1/1').first()).toBeVisible();
         await info.attach('member-rsvp', { body: await teammate.screenshot(), contentType: 'image/png' });
 
@@ -110,9 +112,11 @@ test('new leader and first-time teammate: invite, shared setlist, permission bou
         try {
             await linkCheck.goto('/dashboard/planning');
             await linkCheck.getByRole('article', { name: '함께 준비할 예배', exact: true }).getByRole('link', { name: /콘티 · 악보 보기/ }).click();
-            await linkCheck.waitForURL(/\/dashboard\/songs\?tab=order/);
+            await linkCheck.waitForURL(/\/dashboard\/songs\?tab=order&setlist=[^&]+/);
+            expect(new URL(linkCheck.url()).searchParams.get('setlist')).toBeTruthy();
             await expect(linkCheck.getByRole('tab', { name: '콘티', exact: true })).toHaveAttribute('aria-selected', 'true');
             await expect(linkCheck.getByRole('heading', { name: '처음 함께 예배', exact: true })).toBeVisible();
+            await expect(linkCheck.getByRole('list', { name: '처음 함께 예배 콘티 순서' })).toBeVisible();
         } finally { await linkCheck.close(); }
 
         const teamId = await page.evaluate(() => (JSON.parse(localStorage.getItem('worship:online-teams:v1') ?? '[]') as string[])[0]);
