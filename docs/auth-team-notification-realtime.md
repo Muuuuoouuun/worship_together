@@ -278,4 +278,14 @@ master가 계정 · 팀 권한 서버, SSE 팀 스트림, 실시간 예배 세�
 
 검증: `npm test` 311개, Playwright 스위트(`npm run test:e2e`) 병합본 39 통과 + `planning-notices.spec.ts` 8 통과.
 
-다음 작업 후보 (우선순위): ① Android 셸 OAuth (Custom Tabs + 일회용 코드), ② 셸 푸시(FCM), ③ 알림 테이블 분리와 15초 폴링 제거(P3 · P6), ④ 시작 신호 `startAt`과 서버 시각 오프셋, ⑤ `Button` 작은 크기(`xs` · `sm` · `icon-sm`)의 모바일 터치 영역.
+다음 작업 후보 (우선순위): ① 셸 푸시(FCM · APNs), ② 알림 테이블 분리와 15초 폴링 제거(P3 · P6), ③ 시작 신호 `startAt`과 서버 시각 오프셋, ④ `Button` 작은 크기(`xs` · `sm` · `icon-sm`)의 모바일 터치 영역, ⑤ 실기기에서 앱 셸 로그인 복귀 확인(iOS는 필요하면 ASWebAuthenticationSession).
+
+### 2026-11-09 정기 점검 2회차
+
+| 항목 | 결과 |
+| --- | --- |
+| 병합 | `claude/jolly-davinci-4toxa2` 3커밋(UX 1 · 2 · 3차: 터치 영역, 참석 응답 먼저, 라이브 재동기화 · 콘티 딥링크 · D-day) |
+| iOS | Capacitor iOS 셸(SPM) + macOS CI, 첫 실행 전 단계 통과 · 시뮬레이터 화면 확인 |
+| 코드 검토 | 다른 팀 알림 배지가 일정 화면에서 사라지던 문제, 보관함에서 콘티 딥링크, 라이브 응답 버전 역전, iPad 헤더 safe-area, 사유 칩 터치 영역, CI 이중 실행 — 모두 수정 |
+| 백로그 | 앱 셸 로그인(일회용 코드 교환) 구현 |
+| 검증 | 단위 326, E2E(team-journey · live-stage · planning-notices · native-login) 통과 |

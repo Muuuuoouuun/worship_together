@@ -62,7 +62,7 @@
 | 뒤로가기 | 구현 | `@capacitor/app` + `components/app/NativeBridge`: 열린 창 닫기 → 이전 화면 → 시작 화면에서 두 번 눌러 종료 |
 | 앱 링크 | 구현 | autoVerify intent-filter (`/invite/` · `/session/` · `/live/` · `/dashboard`), 호스트는 `APP_LINK_HOST`. 같은 출처 · 허용 경로만 앱 안에서 엶. 절차는 `docs/android-app-links.md` |
 | 혼합 콘텐츠 | 구현 | http 서버(에뮬레이터)일 때만 cleartext · allowMixedContent |
-| OAuth (WebView) | 설계만 | Custom Tabs + 일회용 코드 교환 (`docs/android-app-links.md`) |
+| OAuth (앱 셸) | 구현 (2026-11-09) | 시스템 브라우저(Custom Tabs · SFSafariViewController) 로그인 → 일회용 코드 → `/api/auth/app-exchange`로 앱 안 세션. 단위 11 · E2E 통과. 실기기의 앱 복귀(특히 iOS 같은 도메인 유니버설 링크)는 미확인 |
 | 셸 푸시 (FCM) | 미구현 | 웹 푸시는 동작, Android 셸은 앱이 닫히면 알림 없음 |
 | 오프라인 보관본 개인정보 | 구현 | 로그아웃 · 세션 만료 · 계정 전환 때 `-pages` 캐시 삭제, 오류 · 이동 화면은 보관하지 않음 |
 | iOS 셸 | 구현 · CI 통과 (2026-11-09) | Capacitor iOS(SPM), `.github/workflows/ios-build.yml`이 macos-15 · Xcode 26에서 서명 없는 시뮬레이터 빌드 → 설치 · 실행 → 스크린샷. 첫 실행에서 전 단계 통과, 앱이 로컬 Next 서버의 오늘 화면을 그림(safe-area 정상, 설치 배너 없음). [실행 #1](https://github.com/Muuuuoouuun/worship_together/actions/runs/42635872758) |
