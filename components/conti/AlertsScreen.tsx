@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Bell, BellRing, CheckCheck, CircleCheck, ExternalLink, Hand, Inbox, ListMusic, Megaphone, MessageCircle, Repeat, UserCheck, UserX, type LucideIcon } from 'lucide-react';
+import { AlarmClock, ArrowLeft, Bell, BellRing, CheckCheck, CircleCheck, ExternalLink, Hand, Inbox, ListMusic, Megaphone, MessageCircle, Repeat, UserCheck, UserX, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ScreenId } from './model';
 import { useConti } from './context';
@@ -21,6 +21,7 @@ const NOTICE_META: Record<NoticeKind, { icon: LucideIcon; tone: Tone }> = {
     substitute: { icon: Hand, tone: 'peach' },
     volunteer: { icon: Hand, tone: 'mint' },
     conti: { icon: ListMusic, tone: 'mint' },
+    deadline: { icon: AlarmClock, tone: 'peach' },
     schedule: { icon: Bell, tone: 'sky' },
     rotation: { icon: Repeat, tone: 'lilac' },
     announcement: { icon: Megaphone, tone: 'sand' },
@@ -64,7 +65,8 @@ export default function AlertsScreen({ onBack, openOrder, go }: { onBack?: () =>
             else go('conti');
             return;
         }
-        if (notice.target === 'requests') go('requests');
+        if (notice.target === 'deadline') go('week');
+        else if (notice.target === 'requests') go('requests');
         else if (notice.target === 'schedule') go('team');
     }
 

@@ -291,7 +291,7 @@ export function dueDeadlineNotices(input: DeadlineSources & { state: Pick<Planni
             if (sent.has(logId)) continue;
             const window = reminderWindow(kind, target, settings);
             if (input.now < window.at || input.now >= window.until) continue;
-            const entity = target.setlistId ? { target: 'conti' as const, entityId: target.setlistId } : { target: 'schedule' as const, entityId: target.eventId! };
+            const entity = { target: 'deadline' as const, entityId: target.key };
             const push = (title: string, body: string, recipientIds: readonly string[], urgent = false) => {
                 const recipients = [...new Set(recipientIds)].filter((id) => !isPlaceholderMember(id) && input.members.some((member) => member.userId === id));
                 if (recipients.length) result.push({ logId, title, body, urgent, recipientIds: recipients, ...entity });

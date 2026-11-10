@@ -27,7 +27,7 @@ function seed(): { state: PlanningState; eventId: string } {
 }
 const sources = (state: PlanningState, extra: Partial<DeadlineSources> = {}): DeadlineSources => ({ events: state.events, setlists: [], detailsOf: () => null, members, state, ...extra });
 const nudge = (eventId: string, overrides: Partial<Extract<PlanningCommand, { type: 'conti.nudge' }>> = {}): PlanningCommand => ({
-    type: 'conti.nudge', deadlineKey: `event:${eventId}`, title: '주일 2부 예배', serviceAt: '2026-11-01T11:00:00+09:00', setlistId: '', eventId, leaderId: 'u-lead', message: '미리 연습하고 싶어요', anonymous: false, ...overrides,
+    type: 'conti.nudge', deadlineKey: `event:${eventId}`, title: '주일 2부 예배', serviceAt: '2026-11-01T11:00:00+09:00', setlistId: '', leaderId: 'u-lead', message: '미리 연습하고 싶어요', anonymous: false, ...overrides,
 });
 
 test('마감은 예배일 이전의 가장 가까운 화요일 23:59 (한국 시간)', () => {
@@ -120,7 +120,8 @@ test('콘티 요청: 인도자에게 묶어서, 3시간에 한 번, 이름 숨�
     const first = state.notifications[0];
     assert.equal(first.title, '윤사랑님이 콘티를 요청했어요');
     assert.deepEqual(first.recipientIds, ['u-lead']);
-    assert.equal(first.target, 'schedule');
+    assert.equal(first.target, 'deadline');
+    assert.equal(first.entityId, `event:${eventId}`);
 
     state = send(state, 'u-keys', nudge(eventId, { anonymous: true }), at('2026-10-27T19:00:00+09:00'));
     state = send(state, 'u-sound', nudge(eventId), at('2026-10-27T19:30:00+09:00'));
@@ -149,8 +150,8 @@ test('콘티 요청: 인도자에게 묶어서, 3시간에 한 번, 이름 숨�
 test('예정 시간: 요청한 사람에게 알리고, 그 시간까지 요청을 막음 · 밤에는 아침에 보냄', () => {
     const { state: seeded, eventId } = seed();
     let state = send(seeded, 'u-bass', nudge(eventId), at('2026-10-28T08:00:00+09:00'));
-    assert.throws(() => send(state, 'u-bass', { type: 'conti.eta', deadlineKey: `event:${eventId}`, title: '주일 2부 예배', setlistId: '', eventId, until: '2026-10-28T23:59:00+09:00', label: '오늘 밤 안에 올릴게요' }, at('2026-10-28T09:00:00+09:00')), /인도자 또는 관리자/);
-    state = send(state, 'u-lead', { type: 'conti.eta', deadlineKey: `event:${eventId}`, title: '주일 2부 예배', setlistId: '', eventId, until: '2026-10-28T23:59:00+09:00', label: '오늘 밤 안에 올릴게요' }, at('2026-10-28T09:00:00+09:00'));
+    assert.throws(() => send(state, 'u-bass', { type: 'conti.eta', deadlineKey: `event:${eventId}`, title: '주일 2부 예배', until: '2026-10-28T23:59:00+09:00', label: '오늘 밤 안에 올릴게요' }, at('2026-10-28T09:00:00+09:00')), /인도자 또는 관리자/);
+    state = send(state, 'u-lead', { type: 'conti.eta', deadlineKey: `event:${eventId}`, title: '주일 2부 예배', until: '2026-10-28T23:59:00+09:00', label: '오늘 밤 안에 올릴게요' }, at('2026-10-28T09:00:00+09:00'));
     const notice = state.notifications[0];
     assert.equal(notice.title, '박은혜님이 예정 시간을 알려줬어요');
     assert.deepEqual(notice.recipientIds, ['u-bass']);
@@ -185,4 +186,16 @@ test('초안 공유는 배치된 팀원에게 알림, 확정에서 되돌린 초
     assert.match(shared[0].body, /3곡 · 확정 전 초안/);
     assert.deepEqual([...shared[0].recipientIds].sort(), ['u-bass', 'u-keys', 'u-sound']);
     assert.deepEqual(contiNotices({ ...input, before: JSON.stringify({ status: 'confirmed' }), after: JSON.stringify({ status: 'draft' }) }), []);
+});
+
+test('콘티 요청을 취소하면 인도자 묶음 알림도 남은 요청에 맞춰 고침', () => {
+    const { state: seeded, eventId } = seed();
+    let state = send(seeded, 'u-bass', nudge(eventId), at('2026-10-28T08:00:00+09:00'));
+    state = send(state, 'u-keys', nudge(eventId), at('2026-10-28T08:10:00+09:00'));
+    const group = `nudge:event:${eventId}`;
+    assert.equal(state.notifications.find((item) => item.groupKey === group)!.title, '정다윗님 외 1명이 콘티를 요청했어요');
+    state = send(state, 'u-keys', { type: 'request.delete', requestId: state.requests.find((item) => item.authorId === 'u-keys')!.id }, at('2026-10-28T08:20:00+09:00'));
+    assert.equal(state.notifications.find((item) => item.groupKey === group)!.title, '윤사랑님이 콘티를 요청했어요');
+    state = send(state, 'u-bass', { type: 'request.delete', requestId: state.requests.find((item) => item.authorId === 'u-bass')!.id }, at('2026-10-28T08:30:00+09:00'));
+    assert.equal(state.notifications.filter((item) => item.groupKey === group).length, 0);
 });

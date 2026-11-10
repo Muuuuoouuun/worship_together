@@ -51,8 +51,8 @@ export type DeadlineState = {
     etas?: { key: string; until: string; label: string; by: string; at: string }[];
     log?: { id: string; at: string }[];
 };
-/** 알림을 누르면 열리는 곳: 일정 · 요청 화면의 탭, 또는 콘티(entityId 가 콘티 id) */
-export type PlanningTarget = 'requests' | 'schedule' | 'rotation' | 'announcements' | 'conti';
+/** 알림을 누르면 열리는 곳: 일정 · 요청 화면의 탭, 콘티(entityId 가 콘티 id), 콘티 마감(entityId 가 마감 대상 키 → 콘티·악보 '이번 주') */
+export type PlanningTarget = 'requests' | 'schedule' | 'rotation' | 'announcements' | 'conti' | 'deadline';
 /** 공지를 받는 사람: 팀 전체 · 몇 개 파트 · 한 일정에 배치된 사람 */
 export type AnnouncementAudience = { kind: 'all' } | { kind: 'roles'; roles: WorshipRole[] } | { kind: 'event'; eventId: string };
 /** 팀 공지. 받는 사람은 올릴 때 정해지고(이후 들어온 팀원은 다시 알림에서 빠짐), 확인을 받으면 누가 확인했는지 남습니다. */
@@ -152,9 +152,9 @@ export type PlanningCommand =
     | { type: 'notification.read'; notificationId: string }
     | { type: 'notification.readAll' }
     /** 팀원이 인도자에게 콘티 요청 (독촉). deadlineKey 는 lib/contiDeadline 의 마감 대상 키 */
-    | { type: 'conti.nudge'; deadlineKey: string; title: string; serviceAt: string; setlistId: string; eventId: string; leaderId: string | null; message: string; anonymous: boolean }
+    | { type: 'conti.nudge'; deadlineKey: string; title: string; serviceAt: string; setlistId: string; leaderId: string | null; message: string; anonymous: boolean }
     /** 인도자가 콘티를 올릴 예정 시간을 알림 → 요청한 사람에게 공유, 그 시간까지 요청 · 마감 알림을 멈춤 */
-    | { type: 'conti.eta'; deadlineKey: string; title: string; setlistId: string; eventId: string; until: string; label: string }
+    | { type: 'conti.eta'; deadlineKey: string; title: string; until: string; label: string }
     | { type: 'deadline.settings'; settings: DeadlineSettings }
     /** 일정마다 마감 바꾸기 (null 이면 팀 기본 규칙으로) */
     | { type: 'deadline.override'; deadlineKey: string; at: string | null };

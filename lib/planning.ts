@@ -124,12 +124,11 @@ const commandSchema = z.discriminatedUnion('type', [
         title: z.string().trim().min(1).max(120),
         serviceAt: z.iso.datetime({ offset: true }),
         setlistId: z.string().max(200),
-        eventId: z.string().max(200),
         leaderId: id.nullable(),
         message: z.string().trim().min(1, '보낼 말을 골라주세요.').max(300),
         anonymous: z.boolean(),
     }),
-    z.object({ type: z.literal('conti.eta'), deadlineKey: id, title: z.string().trim().min(1).max(120), setlistId: z.string().max(200), eventId: z.string().max(200), until: z.iso.datetime({ offset: true }), label: z.string().trim().min(1).max(60) }),
+    z.object({ type: z.literal('conti.eta'), deadlineKey: id, title: z.string().trim().min(1).max(120), until: z.iso.datetime({ offset: true }), label: z.string().trim().min(1).max(60) }),
     z.object({ type: z.literal('deadline.settings'), settings: deadlineSettingsSchema }),
     z.object({ type: z.literal('deadline.override'), deadlineKey: id, at: z.iso.datetime({ offset: true }).nullable() }),
 ]);
@@ -139,7 +138,7 @@ const stateSchema = z.object({
     requests: z.array(z.object({ id, setlistId: z.string(), setlistTitle: z.string(), kind: z.enum(['question', 'reminder', 'change']), body: z.string(), authorId: id, leaderId: id, status: z.enum(['open', 'reviewing', 'resolved']), createdAt: stamp, updatedAt: stamp, replies: z.array(z.object({ id, authorId: id, body: z.string(), createdAt: stamp })), deadlineKey: id.optional(), anonymous: z.boolean().optional() })),
     events: z.array(scheduleInput.extend({ id, cancelled: z.boolean(), slots: z.array(z.object({ id, role, memberId: id.nullable(), attendance: z.enum(['pending', 'confirmed', 'absent']), volunteers: z.array(id), invitedAt: stamp.optional(), respondedAt: stamp.optional(), declineReason: z.string().optional(), asked: z.array(id).optional(), passed: z.array(id).optional() })) })),
     alerts: z.array(z.object({ id, eventId: id, slotId: id.nullable(), kind: z.enum(['absence', 'substitute', 'notice']), body: z.string(), authorId: id, createdAt: stamp, resolvedAt: stamp.nullable() })),
-    notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation', 'announcements', 'conti']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp, slotId: id.optional(), groupKey: z.string().optional(), deliverAt: stamp.optional() })),
+    notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation', 'announcements', 'conti', 'deadline']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp, slotId: id.optional(), groupKey: z.string().optional(), deliverAt: stamp.optional() })),
     rotations: z.array(rotationGroupSchema).optional().default([]),
     blockedDates: z.array(z.object({ memberId: id, date: z.string(), reason: z.string().optional() })).optional().default([]),
     partLeads: z.array(z.object({ part: z.enum(['band', 'vocal']), memberId: id })).optional().default([]),
@@ -322,6 +321,13 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             if (!canDelete) throw new Error('작성자 또는 관리자만 요청을 삭제할 수 있습니다.');
             state.requests.splice(index, 1);
             state.notifications = state.notifications.filter(item => item.entityId !== command.requestId);
+            // 콘티 요청을 취소하면 인도자에게 묶어 보낸 알림(아직 안 읽은 것)도 남은 요청에 맞춰 고칩니다.
+            if (request.deadlineKey) {
+                const bundle = state.notifications.find(item => item.groupKey === `nudge:${request.deadlineKey}` && !item.readBy.some(reader => item.recipientIds.includes(reader)));
+                const remaining = openNudges(state, request.deadlineKey);
+                if (bundle && remaining.length) bundle.title = nudgeTitle(remaining, members);
+                else if (bundle) state.notifications = state.notifications.filter(item => item !== bundle);
+            }
             break;
         }
         case 'request.reply': case 'request.status': {
@@ -1105,11 +1111,11 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             // 인도자 알림은 요청 간격 안에서 하나로 묶어, 새 요청이 오면 제목만 고쳐 씁니다 (알림이 쌓이지 않게).
             const groupKey = `nudge:${command.deadlineKey}`;
             const title = nudgeTitle(openNudges(state, command.deadlineKey), members);
-            const text = `${command.title} · ${planningDate(command.serviceAt)} · “${preview(command.message)}”`;
+            // 팀 소식은 첫 ' · ' 뒤를 인용으로 보여 줍니다 (components/conti/planningBridge quoteFromNotice).
+            const text = `${command.title} · ${preview(command.message)}`;
             const bundle = state.notifications.find(item => item.groupKey === groupKey && leaders.every(leader => item.recipientIds.includes(leader) && !item.readBy.includes(leader)) && at - Date.parse(item.createdAt) < settings.nudgeCooldownHours * 60 * 60 * 1000);
             if (bundle) { bundle.title = title; bundle.body = text; break; }
-            const entity = command.setlistId ? { target: 'conti' as const, entityId: command.setlistId } : { target: 'schedule' as const, entityId: command.eventId || command.deadlineKey };
-            notify(leaders, title, text, entity.target, entity.entityId);
+            notify(leaders, title, text, 'deadline', command.deadlineKey);
             const created = state.notifications[0];
             if (created?.createdAt === now && created.title === title) {
                 created.groupKey = groupKey;
@@ -1130,8 +1136,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
                 nudge.status = 'reviewing';
                 nudge.updatedAt = now;
             }
-            const entity = command.setlistId ? { target: 'conti' as const, entityId: command.setlistId } : { target: 'schedule' as const, entityId: command.eventId || command.deadlineKey };
-            notify(nudges.map(item => item.authorId), `${actor.name}님이 예정 시간을 알려줬어요`, `${command.title} · “${command.label}” · 예정 ${planningDate(command.until)}`, entity.target, entity.entityId);
+            notify(nudges.map(item => item.authorId), `${actor.name}님이 예정 시간을 알려줬어요`, `${command.title} · ${command.label} (예정 ${planningDate(command.until)})`, 'deadline', command.deadlineKey);
             const created = state.notifications[0];
             if (created?.createdAt === now && settings.quietHours && inQuietHours(at) && created.title.endsWith('예정 시간을 알려줬어요')) created.deliverAt = new Date(afterQuietHours(at)).toISOString();
             break;

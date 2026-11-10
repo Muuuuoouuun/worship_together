@@ -3,10 +3,11 @@
  * 순수 함수만 있어 서버·브라우저·테스트 어디서나 같은 결과를 냅니다.
  */
 
-import { requestKinds, requestStatuses, type PlanningCommand, type PlanningNotification, type PlanningState, type SetlistRequest, type TeamSchedule, type UrgentAlert } from '@/types/planning';
+import { planningDate, requestKinds, requestStatuses, type PlanningCommand, type PlanningNotification, type PlanningState, type SetlistRequest, type TeamSchedule, type UrgentAlert } from '@/types/planning';
 import { worshipRoles, type TeamMember, type WorshipRole } from '@/types/team';
 import { canHandleSlot, canManagePlanning, leadParts, type LeadPart } from '@/types/planning';
-import { slotKeepers, substituteOptions, type SlotKeeper, type SubstituteOption } from '@/lib/planning';
+import { leaderIds, slotKeepers, substituteOptions, type SlotKeeper, type SubstituteOption } from '@/lib/planning';
+import { ANONYMOUS_AUTHOR, DEFAULT_DEADLINE_SETTINGS, activeEta, deadlineSettingsOf, deadlineStage, deadlineTargets, nudgeAvailableAt, openNudges, spanText, type DeadlineSettings, type DeadlineStage, type DeadlineStatus } from '@/lib/contiDeadline';
 import { DEFAULT_POLICY, type TeamPolicy } from '@/lib/permissions';
 import { linkedSetlistId } from '@/lib/serviceLink';
 import { diffDays, relativeTime, seoulDateTime, type ContiSetlist } from './model';
@@ -143,7 +144,55 @@ export interface RequestItem {
     volunteered?: boolean;
 }
 
-export type NoticeKind = 'request' | 'reply' | 'invite' | 'accept' | 'decline' | 'substitute' | 'volunteer' | 'conti' | 'schedule' | 'rotation' | 'announcement' | 'comment' | 'other';
+export type NoticeKind = 'request' | 'reply' | 'invite' | 'accept' | 'decline' | 'substitute' | 'volunteer' | 'conti' | 'deadline' | 'schedule' | 'rotation' | 'announcement' | 'comment' | 'other';
+
+/** 콘티 요청(독촉) 한 건 — 내용은 쓴 사람 · 받는 인도자 · 관리자에게만 */
+export interface DeadlineNudge {
+    id: string;
+    /** 이름을 숨긴 요청은 '팀원 1명' */
+    author: string;
+    anonymous: boolean;
+    message: string;
+    ago: string;
+    createdAt: string;
+    mine: boolean;
+}
+
+/** 예배 하나의 콘티 마감 상태 (lib/contiDeadline 의 마감 대상 + 보는 사람 기준) */
+export interface DeadlineCardView {
+    key: string;
+    title: string;
+    eventId: string | null;
+    setlistId: string | null;
+    setlistTitle: string | null;
+    serviceAt: string;
+    /** 예배일 YYYY-MM-DD (서울) */
+    serviceDate: string;
+    deadlineAt: string;
+    /** '10월 27일 (화) 23:59' */
+    deadlineText: string;
+    stage: DeadlineStage;
+    /** '마감까지 1일 4시간' · '마감 12시간 지남' · '확정' */
+    stageText: string;
+    status: DeadlineStatus;
+    songCount: number;
+    leaderId: string | null;
+    leaderName: string | null;
+    /** 보는 사람이 이 콘티를 올릴 사람 (콘티 담당 · 예배 인도, 없으면 인도자 · 관리자) */
+    isLeader: boolean;
+    /** 보는 사람이 이 예배(연습 포함)에 배치됨 */
+    assigned: boolean;
+    /** 기다리는 사람: 이름이 보이는 사람과 이름을 숨긴 사람 수 */
+    waiting: { count: number; names: string[]; hidden: number };
+    nudges: DeadlineNudge[];
+    myNudge: DeadlineNudge | null;
+    /** 내가 다시 요청할 수 있는 시각 (지금 가능하면 null) */
+    nextNudgeAt: string | null;
+    nextNudgeText: string | null;
+    eta: { label: string; until: string; untilText: string; byName: string | null } | null;
+    /** 이 예배만 마감을 따로 정함 */
+    overridden: boolean;
+}
 export type NoticeCategory = 'conti' | 'team' | 'request';
 export type NoticeGroup = '오늘' | '어제' | '이번 주' | '이전';
 
@@ -198,6 +247,11 @@ export interface PlanningView {
     openRequestCount: number;
     /** 마감하지 않은 팀 공지 (내가 받은 것 · 내가 쓴 것) */
     announcements: AnnouncementItem[];
+    /** 다가오는 예배의 콘티 마감 (가까운 순) */
+    deadlines: DeadlineCardView[];
+    deadlineSettings: DeadlineSettings;
+    /** 팀 마감 설정을 바꿀 수 있는지 (관리자) */
+    canEditDeadline: boolean;
     actions: PlanningActions | null;
     /** 일정·요청 화면 주소 (관리 기능은 그곳에서) */
     planningHref: string;
@@ -218,6 +272,9 @@ export const EMPTY_PLANNING_VIEW: PlanningView = {
     unreadCount: 0,
     openRequestCount: 0,
     announcements: [],
+    deadlines: [],
+    deadlineSettings: DEFAULT_DEADLINE_SETTINGS,
+    canEditDeadline: false,
     actions: null,
     planningHref: '/dashboard/planning',
 };
@@ -236,7 +293,7 @@ export interface BuildInput {
     feedSeenAt?: string | null;
 }
 
-export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'partLeads' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount' | 'announcements'>;
+export type BuiltPlanning = Pick<PlanningView, 'viewer' | 'roster' | 'partLeads' | 'services' | 'events' | 'requests' | 'notices' | 'unreadCount' | 'openRequestCount' | 'announcements' | 'deadlines' | 'deadlineSettings' | 'canEditDeadline'>;
 
 export interface AnnouncementItem {
     id: string;
@@ -352,16 +409,17 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
             };
         });
 
-    const requests: RequestItem[] = state.requests.map((request): RequestItem => {
+    // 다른 팀원의 콘티 요청(독촉)은 대기 인원 계산에만 쓰고 요청 목록에는 넣지 않습니다 (내용이 비어 내려옴).
+    const requests: RequestItem[] = state.requests.filter((request) => !request.deadlineKey || request.body || request.authorId === userId).map((request): RequestItem => {
         const canResolve = request.leaderId === userId || owner;
         return {
             id: request.id,
             source: 'request',
             kind: request.kind,
-            kindLabel: requestKinds[request.kind],
+            kindLabel: request.deadlineKey ? '콘티 요청' : requestKinds[request.kind],
             title: firstLine(request.body),
             body: request.body,
-            author: nameOf(request.authorId),
+            author: request.authorId === ANONYMOUS_AUTHOR ? '팀원 1명 (이름 숨김)' : nameOf(request.authorId),
             authorId: request.authorId,
             context: request.setlistTitle,
             createdAt: request.createdAt,
@@ -443,7 +501,7 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
             return {
                 id: item.id,
                 kind,
-                category: kind === 'request' || kind === 'reply' ? 'request' : kind === 'conti' ? 'conti' : 'team',
+                category: kind === 'request' || kind === 'reply' ? 'request' : kind === 'conti' || kind === 'deadline' ? 'conti' : 'team',
                 actor,
                 title: item.title,
                 message: collapse(item.body),
@@ -489,6 +547,65 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
 
     const allNotices = [...notices, ...commentNotices].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
+    // 콘티 마감: 서버 예약 알림과 같은 규칙(lib/contiDeadline)으로 다가오는 예배마다 계산합니다.
+    const at = now.getTime();
+    const setlistById = new Map((input.setlists ?? []).map((setlist) => [setlist.id, setlist]));
+    const songIds = (setlist: ContiSetlist) => setlist.items.filter((item) => item.kind === 'song').map((item) => item.id);
+    const targets = deadlineTargets({
+        events: state.events,
+        setlists: (input.setlists ?? []).map((setlist) => ({ id: setlist.id, title: setlist.service, worship_date: `${setlist.date}T${setlist.time || '00:00'}:00+09:00`, song_order: songIds(setlist) })),
+        detailsOf: (id) => {
+            const setlist = setlistById.get(id);
+            return setlist ? { status: setlist.status === 'confirmed' || setlist.status === 'draft' ? setlist.status : 'writing', owner: setlist.owner } : null;
+        },
+        members,
+        state,
+    }).filter((target) => Date.parse(target.serviceAt) > at && Date.parse(target.serviceAt) - at < 21 * 86_400_000);
+    const leaders = leaderIds(members);
+    const nudgeOf = (request: SetlistRequest): DeadlineNudge => ({
+        id: request.id,
+        author: request.anonymous ? (request.authorId === userId ? `${me?.name ?? '나'} (이름 숨김)` : '팀원 1명') : nameOf(request.authorId) ?? '이전 팀원',
+        anonymous: Boolean(request.anonymous),
+        message: request.body,
+        ago: ago(request.createdAt),
+        createdAt: request.createdAt,
+        mine: request.authorId === userId,
+    });
+    const deadlines = targets.map((target): DeadlineCardView => {
+        const open = openNudges(state, target.key).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        const named = [...new Set(open.filter((request) => !request.anonymous && request.authorId !== ANONYMOUS_AUTHOR).map((request) => request.authorId))];
+        const hidden = open.filter((request) => request.anonymous || request.authorId === ANONYMOUS_AUTHOR).length;
+        const mine = open.find((request) => request.authorId === userId);
+        const eta = activeEta(state, target.key, at);
+        const next = nudgeAvailableAt(state, target.key, userId, at);
+        return {
+            key: target.key,
+            title: target.title,
+            eventId: target.eventId,
+            setlistId: target.setlistId,
+            setlistTitle: target.setlistTitle,
+            serviceAt: target.serviceAt,
+            serviceDate: seoulDateTime(target.serviceAt).date,
+            deadlineAt: target.deadlineAt,
+            deadlineText: planningDate(target.deadlineAt),
+            stage: deadlineStage(target, at),
+            stageText: target.status === 'confirmed' ? '확정' : Date.parse(target.deadlineAt) > at ? `마감까지 ${spanText(Date.parse(target.deadlineAt) - at)}` : `마감 ${spanText(at - Date.parse(target.deadlineAt))} 지남`,
+            status: target.status,
+            songCount: target.songCount,
+            leaderId: target.leaderId,
+            leaderName: nameOf(target.leaderId),
+            isLeader: target.leaderId ? target.leaderId === userId : leaders.includes(userId),
+            assigned: target.assignedIds.includes(userId),
+            waiting: { count: named.length + hidden, names: named.map((id) => nameOf(id) ?? '팀원'), hidden },
+            nudges: open.filter((request) => request.body).map(nudgeOf),
+            myNudge: mine ? nudgeOf(mine) : null,
+            nextNudgeAt: next === null ? null : new Date(next).toISOString(),
+            nextNudgeText: next === null ? null : planningDate(new Date(next).toISOString()),
+            eta: eta ? { label: eta.label, until: eta.until, untilText: planningDate(eta.until), byName: nameOf(eta.by) } : null,
+            overridden: (state.deadline?.overrides ?? []).some((item) => item.key === target.key),
+        };
+    });
+
     return {
         viewer: me ? { id: me.userId, name: me.name, role: me.role, canManage } : null,
         roster: members.map((member) => ({ id: member.userId, name: member.name, role: member.role })),
@@ -526,6 +643,9 @@ export function buildPlanningView(input: BuildInput): BuiltPlanning {
                 };
             })
             .sort((a, b) => Number(b.needsMyAck) - Number(a.needsMyAck) || b.createdAt.localeCompare(a.createdAt)),
+        deadlines,
+        deadlineSettings: deadlineSettingsOf(state),
+        canEditDeadline: owner,
     };
 }
 
@@ -535,6 +655,10 @@ export function classifyNotice(item: Pick<PlanningNotification, 'title' | 'targe
     if (item.target === 'announcements') return 'announcement';
     if (title.includes('답변')) return 'reply';
     if (title.startsWith('콘티 ') && (title.includes('요청') || title.includes('질문'))) return 'request';
+    // 콘티 마감 알림 (lib/contiDeadline) · 콘티 요청 · 인도자의 예정 시간
+    if (title.includes('콘티를 요청했어요')) return 'request';
+    if (title.includes('예정 시간을 알려줬어요')) return 'reply';
+    if (title.startsWith('콘티 마감') || title.startsWith('콘티 미확정') || title.includes('콘티가 올라오지 않았어요') || title.includes('콘티 초안만')) return 'deadline';
     if (title.includes('초대') || title.includes('참석 여부를 확정')) return 'invite';
     if (title.startsWith('참석')) return 'accept';
     if (title.startsWith('결석')) return 'decline';

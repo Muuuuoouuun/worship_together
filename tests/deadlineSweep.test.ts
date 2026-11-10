@@ -72,7 +72,7 @@ test('마감이 지나면 아침에 인도자 · 배치된 팀원에게 한 번�
 test('콘티를 확정하면 요청이 완료되고, 배치 안 된 요청자도 확정 알림을 받음 · 이후 마감 알림 없음', () => {
     const { repo, docs, events, delivered, teamId, event, target } = seed();
     try {
-        repo.updatePlanning(teamId, vocal.id, { type: 'conti.nudge', deadlineKey: target.key, title: '주일 2부 예배', serviceAt: event.startsAt, setlistId: '', eventId: event.id, leaderId: leader.id, message: '미리 연습하고 싶어요', anonymous: true });
+        repo.updatePlanning(teamId, vocal.id, { type: 'conti.nudge', deadlineKey: target.key, title: '주일 2부 예배', serviceAt: event.startsAt, setlistId: '', leaderId: leader.id, message: '미리 연습하고 싶어요', anonymous: true });
         assert.equal(repo.planning(teamId, leader.id).requests[0].status, 'open');
         const enc = encodeURIComponent(teamId);
         docs.put(teamId, leader, `worship-together:library:v1:${enc}`, JSON.stringify({ version: 1, songs: [{ id: 'a', title: '곡 A' }], setlists: [{ id: 'set-1', title: '주님 오실 때까지', worship_date: event.startsAt, song_order: ['a'] }] }), 0);

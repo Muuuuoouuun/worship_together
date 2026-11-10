@@ -13,6 +13,7 @@ import {
     type PlanningCommand, type PlanningPanelProps, type SetlistRequest,
 } from '@/types/planning';
 import { isPlaceholderMember } from '@/types/team';
+import { ANONYMOUS_AUTHOR } from '@/lib/contiDeadline';
 
 type Props = PlanningPanelProps & { initialSetlist?: { id: string; title: string } };
 type RunCommand = (command: PlanningCommand, message: string) => Promise<boolean>;
@@ -207,8 +208,9 @@ export default function RequestsPanel({ state, members, userId, busy, onCommand,
     const details = useRef(new Map<string, HTMLDetailsElement>());
     const disabled = busy || pending;
     const owner = members.some(member => member.userId === userId && member.permission === 'owner');
-    const names = new Map(members.map(member => [member.userId, member.name]));
-    const requests = [...state.requests].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const names = new Map([...members.map(member => [member.userId, member.name] as const), [ANONYMOUS_AUTHOR, '팀원 1명 (이름 숨김)'] as const]);
+    // 다른 팀원의 콘티 요청(독촉)은 내용 없이 대기 인원 계산용으로만 내려옵니다 (lib/planning planningForViewer).
+    const requests = state.requests.filter(request => !request.deadlineKey || request.body || request.authorId === userId).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     const initialTarget = initialSetlist ? requests.find(request => initialSetlist.id ? request.setlistId === initialSetlist.id : request.setlistTitle === initialSetlist.title) : undefined;
     const setlists = new Map(requests.map(request => [setlistKey(request), request.setlistTitle]));
     const audienceRequests = audience === 'me' ? requests.filter(request => request.leaderId === userId) : requests;

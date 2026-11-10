@@ -24,6 +24,7 @@ import { useConti } from './context';
 import { EVENT_KIND } from './planningUi';
 import { AddButton, Avatar, AvatarStack, Eyebrow, KeyText, RoundIconButton, SampleChip, ScreenTitle, SectionTitle, TONE_BLOCK, TONE_DOT, TONE_ICON, body, ink, line, selected, sub, todayText, STATUS, dashed, divide, ringCard } from './ui';
 import { NoticeAvatar } from './AlertsScreen';
+import DeadlineCard from './DeadlineCard';
 
 export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) => void; openOrder: (id: string) => void }) {
     const { today, setlists, thisWeekId, editor, planning } = useConti();
@@ -40,6 +41,8 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
     const dayName = (date: string) => (weekday(date) === '일' ? '주일' : `${weekday(date)}요일`);
     const manageHref = planning.planningHref.includes('?') ? `${planning.planningHref}&tab=schedule` : `${planning.planningHref}?tab=schedule`;
     const openRequests = planning.requests.filter((request) => !request.done);
+    // 이번 주 콘티(또는 다가오는 주일 예배)의 콘티 마감
+    const deadline = (setlist && planning.deadlines.find((item) => item.setlistId === setlist.id)) || planning.deadlines.find((item) => item.serviceDate === anchor) || planning.deadlines[0] || null;
 
     return (
         <div className="space-y-7">
@@ -158,6 +161,8 @@ export default function WeekScreen({ go, openOrder }: { go: (screen: ScreenId) =
                     </div>
                 )}
             </section>
+
+            <DeadlineCard deadline={deadline} openOrder={openOrder} />
 
             <section aria-label="팀 소식" className="space-y-1">
                 <SectionTitle

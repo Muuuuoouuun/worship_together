@@ -20,14 +20,7 @@ export default function LiveContiWorkspace(props: Props) {
         <div className="flex flex-col gap-5">
             <PageHeader
                 title="콘티·악보"
-                description={
-                    <>
-                        {source.kind === 'server' ? '서버에 저장된 콘티' : '곡 보관함에 저장된 콘티'}를 이번 주 순서·송폼·특이사항과 함께 봐요
-                        <Link href="/dashboard/songs/deadline" className="ml-1.5 inline-flex items-center text-xs font-semibold text-brand underline-offset-2 hover:underline">
-                            마감 알림 목업 →
-                        </Link>
-                    </>
-                }
+                description={<>{source.kind === 'server' ? '서버에 저장된 콘티' : '곡 보관함에 저장된 콘티'}를 이번 주 순서·송폼·특이사항과 함께 봐요</>}
                 actions={
                     <>
                     {source.teams.length > 1 && (
