@@ -3,14 +3,16 @@ import { planningDate, type PlanningNotification, type PlanningState } from '../
 import { eventsForSetlist, linkableFromLibrary } from './serviceLink';
 
 /*
- * 콘티 확정 · 변경 알림. 팀 공유 자료(콘티 세부 · 곡 보관함)가 저장될 때 서버가 부릅니다.
+ * 콘티 확정 · 초안 · 변경 알림. 팀 공유 자료(콘티 세부 · 곡 보관함)가 저장될 때 서버가 부릅니다.
  * - 콘티를 '확정' 으로 바꾸면 → 그 콘티를 준비하는 일정(예배 · 연습)에 배치된 사람에게 "콘티가 확정됐어요"
+ * - '초안' (곡 제목만 먼저 공유) 으로 바꾸면 → 같은 사람에게 "콘티 초안이 올라왔어요" (마감은 확정해야 지켜짐)
  * - 확정된 콘티의 곡 순서 · Key · BPM · 메모가 바뀌면 → 같은 사람에게 "확정된 콘티가 바뀌었어요" (콘티마다 10분에 한 번)
  * 작성 중인 콘티의 변경과 코멘트만 더한 저장은 알리지 않습니다(코멘트는 팀 소식에 따로 보임).
  * 그 콘티를 준비하는 일정이나 배치된 사람이 없으면 팀 전체에 알립니다.
  */
 
 export const CONTI_CONFIRMED_TITLE = '콘티가 확정됐어요';
+export const CONTI_DRAFT_TITLE = '콘티 초안이 올라왔어요';
 export const CONTI_CHANGED_TITLE = '확정된 콘티가 바뀌었어요';
 const CHANGE_GAP_MS = 10 * 60 * 1000;
 
@@ -92,6 +94,12 @@ export function contiNotices(input: ContiNoticeInput): ContiNotice[] {
         if (after.status === 'confirmed' && !wasConfirmed) {
             const info = describe(input.setlistId, library);
             const item = notice(input.setlistId, CONTI_CONFIRMED_TITLE, info.songs ? `${info.songs}곡 · 곡 순서와 Key를 확인해 주세요` : '곡 순서와 Key를 확인해 주세요');
+            return item ? [item] : [];
+        }
+        // 초안: 곡 제목만 먼저 공유 — 팀에 알리지만 확정 전이라는 걸 함께 알립니다. 확정에서 초안으로 되돌린 건 알리지 않습니다.
+        if (after.status === 'draft' && before?.status !== 'draft' && !wasConfirmed) {
+            const info = describe(input.setlistId, library);
+            const item = notice(input.setlistId, CONTI_DRAFT_TITLE, `${info.songs ? `${info.songs}곡 · ` : ''}확정 전 초안이에요. 바뀔 수 있어요`);
             return item ? [item] : [];
         }
         if (after.status === 'confirmed' && wasConfirmed && !same(before?.overrides, after.overrides) && !recentlyNotified(input, input.setlistId)) {

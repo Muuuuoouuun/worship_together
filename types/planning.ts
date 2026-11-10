@@ -1,5 +1,6 @@
 import type { TeamMember, WorshipRole } from './team';
 import { DEFAULT_POLICY, can, type TeamPolicy } from '../lib/permissions';
+import type { DeadlineSettings } from '../lib/contiDeadline';
 
 export const requestKinds = { question: '질문', reminder: '진행 확인 요청', change: '수정 요청' } as const;
 export const requestStatuses = { open: '접수', reviewing: '확인 중', resolved: '완료' } as const;
@@ -8,6 +9,10 @@ export type SetlistRequest = {
     body: string; authorId: string; leaderId: string; status: keyof typeof requestStatuses;
     createdAt: string; updatedAt: string;
     replies: { id: string; authorId: string; body: string; createdAt: string }[];
+    /** 콘티 요청(독촉)이면 그 예배의 마감 대상 키 ('event:<id>' · 'setlist:<id>') */
+    deadlineKey?: string;
+    /** 이름을 숨긴 요청 — 다른 사람 화면에는 작성자가 보이지 않습니다. */
+    anonymous?: boolean;
 };
 export type ScheduleSlot = {
     id: string; role: WorshipRole; memberId: string | null;
@@ -34,6 +39,17 @@ export type PlanningNotification = {
     entityId: string; recipientIds: string[]; readBy: string[]; createdAt: string;
     /** 특정 자리에 관한 알림이면 그 자리 (대체 부탁 카드에서 바로 지원·거절) */
     slotId?: string;
+    /** 같은 묶음의 알림은 새로 만들지 않고 고쳐 씁니다 (콘티 요청을 인도자에게 묶어 보낼 때) */
+    groupKey?: string;
+    /** 밤 시간에 생긴 알림: 이 시각에 기기 · 푸시로 보냅니다 (앱 안 목록에는 바로 보임) */
+    deliverAt?: string;
+};
+/** 콘티 마감: 팀 설정 · 일정별 마감 · 인도자가 알려준 예정 시간 · 보낸 예약 알림 기록 */
+export type DeadlineState = {
+    settings?: DeadlineSettings;
+    overrides?: { key: string; at: string }[];
+    etas?: { key: string; until: string; label: string; by: string; at: string }[];
+    log?: { id: string; at: string }[];
 };
 /** 알림을 누르면 열리는 곳: 일정 · 요청 화면의 탭, 또는 콘티(entityId 가 콘티 id) */
 export type PlanningTarget = 'requests' | 'schedule' | 'rotation' | 'announcements' | 'conti';
@@ -82,6 +98,7 @@ export type PlanningState = {
     blockedDates?: BlockedDate[];
     partLeads?: PartLead[];
     announcements?: TeamAnnouncement[];
+    deadline?: DeadlineState;
 };
 export const emptyPlanningState = (): PlanningState => ({ version: 1, requests: [], events: [], alerts: [], notifications: [], rotations: [], blockedDates: [], partLeads: [], announcements: [] });
 export type ScheduleInput = {
@@ -133,7 +150,14 @@ export type PlanningCommand =
     | { type: 'announcement.close'; announcementId: string }
     | { type: 'announcement.delete'; announcementId: string }
     | { type: 'notification.read'; notificationId: string }
-    | { type: 'notification.readAll' };
+    | { type: 'notification.readAll' }
+    /** 팀원이 인도자에게 콘티 요청 (독촉). deadlineKey 는 lib/contiDeadline 의 마감 대상 키 */
+    | { type: 'conti.nudge'; deadlineKey: string; title: string; serviceAt: string; setlistId: string; eventId: string; leaderId: string | null; message: string; anonymous: boolean }
+    /** 인도자가 콘티를 올릴 예정 시간을 알림 → 요청한 사람에게 공유, 그 시간까지 요청 · 마감 알림을 멈춤 */
+    | { type: 'conti.eta'; deadlineKey: string; title: string; setlistId: string; eventId: string; until: string; label: string }
+    | { type: 'deadline.settings'; settings: DeadlineSettings }
+    /** 일정마다 마감 바꾸기 (null 이면 팀 기본 규칙으로) */
+    | { type: 'deadline.override'; deadlineKey: string; at: string | null };
 export type PlanningPanelProps = {
     state: PlanningState; members: TeamMember[]; userId: string; busy: boolean;
     onCommand: (command: PlanningCommand) => Promise<boolean>;

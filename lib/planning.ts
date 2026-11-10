@@ -2,6 +2,7 @@ import * as z from 'zod';
 import { createClientId } from './clientId';
 import { isPlaceholderMember, worshipRoles, type TeamMember } from '../types/team';
 import { DEFAULT_POLICY, can, receivesManagerNotices, type TeamPolicy } from './permissions';
+import { ANONYMOUS_AUTHOR, activeEta, deadlineAt, deadlineSettingsOf, deadlineSettingsSchema, inQuietHours, afterQuietHours, nudgeAvailableAt, nudgeTitle, openNudges } from './contiDeadline';
 import { canHandleSlot, canManagePlanning, emptyPlanningState, leadParts, partOfRole, planningDate, planningDay, requestKinds, scheduleTemplates, type LeadPart, type PlanningCommand, type PlanningState, type PlanningTarget, type RotationGroup, type ScheduleSlot, type TeamAnnouncement, type TeamSchedule } from '../types/planning';
 
 const id = z.string().min(1).max(200);
@@ -117,18 +118,38 @@ const commandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('member.blockDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(200).optional() }),
     z.object({ type: z.literal('member.unblockDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
     z.object({ type: z.literal('partLead.set'), part: z.enum(['band', 'vocal']), memberIds: z.array(id).max(10) }),
+    z.object({
+        type: z.literal('conti.nudge'),
+        deadlineKey: id,
+        title: z.string().trim().min(1).max(120),
+        serviceAt: z.iso.datetime({ offset: true }),
+        setlistId: z.string().max(200),
+        eventId: z.string().max(200),
+        leaderId: id.nullable(),
+        message: z.string().trim().min(1, '보낼 말을 골라주세요.').max(300),
+        anonymous: z.boolean(),
+    }),
+    z.object({ type: z.literal('conti.eta'), deadlineKey: id, title: z.string().trim().min(1).max(120), setlistId: z.string().max(200), eventId: z.string().max(200), until: z.iso.datetime({ offset: true }), label: z.string().trim().min(1).max(60) }),
+    z.object({ type: z.literal('deadline.settings'), settings: deadlineSettingsSchema }),
+    z.object({ type: z.literal('deadline.override'), deadlineKey: id, at: z.iso.datetime({ offset: true }).nullable() }),
 ]);
 const stamp = z.string();
 const stateSchema = z.object({
     version: z.literal(1),
-    requests: z.array(z.object({ id, setlistId: z.string(), setlistTitle: z.string(), kind: z.enum(['question', 'reminder', 'change']), body: z.string(), authorId: id, leaderId: id, status: z.enum(['open', 'reviewing', 'resolved']), createdAt: stamp, updatedAt: stamp, replies: z.array(z.object({ id, authorId: id, body: z.string(), createdAt: stamp })) })),
+    requests: z.array(z.object({ id, setlistId: z.string(), setlistTitle: z.string(), kind: z.enum(['question', 'reminder', 'change']), body: z.string(), authorId: id, leaderId: id, status: z.enum(['open', 'reviewing', 'resolved']), createdAt: stamp, updatedAt: stamp, replies: z.array(z.object({ id, authorId: id, body: z.string(), createdAt: stamp })), deadlineKey: id.optional(), anonymous: z.boolean().optional() })),
     events: z.array(scheduleInput.extend({ id, cancelled: z.boolean(), slots: z.array(z.object({ id, role, memberId: id.nullable(), attendance: z.enum(['pending', 'confirmed', 'absent']), volunteers: z.array(id), invitedAt: stamp.optional(), respondedAt: stamp.optional(), declineReason: z.string().optional(), asked: z.array(id).optional(), passed: z.array(id).optional() })) })),
     alerts: z.array(z.object({ id, eventId: id, slotId: id.nullable(), kind: z.enum(['absence', 'substitute', 'notice']), body: z.string(), authorId: id, createdAt: stamp, resolvedAt: stamp.nullable() })),
-    notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation', 'announcements', 'conti']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp, slotId: id.optional() })),
+    notifications: z.array(z.object({ id, title: z.string(), body: z.string(), urgent: z.boolean(), target: z.enum(['requests', 'schedule', 'rotation', 'announcements', 'conti']), entityId: id, recipientIds: z.array(id), readBy: z.array(id), createdAt: stamp, slotId: id.optional(), groupKey: z.string().optional(), deliverAt: stamp.optional() })),
     rotations: z.array(rotationGroupSchema).optional().default([]),
     blockedDates: z.array(z.object({ memberId: id, date: z.string(), reason: z.string().optional() })).optional().default([]),
     partLeads: z.array(z.object({ part: z.enum(['band', 'vocal']), memberId: id })).optional().default([]),
     announcements: z.array(z.object({ id, title: z.string(), body: z.string(), authorId: id, createdAt: stamp, audience: announcementAudience, recipientIds: z.array(id), requireAck: z.boolean(), acks: z.array(z.object({ userId: id, at: stamp })), remindedAt: stamp.optional(), closedAt: stamp.nullable() })).optional().default([]),
+    deadline: z.object({
+        settings: deadlineSettingsSchema.optional(),
+        overrides: z.array(z.object({ key: id, at: stamp })).optional(),
+        etas: z.array(z.object({ key: id, until: stamp, label: z.string(), by: id, at: stamp })).optional(),
+        log: z.array(z.object({ id: z.string(), at: stamp })).optional(),
+    }).optional(),
 });
 export function parsePlanningState(value: unknown): PlanningState {
     if (value == null) return emptyPlanningState();
@@ -144,7 +165,15 @@ export function planningForViewer(state: PlanningState, members: TeamMember[], u
     const announcer = can(me, policy, 'announce');
     return {
         ...state,
-        requests: state.requests.filter(item => item.authorId === userId || item.leaderId === userId || owner),
+        requests: state.requests
+            // 콘티 요청(독촉)은 몇 명이 기다리는지 보이도록 열린 것은 팀 모두에게 보이되, 내용은 쓴 사람 · 받는 인도자 · 관리자만 봅니다.
+            .filter(item => item.authorId === userId || item.leaderId === userId || owner || (item.deadlineKey && item.status !== 'resolved'))
+            .map(item => {
+                const involved = item.authorId === userId || item.leaderId === userId || owner;
+                const hidden = involved ? item : { ...item, body: '', replies: [] };
+                // 이름을 숨긴 요청은 받는 인도자 · 관리자에게도 작성자를 보이지 않습니다.
+                return item.anonymous && item.authorId !== userId ? { ...hidden, authorId: ANONYMOUS_AUTHOR } : hidden;
+            }),
         notifications: state.notifications.filter(item => item.recipientIds.includes(userId)),
         announcements: (state.announcements ?? []).filter(item => announcer || item.authorId === userId || item.recipientIds.includes(userId)),
     };
@@ -173,9 +202,9 @@ export function previewRotationBatchSkips(state: PlanningState, members: TeamMem
 /** 알림을 받고 직접 처리할 수 있는 팀원 — 이름만 올려 둔 명단 자리(미가입)는 알림을 볼 수 없어 빠집니다. */
 const reachable = (members: TeamMember[], memberId: string) => !isPlaceholderMember(memberId) && members.some(member => member.userId === memberId);
 /** 콘티 요청을 받는 사람: 관리자 · 인도자 */
-const leaderIds = (members: TeamMember[]) => members.filter(member => !isPlaceholderMember(member.userId) && (member.permission === 'owner' || member.role === 'leader')).map(member => member.userId);
+export const leaderIds = (members: TeamMember[]) => members.filter(member => !isPlaceholderMember(member.userId) && (member.permission === 'owner' || member.role === 'leader')).map(member => member.userId);
 /** 참석 응답 · 불가일 · 결석(챙길 사람이 없을 때) 소식을 받는 사람: 일정 · 배치 관리 권한자 (팀 권한 설정) */
-const managerIds = (members: TeamMember[], policy: TeamPolicy) => members.filter(member => !isPlaceholderMember(member.userId) && receivesManagerNotices(member, policy)).map(member => member.userId);
+export const managerIds = (members: TeamMember[], policy: TeamPolicy) => members.filter(member => !isPlaceholderMember(member.userId) && receivesManagerNotices(member, policy)).map(member => member.userId);
 
 /** 겹치는 시간에 이 팀원이 이미 서는 다른 일정 (같은 자리는 제외). 없으면 undefined */
 export function clashingEvent(state: PlanningState, event: TeamSchedule, memberId: string, slotId?: string): TeamSchedule | undefined {
@@ -214,7 +243,7 @@ export function substituteOptions(state: PlanningState, members: TeamMember[], e
 }
 
 /** Shared local-demo/server domain rules; the server supplies authenticated identity, roster and team policy. */
-export function applyPlanningCommand(previous: PlanningState, members: TeamMember[], userId: string, input: PlanningCommand | unknown, policy: TeamPolicy = DEFAULT_POLICY): PlanningState {
+export function applyPlanningCommand(previous: PlanningState, members: TeamMember[], userId: string, input: PlanningCommand | unknown, policy: TeamPolicy = DEFAULT_POLICY, clock: Date = new Date()): PlanningState {
     const actor = members.find(member => member.userId === userId);
     if (!actor) throw new Error('이 팀에 접근할 수 없습니다.');
     const parsed = commandSchema.safeParse(input);
@@ -223,7 +252,7 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
     const state = structuredClone(previous);
     state.rotations = state.rotations ?? [];
     state.partLeads = state.partLeads ?? [];
-    const now = new Date().toISOString();
+    const now = clock.toISOString();
     const managers = managerIds(members, policy);
     const manage = () => { if (!canManagePlanning(members, userId, policy)) throw new Error(policy.planningManage === 'admins' ? '팀 관리자만 변경할 수 있습니다.' : '인도자 또는 팀 관리자만 변경할 수 있습니다.'); };
     /** slotId: 알림을 누르면 열릴 배치 자리. includeSelf: 처리한 본인도 확인해야 할 결과(예: 일괄 배정에서 빠진 팀원)일 때 */
@@ -1047,6 +1076,75 @@ export function applyPlanningCommand(previous: PlanningState, members: TeamMembe
             const idx = state.blockedDates.findIndex(b => b.memberId === userId && b.date === command.date);
             if (idx === -1) throw new Error('등록된 불가일이 아닙니다.');
             state.blockedDates.splice(idx, 1);
+            break;
+        }
+        case 'conti.nudge': {
+            const settings = deadlineSettingsOf(state);
+            const at = clock.getTime();
+            if (!settings.enabled) throw new Error('이 팀은 콘티 마감 알림을 쓰지 않아요.');
+            if (command.anonymous && !settings.allowAnonymous) throw new Error('이 팀은 이름을 숨긴 요청을 받지 않아요.');
+            if (Date.parse(command.serviceAt) <= at) throw new Error('이미 지난 예배예요.');
+            const due = state.deadline?.overrides?.find(item => item.key === command.deadlineKey)?.at ?? deadlineAt(command.serviceAt, settings.rule);
+            if (!settings.nudgeBeforeDeadline && at < Date.parse(due)) throw new Error(`콘티 마감(${planningDate(due)}) 후에 요청할 수 있어요.`);
+            const eta = activeEta(state, command.deadlineKey, at);
+            if (eta) throw new Error(`인도자가 알려준 예정 시간(${planningDate(eta.until)})까지 기다려 주세요.`);
+            const again = nudgeAvailableAt(state, command.deadlineKey, userId, at);
+            if (again !== null) throw new Error(`${planningDate(new Date(again).toISOString())}부터 다시 요청할 수 있어요.`);
+            const leaders = (command.leaderId && reachable(members, command.leaderId) ? [command.leaderId] : leaderIds(members)).filter(leader => leader !== userId);
+            if (!leaders.length) throw new Error('요청을 받을 인도자가 없어요.');
+            if (state.requests.length >= 300) {
+                const pruneIndex = state.requests.findLastIndex(item => item.status === 'resolved');
+                if (pruneIndex === -1) throw new Error('요청 보관 한도에 도달했습니다.');
+                state.requests.splice(pruneIndex, 1);
+            }
+            state.requests.unshift({
+                id: createClientId(), setlistId: command.setlistId, setlistTitle: command.title, kind: 'reminder', body: command.message,
+                authorId: userId, leaderId: leaders[0], status: 'open', createdAt: now, updatedAt: now, replies: [],
+                deadlineKey: command.deadlineKey, ...(command.anonymous ? { anonymous: true } : {}),
+            });
+            // 인도자 알림은 요청 간격 안에서 하나로 묶어, 새 요청이 오면 제목만 고쳐 씁니다 (알림이 쌓이지 않게).
+            const groupKey = `nudge:${command.deadlineKey}`;
+            const title = nudgeTitle(openNudges(state, command.deadlineKey), members);
+            const text = `${command.title} · ${planningDate(command.serviceAt)} · “${preview(command.message)}”`;
+            const bundle = state.notifications.find(item => item.groupKey === groupKey && leaders.every(leader => item.recipientIds.includes(leader) && !item.readBy.includes(leader)) && at - Date.parse(item.createdAt) < settings.nudgeCooldownHours * 60 * 60 * 1000);
+            if (bundle) { bundle.title = title; bundle.body = text; break; }
+            const entity = command.setlistId ? { target: 'conti' as const, entityId: command.setlistId } : { target: 'schedule' as const, entityId: command.eventId || command.deadlineKey };
+            notify(leaders, title, text, entity.target, entity.entityId);
+            const created = state.notifications[0];
+            if (created?.createdAt === now && created.title === title) {
+                created.groupKey = groupKey;
+                if (settings.quietHours && inQuietHours(at)) created.deliverAt = new Date(afterQuietHours(at)).toISOString();
+            }
+            break;
+        }
+        case 'conti.eta': {
+            const settings = deadlineSettingsOf(state);
+            const at = clock.getTime();
+            const nudges = openNudges(state, command.deadlineKey);
+            if (!nudges.some(item => item.leaderId === userId) && !leaderIds(members).includes(userId) && !canManagePlanning(members, userId, policy)) throw new Error('인도자 또는 관리자만 예정 시간을 알릴 수 있어요.');
+            if (Date.parse(command.until) <= at) throw new Error('지금 이후 시각을 골라주세요.');
+            const etas = (state.deadline?.etas ?? []).filter(item => item.key !== command.deadlineKey && Date.parse(item.until) > at);
+            state.deadline = { ...state.deadline, etas: [...etas, { key: command.deadlineKey, until: command.until, label: command.label, by: userId, at: now }].slice(-50) };
+            for (const nudge of nudges) {
+                if (nudge.replies.length < 100) nudge.replies.push({ id: createClientId(), authorId: userId, body: `예정 시간 · ${command.label} (${planningDate(command.until)})`, createdAt: now });
+                nudge.status = 'reviewing';
+                nudge.updatedAt = now;
+            }
+            const entity = command.setlistId ? { target: 'conti' as const, entityId: command.setlistId } : { target: 'schedule' as const, entityId: command.eventId || command.deadlineKey };
+            notify(nudges.map(item => item.authorId), `${actor.name}님이 예정 시간을 알려줬어요`, `${command.title} · “${command.label}” · 예정 ${planningDate(command.until)}`, entity.target, entity.entityId);
+            const created = state.notifications[0];
+            if (created?.createdAt === now && settings.quietHours && inQuietHours(at) && created.title.endsWith('예정 시간을 알려줬어요')) created.deliverAt = new Date(afterQuietHours(at)).toISOString();
+            break;
+        }
+        case 'deadline.settings': {
+            if (actor.permission !== 'owner') throw new Error('팀 관리자만 콘티 마감 설정을 바꿀 수 있어요.');
+            state.deadline = { ...state.deadline, settings: command.settings };
+            break;
+        }
+        case 'deadline.override': {
+            if (!leaderIds(members).includes(userId) && !canManagePlanning(members, userId, policy)) throw new Error('인도자 또는 관리자만 마감을 바꿀 수 있어요.');
+            const overrides = (state.deadline?.overrides ?? []).filter(item => item.key !== command.deadlineKey);
+            state.deadline = { ...state.deadline, overrides: command.at ? [...overrides, { key: command.deadlineKey, at: command.at }].slice(-100) : overrides };
             break;
         }
     }

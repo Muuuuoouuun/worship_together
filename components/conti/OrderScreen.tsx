@@ -72,7 +72,7 @@ function draftFromSetlist(setlist: ContiSetlist): SetlistDraft {
     }
     return {
         owner: setlist.owner ?? '',
-        status: setlist.status === 'confirmed' ? 'confirmed' : 'writing',
+        status: setlist.status === 'confirmed' || setlist.status === 'draft' ? setlist.status : 'writing',
         order: songs.map((song) => song.songId),
         songs: drafts,
     };
@@ -212,8 +212,8 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
                                 <input className={field} list="conti-roster" value={draft.owner} maxLength={40} placeholder="이름" onChange={(event) => setDraft({ ...draft, owner: event.target.value })} />
                             </Field>
                             <Field label="상태">
-                                <div className={cn('grid h-10 grid-cols-2 gap-1 rounded-xl p-1', chip)} role="radiogroup" aria-label="콘티 상태">
-                                    {(['writing', 'confirmed'] as const).map((status) => (
+                                <div className={cn('grid h-10 grid-cols-3 gap-1 rounded-xl p-1', chip)} role="radiogroup" aria-label="콘티 상태">
+                                    {(['writing', 'draft', 'confirmed'] as const).map((status) => (
                                         <button
                                             key={status}
                                             type="button"
@@ -222,12 +222,17 @@ export default function OrderScreen({ setlistId, onBack, onSelect }: { setlistId
                                             onClick={() => setDraft({ ...draft, status })}
                                             className={cn('rounded-lg text-xs font-semibold transition', draft.status === status ? 'bg-card text-foreground shadow-xs' : sub)}
                                         >
-                                            {status === 'writing' ? '작성 중' : '확정'}
+                                            {status === 'writing' ? '작성 중' : status === 'draft' ? '초안 공유' : '확정'}
                                         </button>
                                     ))}
                                 </div>
                             </Field>
                         </div>
+                        {draft.status !== 'writing' && (
+                            <p className={cn('text-xs leading-relaxed', sub)}>
+                                {draft.status === 'draft' ? '초안 공유: 저장하면 배치된 팀원에게 초안이 올라왔다고 알려요. 콘티 마감은 확정해야 지켜져요.' : '확정: 저장하면 배치된 팀원에게 알리고, 콘티 요청은 자동으로 완료돼요.'}
+                            </p>
+                        )}
                         <p className={cn('text-xs leading-relaxed', sub)}>
                             {editor?.storageNote}
                             {!editor?.canReorder && ' · 서버에 저장된 콘티는 아직 곡 순서를 바꿀 수 없어요.'}

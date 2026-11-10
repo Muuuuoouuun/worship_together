@@ -21,7 +21,7 @@ export interface SongDraft {
 /** 순서 화면 편집 모드 전체 값. 곡 값은 곡 보관함 곡 id 기준입니다. */
 export interface SetlistDraft {
     owner: string;
-    status: 'writing' | 'confirmed';
+    status: 'writing' | 'draft' | 'confirmed';
     order: string[];
     songs: Record<string, SongDraft>;
 }

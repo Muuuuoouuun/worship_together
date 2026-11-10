@@ -5,6 +5,7 @@ import path from 'node:path';
 import { applyPlanningCommand, parsePlanningState, planningForViewer } from '../planning';
 import { DEFAULT_POLICY, parsePolicy, type TeamPolicy } from '../permissions';
 import type { PlanningCommand, PlanningNotification, PlanningState } from '../../types/planning';
+import type { DueDeadlineNotice } from '../contiDeadline';
 import type { InvitationPreview, OnlineTeam, TeamIdentity, TeamMember, UserProfile, WorshipRole } from '../../types/team';
 
 const roles = new Set(['leader', 'vocal', 'keyboard', 'guitar', 'bass', 'drums', 'sound', 'media', 'member']);
@@ -127,6 +128,46 @@ export class TeamRepository {
     planningSnapshot(teamId: string): { state: PlanningState; members: TeamMember[] } {
         const members = this.db.prepare('SELECT user_id AS userId, name, role, permission FROM online_members WHERE team_id = ?').all(teamId) as TeamMember[];
         return { state: this.readPlanning(teamId), members };
+    }
+    /** 모든 팀 id (예약 알림을 확인할 때) */
+    teamIds(): string[] {
+        return (this.db.prepare('SELECT id FROM online_teams').all() as { id: string }[]).map((row) => row.id);
+    }
+    /**
+     * 콘티 마감 예약 알림을 한 번에 저장합니다. due 가 돌려준 알림을 더하고 보낸 기록을 남기며,
+     * 밤 시간이라 미뤄 둔 알림 중 보낼 때가 된 것도 함께 돌려줍니다 (받는 사람에게 보내도록).
+     */
+    sweepDeadlines(teamId: string, due: (input: { state: PlanningState; members: TeamMember[]; policy: TeamPolicy }) => DueDeadlineNotice[], now: number): PlanningNotification[] {
+        return this.db.transaction(() => {
+            const state = this.readPlanning(teamId);
+            const members = this.db.prepare('SELECT user_id AS userId, name, role, permission FROM online_members WHERE team_id = ?').all(teamId) as TeamMember[];
+            const notices = due({ state, members, policy: this.policy(teamId) });
+            const stamp = new Date(now).toISOString();
+            // 알림 목록처럼 최신이 앞 (보낼 때 뒤집어 만든 순서대로 보냄)
+            const created = notices.map((item): PlanningNotification => ({ id: randomUUID(), title: item.title, body: item.body, urgent: item.urgent, target: item.target, entityId: item.entityId, recipientIds: [...new Set(item.recipientIds)], readBy: [], createdAt: stamp })).reverse();
+            const ready = state.notifications.filter((item) => item.deliverAt && Date.parse(item.deliverAt) <= now);
+            if (!created.length && !ready.length) return [];
+            for (const item of ready) delete item.deliverAt;
+            state.notifications = [...created, ...state.notifications].slice(0, 500);
+            if (notices.length) state.deadline = { ...state.deadline, log: [...(state.deadline?.log ?? []), ...notices.map((item) => ({ id: item.logId, at: stamp }))].slice(-300) };
+            this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
+            return [...created, ...ready];
+        })();
+    }
+    /** 콘티가 확정되면 그 예배 콘티에 대한 열린 요청을 완료하고, 요청한 사람을 돌려줍니다 (확정 알림을 받도록). */
+    resolveNudges(teamId: string, keys: readonly string[]): string[] {
+        if (!keys.length) return [];
+        return this.db.transaction(() => {
+            const state = this.readPlanning(teamId);
+            const now = new Date().toISOString();
+            const open = state.requests.filter((item) => item.deadlineKey && keys.includes(item.deadlineKey) && item.status !== 'resolved');
+            const etas = state.deadline?.etas?.filter((item) => !keys.includes(item.key));
+            if (!open.length && etas?.length === state.deadline?.etas?.length) return [];
+            for (const item of open) { item.status = 'resolved'; item.updatedAt = now; }
+            if (state.deadline) state.deadline = { ...state.deadline, etas };
+            this.db.prepare('INSERT INTO online_planning(team_id, state_json) VALUES (?, ?) ON CONFLICT(team_id) DO UPDATE SET state_json = excluded.state_json').run(teamId, JSON.stringify(state));
+            return [...new Set(open.map((item) => item.authorId))];
+        })();
     }
     /** 일정 명령이 아닌 곳(콘티 저장 등)에서 생긴 알림을 알림 목록에 더합니다. */
     addNotices(teamId: string, items: Array<Pick<PlanningNotification, 'title' | 'body' | 'target' | 'entityId' | 'recipientIds'> & { urgent?: boolean }>): PlanningNotification[] {

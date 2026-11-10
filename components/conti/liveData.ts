@@ -33,7 +33,7 @@ export interface LiveSources {
 export function statusFor(date: string, today: string, songCount: number, saved: SetlistDetailMetadata['status']): SetlistStatus {
     if (songCount === 0) return 'empty';
     if (date < today) return 'done';
-    return saved === 'confirmed' ? 'confirmed' : 'writing';
+    return saved === 'confirmed' || saved === 'draft' ? saved : 'writing';
 }
 
 function linksFrom(form: SongForm | null | undefined, stored: StoredSongLink[] | undefined): SongLink[] {
@@ -92,7 +92,7 @@ export interface SavePlan {
     /** 곡 보관함 콘티의 곡 순서 (바뀌지 않았으면 null) */
     order: string[] | null;
     owner: string | null;
-    status: 'writing' | 'confirmed';
+    status: 'writing' | 'draft' | 'confirmed';
     overrides: Record<string, SongSetlistOverride>;
     /** 송폼 저장소에 쓸 곡별 송폼 (바뀐 곡만) */
     forms: SongForm[];

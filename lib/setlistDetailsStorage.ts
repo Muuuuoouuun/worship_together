@@ -27,7 +27,8 @@ export interface SetlistComment {
     createdAt: string;
 }
 
-export type SetlistDetailStatus = 'writing' | 'confirmed';
+/** 작성 중 → 초안(곡 제목만 먼저 공유, 팀에 알림 · 마감은 아직) → 확정(끝까지 다 올림, 마감 충족) */
+export type SetlistDetailStatus = 'writing' | 'draft' | 'confirmed';
 
 export interface SetlistDetailMetadata {
     setlistId: string;
@@ -120,7 +121,7 @@ export function sanitizeSetlistDetails(value: unknown, teamId: string, setlistId
         teamId,
         overrides,
         owner: text(raw.owner, LIMITS.name),
-        status: raw.status === 'confirmed' ? 'confirmed' : raw.status === 'writing' ? 'writing' : undefined,
+        status: raw.status === 'confirmed' || raw.status === 'draft' || raw.status === 'writing' ? raw.status : undefined,
         comments,
         updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString(),
     };
